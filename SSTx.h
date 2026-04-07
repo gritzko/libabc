@@ -1,7 +1,7 @@
 #include "OK.h"
 #include "SST.h"
 #include "TLV.h"
-#include "abc/B.h"
+#include "B.h"
 
 typedef Bu8 X(SST, );
 typedef X(, ) Key;

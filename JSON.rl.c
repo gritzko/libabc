@@ -1,6 +1,6 @@
 /* #line 1 "/home/gritzko/librdx/abc/JSON.c.rl" */
-#include "abc/INT.h"
-#include "abc/PRO.h"
+#include "INT.h"
+#include "PRO.h"
 #include "JSON.h"
 
 // action indices for the parser

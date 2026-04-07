@@ -6,11 +6,11 @@
 #include "01.h"
 #include "BUF.h"
 #include "FILE.h"
-#include "abc/B.h"
-#include "abc/OK.h"
-#include "abc/TEST.h"
-#include "abc/TLV.h"
-#include "abc/ZINT.h"
+#include "B.h"
+#include "OK.h"
+#include "TEST.h"
+#include "TLV.h"
+#include "ZINT.h"
 
 #define u128pack ZINTu128feed
 #define u128unpack ZINTu128drain

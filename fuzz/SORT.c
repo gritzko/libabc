@@ -3,8 +3,8 @@
 #include <unistd.h>
 
 #include "PRO.h"
-#include "abc/B.h"
-#include "abc/TEST.h"
+#include "B.h"
+#include "TEST.h"
 
 #define LEN1 1024
 

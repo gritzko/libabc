@@ -3,7 +3,7 @@
 #include <sys/poll.h>
 #include <time.h>
 
-#include "abc/OK.h"
+#include "OK.h"
 
 typedef struct poller poller;
 

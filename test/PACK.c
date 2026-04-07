@@ -3,8 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "abc/PRO.h"
-#include "abc/TEST.h"
+#include "PRO.h"
+#include "TEST.h"
 
 #define TEST_FILE "/tmp/pack_test.lz4"
 

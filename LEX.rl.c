@@ -1,8 +1,8 @@
 #line 1 "LEX.rl"
 #include "LEX.h"
 
-#include "abc/INT.h"
-#include "abc/PRO.h"
+#include "INT.h"
+#include "PRO.h"
 
 // action indices for the parser
 #define LEXenum 0

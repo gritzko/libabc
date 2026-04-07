@@ -1,6 +1,6 @@
 #line 1 "HTTP.c.rl"
-#include "abc/INT.h"
-#include "abc/PRO.h"
+#include "INT.h"
+#include "PRO.h"
 #include "HTTP.h"
 
 // action indices for the parser

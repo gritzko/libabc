@@ -1,8 +1,8 @@
 #ifndef ABC_LSM_H
 #define ABC_LSM_H
-#include "abc/BUF.h"
-#include "abc/OK.h"
-#include "abc/PRO.h"
+#include "BUF.h"
+#include "OK.h"
+#include "PRO.h"
 
 #define LSM_MAX_INPUTS 64
 
@@ -12,7 +12,7 @@ con ok64 LSMNODATA = 0x157165d834a74a;
 con ok64 LSMNOROOM = 0x157165d86d8616;
 
 #define X(M, name) M##u8cs##name
-#include "abc/HEAPx.h"
+#include "HEAPx.h"
 #undef X
 
 typedef u8csb LSM;

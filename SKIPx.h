@@ -1,11 +1,11 @@
 #include <stdint.h>
 
 #include "B.h"
-#include "abc/01.h"
-#include "abc/OK.h"
-#include "abc/S.h"
-#include "abc/SKIP.h"
-#include "abc/TLV.h"
+#include "01.h"
+#include "OK.h"
+#include "S.h"
+#include "SKIP.h"
+#include "TLV.h"
 #define T X(, )
 #define SKIP_BLK_HI (sizeof(T) * 8)
 #define SKIP_BLK_MASK ((1UL << SKIP_BLK_HI) - 1)

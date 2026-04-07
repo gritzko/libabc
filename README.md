@@ -51,11 +51,7 @@ ok64 SortAndDedup() {
     done;
 }
 ````
-
-The `u64s*` family is not hand-written: [`INT.h`](./INT.h) includes
-[`Sx.h`](./Sx.h), [`Bx.h`](./Bx.h) and [`QSORTx.h`](./QSORTx.h) three times
-with a token-pasting `X` macro, generating the `u16s*`, `u32s*` and `u64s*`
-variants at once.
+Libabc heavily relies on C templates (see `*x.h` files, e.g. QSORTx.h).
 
 ##  Modules
 

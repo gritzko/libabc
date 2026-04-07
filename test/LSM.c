@@ -2,11 +2,11 @@
 
 #include <unistd.h>
 
-#include "abc/B.h"
-#include "abc/OK.h"
-#include "abc/TEST.h"
-#include "abc/TLV.h"
-#include "abc/ZINT.h"
+#include "B.h"
+#include "OK.h"
+#include "TEST.h"
+#include "TLV.h"
+#include "ZINT.h"
 
 fun b8 alpha(u8cscp a, u8cscp b) {
     a_dup(u8c, aa, *a);

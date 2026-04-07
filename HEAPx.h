@@ -1,5 +1,5 @@
 #include "B.h"
-#include "abc/01.h"
+#include "01.h"
 #define T X(, )
 
 typedef T const X(, c);

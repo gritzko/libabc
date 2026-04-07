@@ -1,12 +1,12 @@
 #ifndef ABC_SLOG_H
 #define ABC_SLOG_H
 
-#include "abc/B.h"
-#include "abc/INT.h"
-#include "abc/OK.h"
-#include "abc/S.h"
-#include "abc/TLV.h"
-#include "abc/ZINT.h"
+#include "B.h"
+#include "INT.h"
+#include "OK.h"
+#include "S.h"
+#include "TLV.h"
+#include "ZINT.h"
 
 // Error codes
 con ok64 SLOGNOROOM = 0x7156105d86d8616;

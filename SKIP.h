@@ -1,11 +1,11 @@
 #ifndef ABC_SKIP_H
 #define ABC_SKIP_H
 
-#include "abc/S.h"
-#include "abc/01.h"
-#include "abc/B.h"
-#include "abc/OK.h"
-#include "abc/TLV.h"
+#include "S.h"
+#include "01.h"
+#include "B.h"
+#include "OK.h"
+#include "TLV.h"
 
 con ok64 SKIPNOTYET = 0x7144995d876239d;
 con ok64 SKIPBAD = 0x1c51264b28d;

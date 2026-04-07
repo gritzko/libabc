@@ -1,7 +1,7 @@
 #include "LSM.h"
 
-#include "abc/OK.h"
-#include "abc/S.h"
+#include "OK.h"
+#include "S.h"
 
 ok64 LSMNext(u8s into, u8css lsm, u8xs x, u8csz z, u8ys y) {
     sane(u8sOK(into) && u8cssOK(lsm) && x && z && y);

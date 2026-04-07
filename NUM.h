@@ -1,9 +1,9 @@
 #ifndef ABC_NUM_H
 #define ABC_NUM_H
 
-#include "abc/01.h"
-#include "abc/BUF.h"
-#include "abc/OK.h"
+#include "01.h"
+#include "BUF.h"
+#include "OK.h"
 
 // Number-to-English-words conversion, 64-bit ready
 

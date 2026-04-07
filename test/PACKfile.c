@@ -5,9 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "abc/FILE.h"
-#include "abc/PRO.h"
-#include "abc/TEST.h"
+#include "FILE.h"
+#include "PRO.h"
+#include "TEST.h"
 
 #ifndef TEST_CPP_PARSER
 #error "TEST_CPP_PARSER must be defined"

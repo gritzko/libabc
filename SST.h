@@ -6,8 +6,8 @@
 #include "BUF.h"
 #include "OK.h"
 #include "TLV.h"
-#include "abc/FILE.h"
-#include "abc/SKIP.h"
+#include "FILE.h"
+#include "SKIP.h"
 
 #define SSTab SKIPu8tab
 

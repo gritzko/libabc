@@ -2,8 +2,8 @@
 
 #include <string.h>
 
-#include "abc/PRO.h"
-#include "abc/TEST.h"
+#include "PRO.h"
+#include "TEST.h"
 
 // Simple ensure callback: just marks pages loaded
 ok64 testEnsure(pagep p, b8 rw, u64 pos, size_t len) {

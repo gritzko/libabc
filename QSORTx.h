@@ -1,8 +1,8 @@
 // QSORTx.h — Inline-comparator introsort + dedup template
 // Instantiate: #define ABC_QSORT_X
 //              #define X(M, name) M##u64##name
-//              #include "abc/Bx.h"   (or Sx.h — must come after ABC_QSORT_X)
-//              #include "abc/QSORTx.h"
+//              #include "Bx.h"   (or Sx.h — must come after ABC_QSORT_X)
+//              #include "QSORTx.h"
 //              #undef X
 //              #undef ABC_QSORT_X
 // Requires: X(,Z)(cp a, cp b) -> b8  (inline less-than comparator)

@@ -1,6 +1,6 @@
-#include "abc/NUM.h"
-#include "abc/PRO.h"
-#include "abc/TEST.h"
+#include "NUM.h"
+#include "PRO.h"
+#include "TEST.h"
 
 ok64 NUMTest1() {
     sane(1);
