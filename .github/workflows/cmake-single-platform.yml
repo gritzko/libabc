@@ -1,4 +1,4 @@
-name: CMake on a single platform
+name: CMake build & test
 
 on:
   push:
@@ -10,42 +10,58 @@ env:
   BUILD_TYPE: Release
 
 jobs:
-  ubuntu:
-    runs-on: ubuntu-latest
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install \
+          libsodium-dev libc6-dev libcurl4-gnutls-dev librocksdb-dev liblz4-dev
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install libsodium rocksdb lz4
+
+    - name: Configure
+      run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      run: cmake --build build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: build
+      run: ctest --output-on-failure -C ${{env.BUILD_TYPE}}
+
+  alpine:
+    name: alpine-musl
+    runs-on: ubuntu-24.04
+    container: alpine:latest
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
-          sudo apt-get update
-          sudo apt-get -y install libsodium-dev libc6-dev libcurl4-gnutls-dev librocksdb-dev liblz4-dev
+        apk add --no-cache \
+          build-base clang cmake ninja \
+          libsodium-dev curl-dev lz4-dev
 
-    - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
-    - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
-
-    - name: Test
-      working-directory: ${{github.workspace}}/build
-      run: ctest --output-on-failure -C ${{env.BUILD_TYPE}}
-
-  macos:
-    runs-on: macos-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install dependencies
-      run: brew install libsodium rocksdb lz4
-
-    - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+    - name: Configure
+      run: cmake -B build -GNinja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_ROCKS=OFF
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake --build build --config ${{env.BUILD_TYPE}}
 
     - name: Test
-      working-directory: ${{github.workspace}}/build
+      working-directory: build
       run: ctest --output-on-failure -C ${{env.BUILD_TYPE}}

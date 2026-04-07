@@ -37,8 +37,8 @@ ok64 SortAndDedup() {
     sane(1);
     // u64 = uint64_t (01.h)
     u64 arr[] = {5, 3, 1, 3, 2, 5, 1, 4, 2};
-    // u64s = u64*[2] slice {head, term} (Sx.h)
-    u64s data = {arr, arr + 9};
+    // a$: declare u64 *data[2] = {arr, arr + sizeof(arr)/sizeof(u64)} (S.h)
+    a$(u64, data, arr);
     // in-place quicksort over the slice (QSORTx.h)
     u64sSort(data);
     // collapse equal runs in place (QSORTx.h)
