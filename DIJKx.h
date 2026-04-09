@@ -35,7 +35,7 @@ static inline ok64 X(DIJK, Run)(u64 *cost, u64 src, u64 tgt,
 
     // seed: distance 1 means cost 0 (offset by 1)
     kv64 start = {src, 1};
-    o = HASHkv64put(dist, &start);
+    o = HASHkv64Put(dist, &start);
     if (o != OK) return o;
     o = HEAPkv64Push1Z(heap, start, kv64Zval);
     if (o != OK) return o;
@@ -51,7 +51,7 @@ static inline ok64 X(DIJK, Run)(u64 *cost, u64 src, u64 tgt,
 
         // check if stale
         kv64 probe = {cur.key, 0};
-        o = HASHkv64get(&probe, dist);
+        o = HASHkv64Get(&probe, dist);
         if (o != OK) return o;
         if (cur.val > probe.val) continue;
 
@@ -70,10 +70,10 @@ static inline ok64 X(DIJK, Run)(u64 *cost, u64 src, u64 tgt,
         $for(kv64c, np, ns) {
             u64 ncost = cur.val + np->val;
             kv64 nprobe = {np->key, 0};
-            o = HASHkv64get(&nprobe, dist);
+            o = HASHkv64Get(&nprobe, dist);
             if (o == HASHNONE || ncost < nprobe.val) {
                 kv64 entry = {np->key, ncost};
-                o = HASHkv64put(dist, &entry);
+                o = HASHkv64Put(dist, &entry);
                 if (o != OK) return o;
                 o = HEAPkv64Push1Z(heap, entry, kv64Zval);
                 if (o != OK) return o;

@@ -26,10 +26,10 @@ ok64 HASH0() {
     a_pad(u32, pad, 1024);
     zerob(pad);
     u32 one = 1;
-    call(HASHu32put, pad_idle, &one);
-    call(HASHu32get, &one, pad_idle);
-    call(HASHu32del, pad_idle, &one);
-    want(HASHNONE == HASHu32get(&one, pad_idle));
+    call(HASHu32Put, pad_idle, &one);
+    call(HASHu32Get, &one, pad_idle);
+    call(HASHu32Del, pad_idle, &one);
+    want(HASHNONE == HASHu32Get(&one, pad_idle));
     done;
 }
 
@@ -38,29 +38,29 @@ ok64 HASH1() {
     a_pad(u32, pad, 1024 + 128);
     zerob(pad);
     for (u32 i = 1; i < 1000; i += 2) {
-        call(HASHu32put, pad_idle, &i);
+        call(HASHu32Put, pad_idle, &i);
     }
     for (u32 i = 2; i < 1000; i += 2) {
         u32 n = i;
-        ok64 o = HASHu32get(&n, pad_idle);
+        ok64 o = HASHu32Get(&n, pad_idle);
         want(HASHNONE == o);
     }
     for (u32 i = 1; i < 1000; i += 2) {
         u32 v = i;
-        ok64 o = HASHu32get(&v, pad_idle);
+        ok64 o = HASHu32Get(&v, pad_idle);
         want(o == OK);
         want(v == i);
     }
     for (u32 i = 1; i < 1000; i += 4) {
-        call(HASHu32del, pad_idle, &i);
+        call(HASHu32Del, pad_idle, &i);
     }
     for (u32 i = 1; i < 1000; i += 4) {
         u32 n = i;
-        want(HASHNONE == HASHu32get(&n, pad_idle));
+        want(HASHNONE == HASHu32Get(&n, pad_idle));
     }
     for (u32 i = 3; i < 1000; i += 4) {
         u32 v = i;
-        call(HASHu32get, &v, pad_idle);
+        call(HASHu32Get, &v, pad_idle);
         want(v == i);
     }
     done;
@@ -73,23 +73,23 @@ ok64 HASH3() {
     kv32$ dict = kv32bIdle(dictbuf);
 
     kv32 a = {.key = 6220, .val = 2};
-    call(HASHkv32put, dict, &a);
+    call(HASHkv32Put, dict, &a);
     kv32 b = {.key = 22, .val = 3};
-    call(HASHkv32put, dict, &b);
+    call(HASHkv32Put, dict, &b);
 
     kv32 a2 = {.key = 6220};
     kv32 b2 = {.key = 22};
-    call(HASHkv32get, &a2, dict);
-    call(HASHkv32get, &b2, dict);
+    call(HASHkv32Get, &a2, dict);
+    call(HASHkv32Get, &b2, dict);
     testeq(a2.val, 2);
     testeq(b2.val, 3);
 
-    call(HASHkv32del, dict, &b);
+    call(HASHkv32Del, dict, &b);
 
     a.val = 0;
-    call(HASHkv32get, &a, dict);
+    call(HASHkv32Get, &a, dict);
     testeq(a.val, 2);
-    mute(HASHkv32get(&b, dict), HASHNONE);
+    mute(HASHkv32Get(&b, dict), HASHNONE);
 
     kv32bFree(dictbuf);
     done;
@@ -113,10 +113,10 @@ ok64 HASHd() {
     for (int i = 0; i < LENd; ++i) {
         if (ins[i] > 0) {
             u32 rec = ins[i];
-            HASHu32put(dict, &rec);
+            HASHu32Put(dict, &rec);
         } else {
             u32 rec = -ins[i];
-            HASHu32del(dict, &rec);
+            HASHu32Del(dict, &rec);
         }
     }
     u32sFeed(u32bIdle(copybuf), u32bDataC(dictbuf));
@@ -128,10 +128,10 @@ ok64 HASHd() {
         for (int i = 0; i < LENd; ++i) {
             if (ins[i] > 0) {
                 u32 rec = ins[i];
-                HASHu32put(dict, &rec);
+                HASHu32Put(dict, &rec);
             } else {
                 u32 rec = -ins[i];
-                HASHu32del(dict, &rec);
+                HASHu32Del(dict, &rec);
             }
         }
         if (!$eq(u32bData(dictbuf), u32bData(copybuf))) {
@@ -154,10 +154,10 @@ ok64 HASHd() {
             for (int i = 0; i < LENd; ++i) {
                 if (ins[i] > 0) {
                     u32 rec = ins[i];
-                    HASHu32put(dict, &rec);
+                    HASHu32Put(dict, &rec);
                 } else {
                     u32 rec = -ins[i];
-                    HASHu32del(dict, &rec);
+                    HASHu32Del(dict, &rec);
                 }
                 fprintf(stderr, "#%i\t", i);
                 for (int i = 0; i < 16; ++i)

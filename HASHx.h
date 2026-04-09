@@ -52,7 +52,7 @@ fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx) {
     return HASHNONE;
 }
 
-fun ok64 X(HASH, get)(T *rec, X($, ) data) {
+fun ok64 X(HASH, Get)(T *rec, X($, ) data) {
     u64 hash = X(, hash)(rec);
     size_t ndx = hash % $len(data);
     if (X($, is0)(data, ndx)) return HASHNONE;
@@ -81,7 +81,7 @@ fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
     return HASHNOROOM;
 }
 
-fun ok64 X(HASH, put)(X($, ) data, T const *rec) {
+fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
     u64 hash = X(, hash)(rec);
     size_t ndx = hash % $len(data);
     if (X($, is0)(data, ndx) || X(, cmp)(rec, $atp(data, ndx)) == 0) {
@@ -111,7 +111,7 @@ fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
     done;
 }
 
-fun ok64 X(HASH, del)(X($, ) data, T const *rec) {
+fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
     size_t ndx = 0;
     ok64 o = X(HASH, find)(&ndx, data, rec);
     if (o == HASHNONE || o == HASHNOROOM) return OK;

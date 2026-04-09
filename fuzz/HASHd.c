@@ -18,10 +18,10 @@ fun void Play($u32 dict, u8 *ins, size_t Size) {
         if (ins[i] == 0 || ins[i] == 128) break;
         if (ins[i] < 128) {
             u32 rec = ins[i];
-            HASHu32put(dict, &rec);
+            HASHu32Put(dict, &rec);
         } else {
             u32 rec = ins[i] - 128;
-            HASHu32del(dict, &rec);
+            HASHu32Del(dict, &rec);
         }
     }
 }
