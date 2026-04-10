@@ -1,4 +1,4 @@
-#   Algebraic Bricklaying C
+#   ABC: Abstractionless Buffers-and-slices C dialect
 
 ABC is an experimental C dialect for systems programming without a runtime
 and without abstraction stacking — yet powerful enough to build real things.
@@ -11,21 +11,21 @@ use for GC, runtime or feature creep.
 
 - **No runtime, no encapsulation.** A file descriptor is an `int fd`. A byte
   slice is a pointer pair. No objects hiding the primitives. Modules that
-  don't know each other still compose seamlessly.
+  don't know about each other still compose seamlessly.
 - **Memory safety through buffers and slices**, not through a borrow checker
   or GC. All "star types" (slices like `u8cs`, gauges like `u32g`, buffers
   like `u64b`) are pointer arrays internally, with standard accessors that 
   bounds-check in debug builds. Pointer arithmetic is banned by convention.
 - **Record types have fixed bit layouts** (`u64`, `uuid128`, `sha256`), so
-  they are trivially serializable and mmap-friendly. Messy structs are fine —
-  just keep them private.
+  they are trivially serializable and mmap-friendly. Messy state structs 
+  are also fine; just keep them private.
 - **No rug-pulling reallocations.** Only the owner of a buffer can resize it;
   downstream code returns `NOROOM` instead of reallocating under the
   caller's feet. Arenas, ring buffers and pre-sized limits are preferred over
   `malloc`/`free`. Resource acquisition happens at the top of the call chain.
 - **Errors are `ok64` codes** with human-readable Base64 names like
-  `MMAPFAIL`. Procedures that can fail return `ok64`; functions that can't
-  return their value. The [PRO][P] module wires this into stack-traced
+  `MMAPFAIL`. *Procedures* that can fail return `ok64`; *functions* that 
+  can't fail return values. The [PRO][P] module wraps this into stack-traced
   `call()`/`done`/`fail()` macros.
 
 ##  Code sample
@@ -59,11 +59,12 @@ See [INDEX.md](./INDEX.md) for the full list of modules and functions.
 Notable starting points:
 
 - [S.md](./S.md), [B.md](./B.md), [C.md](./C.md) — slices, buffers, cursors
+- [HASH.md](./HASH.md) — minimalistic mmappable hash tables 
 - [HEX.md](./HEX.md) — minimal example of idiomatic slice code
 - [HEAP.md](./HEAP.md) — non-trivial container built on buffers
 - [PRO.md](./PRO.md) — error handling and call macros
 - [LEX.md](./LEX.md) — Ragel-based lexer generator
-- [FILE.md](./FILE.md), [MMAP.md](./MMAP.md) — I/O and memory mapping
+- [FILE.md](./FILE.md) — I/O and memory mapping
 - [TLV.md](./TLV.md), [ZINT.md](./ZINT.md) — variable-length serialization
 
 [P]: ./PRO.md
