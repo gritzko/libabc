@@ -152,7 +152,7 @@ ok64 DNSResolve(u8cs server, u8csc name, u16 type,
     int fd = -1;
     ok64 o = UDPConnect(&fd, server);
     if (o != OK) return o;
-    o = FILEFeedall(fd, qpkt_datac);
+    o = FILEFeedAll(fd, qpkt_datac);
     if (o != OK) { UDPClose(fd); return o; }
 
     // receive with timeout

@@ -402,61 +402,35 @@ ok64 URITestPathZero() {
 ok64 URITestBareQuery() {
     sane(1);
 
-    // bare ?query — FIXME: ragel DFA rejects this, needs regeneration
+    // bare ?query
     a$str(q, "?refs/heads/master");
     uri uq = {};
-    ok64 oq = URIutf8Drain(q, &uq);
-    if (oq == OK) {
-        a$str(expect_q, "refs/heads/master");
-        $testeq(uq.query, expect_q);
-        test($empty(uq.authority), URIBAD);
-        test($empty(uq.path), URIBAD);
-        test($empty(uq.scheme), URIBAD);
-    } else {
-        fprintf(stderr, "  SKIP: bare ?query not supported (need ragel regen)\n");
-    }
+    call(URIutf8Drain, q, &uq);
+    a$str(expect_q, "refs/heads/master");
+    $testeq(uq.query, expect_q);
+    test($empty(uq.authority), URIBAD);
+    test($empty(uq.path), URIBAD);
+    test($empty(uq.scheme), URIBAD);
 
     // bare #fragment
     a$str(f, "#abc123def");
     uri uf = {};
-    ok64 of = URIutf8Drain(f, &uf);
-    if (of == OK) {
-        a$str(expect_f, "abc123def");
-        $testeq(uf.fragment, expect_f);
-        test($empty(uf.authority), URIBAD);
-        test($empty(uf.path), URIBAD);
-    } else {
-        fprintf(stderr, "  SKIP: bare #fragment not supported (need ragel regen)\n");
-    }
+    call(URIutf8Drain, f, &uf);
+    a$str(expect_f, "abc123def");
+    $testeq(uf.fragment, expect_f);
+    test($empty(uf.authority), URIBAD);
+    test($empty(uf.path), URIBAD);
 
     // //authority/path?query
     a$str(full, "//localhost/src/git?refs/tags/v1");
     uri ufull = {};
-    ok64 ofull = URIutf8Drain(full, &ufull);
-    fprintf(stderr, "  //localhost/src/git?refs/tags/v1 → %s\n", ok64str(ofull));
-    if (ofull == OK) {
-        fprintf(stderr, "    host='%.*s' path='%.*s' query='%.*s'\n",
-                (int)$len(ufull.host), ufull.host[0] ? (char*)ufull.host[0] : "",
-                (int)$len(ufull.path), ufull.path[0] ? (char*)ufull.path[0] : "",
-                (int)$len(ufull.query), ufull.query[0] ? (char*)ufull.query[0] : "");
-    }
-
-    // bare #fragment
-    a$str(f2, "#abc123def");
-    uri uf2 = {};
-    ok64 of2 = URIutf8Drain(f2, &uf2);
-    fprintf(stderr, "  #abc123def → %s\n", ok64str(of2));
-    if (of2 == OK) {
-        fprintf(stderr, "    fragment='%.*s'\n",
-                (int)$len(uf2.fragment), uf2.fragment[0] ? (char*)uf2.fragment[0] : "");
-    }
-
-    // bare ?query
-    fprintf(stderr, "  ?refs/heads/master → %s\n", ok64str(oq));
-    if (oq == OK) {
-        fprintf(stderr, "    query='%.*s'\n",
-                (int)$len(uq.query), uq.query[0] ? (char*)uq.query[0] : "");
-    }
+    call(URIutf8Drain, full, &ufull);
+    a$str(expect_host, "localhost");
+    a$str(expect_path, "/src/git");
+    a$str(expect_ref, "refs/tags/v1");
+    $testeq(ufull.host, expect_host);
+    $testeq(ufull.path, expect_path);
+    $testeq(ufull.query, expect_ref);
 
     done;
 }

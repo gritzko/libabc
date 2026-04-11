@@ -359,7 +359,7 @@ fun ok64 FILEFeedv(int fd, u8css datav) {
     return OK;
 }
 
-fun ok64 FILEFeedall(int fd, uint8_t const *const *data) {
+fun ok64 FILEFeedAll(int fd, uint8_t const *const *data) {
     if (!FILEok(fd) || !$ok(data)) return FILEBADARG;
     a_dup(u8 const, d, data);
     ok64 ret = OK;
@@ -580,12 +580,12 @@ fun ok64 FILEInit() {
 
 fun ok64 FILEout(u8 const *const *txt) {
     a_dup(u8 const, dup, txt);
-    return FILEFeedall(STDOUT_FILENO, dup);
+    return FILEFeedAll(STDOUT_FILENO, dup);
 }
 
 fun ok64 FILEerr(u8 const *const *txt) {
     a_dup(u8 const, dup, txt);
-    return FILEFeedall(STDERR_FILENO, dup);
+    return FILEFeedAll(STDERR_FILENO, dup);
 }
 
 static u8 _NL[2] = {'\n', 0};

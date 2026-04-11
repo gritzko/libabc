@@ -296,7 +296,7 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
     PATHu8bTerm(rlname);
     int rfd;
     call(FILECreate, &rfd, PATHu8cgIn(rlname));
-    call(FILEFeedall, rfd, rl_datac);
+    call(FILEFeedAll, rfd, rl_datac);
     call(FILEClose, &rfd);
 
     done;

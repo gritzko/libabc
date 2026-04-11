@@ -96,7 +96,7 @@ ok64 FILEtest5() {
     int wfd;
     call(FILECreate, &wfd, PATHu8cgIn(path));
     a_dup(u8 const, data, testdata);
-    call(FILEFeedall, wfd, data);
+    call(FILEFeedAll, wfd, data);
     call(FILEClose, &wfd);
 
     // Test FILEEnsureSoft

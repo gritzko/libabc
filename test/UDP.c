@@ -16,7 +16,7 @@ ok64 UDPtest1() {
     call(UDPConnect, &cfd, addr);
 
     a$str(bubu, "BuBu");
-    call(FILEFeedall, cfd, bubu);
+    call(FILEFeedAll, cfd, bubu);
 
     aBpad2(u8, read, 128);
     aNETraw(sndaddr);
