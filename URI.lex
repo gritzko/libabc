@@ -48,7 +48,7 @@ Authority   = "//" ( ( User "@" )? Host ( ":" Port )? ) ;
 
 Fragment = ( pchar | "/" | "?" )* ;
 
-Query = (pchar - "#")* ;
+Query = ( ( pchar | "/" | "?" ) - "#" )* ;
 
 PathRootless = Segment_nz ( slash Segment )*;
 

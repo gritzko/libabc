@@ -1,5 +1,5 @@
-#include "INT.h"
-#include "PRO.h"
+#include "abc/INT.h"
+#include "abc/PRO.h"
 #include "URI.h"
 
 // action indices for the parser
@@ -60,7 +60,7 @@ action URISegment1 {
     tok[1] = p;
     o = URIonSegment(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URISegment_nz0 { mark0[URISegment_nz] = p - data[0]; }
@@ -69,7 +69,7 @@ action URISegment_nz1 {
     tok[1] = p;
     o = URIonSegment_nz(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIPath0 { mark0[URIPath] = p - data[0]; }
@@ -78,7 +78,7 @@ action URIPath1 {
     tok[1] = p;
     o = URIonPath(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIPathNoscheme0 { mark0[URIPathNoscheme] = p - data[0]; }
@@ -87,7 +87,7 @@ action URIPathNoscheme1 {
     tok[1] = p;
     o = URIonPathNoscheme(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIScheme0 { mark0[URIScheme] = p - data[0]; }
@@ -96,7 +96,7 @@ action URIScheme1 {
     tok[1] = p;
     o = URIonScheme(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIIPv4address0 { mark0[URIIPv4address] = p - data[0]; }
@@ -105,7 +105,7 @@ action URIIPv4address1 {
     tok[1] = p;
     o = URIonIPv4address(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIIPvFuture0 { mark0[URIIPvFuture] = p - data[0]; }
@@ -114,7 +114,7 @@ action URIIPvFuture1 {
     tok[1] = p;
     o = URIonIPvFuture(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIIPv6address0 { mark0[URIIPv6address] = p - data[0]; }
@@ -123,7 +123,7 @@ action URIIPv6address1 {
     tok[1] = p;
     o = URIonIPv6address(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIIP_literal0 { mark0[URIIP_literal] = p - data[0]; }
@@ -132,7 +132,7 @@ action URIIP_literal1 {
     tok[1] = p;
     o = URIonIP_literal(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIUser0 { mark0[URIUser] = p - data[0]; }
@@ -141,7 +141,7 @@ action URIUser1 {
     tok[1] = p;
     o = URIonUser(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIHost0 { mark0[URIHost] = p - data[0]; }
@@ -150,7 +150,7 @@ action URIHost1 {
     tok[1] = p;
     o = URIonHost(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIPort0 { mark0[URIPort] = p - data[0]; }
@@ -159,7 +159,7 @@ action URIPort1 {
     tok[1] = p;
     o = URIonPort(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIAuthority0 { mark0[URIAuthority] = p - data[0]; }
@@ -168,7 +168,7 @@ action URIAuthority1 {
     tok[1] = p;
     o = URIonAuthority(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIFragment0 { mark0[URIFragment] = p - data[0]; }
@@ -177,7 +177,7 @@ action URIFragment1 {
     tok[1] = p;
     o = URIonFragment(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIQuery0 { mark0[URIQuery] = p - data[0]; }
@@ -186,7 +186,7 @@ action URIQuery1 {
     tok[1] = p;
     o = URIonQuery(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIPathRootless0 { mark0[URIPathRootless] = p - data[0]; }
@@ -195,7 +195,7 @@ action URIPathRootless1 {
     tok[1] = p;
     o = URIonPathRootless(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIURI0 { mark0[URIURI] = p - data[0]; }
@@ -204,7 +204,7 @@ action URIURI1 {
     tok[1] = p;
     o = URIonURI(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 action URIRoot0 { mark0[URIRoot] = p - data[0]; }
@@ -213,7 +213,7 @@ action URIRoot1 {
     tok[1] = p;
     o = URIonRoot(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fbreak;
     }
 }
 
@@ -249,7 +249,7 @@ URIHost = (   URIIP_literal  |  URIIPv4address  |  URIreg_name   )  >URIHost0 %U
 URIPort = (   (URIpchar  -  ("/"  |  "?"  |  "#")){1,5}   )  >URIPort0 %URIPort1;
 URIAuthority = (   "//"  (  (  URIUser  "@"  )?  URIHost  (  ":"  URIPort  )?  )   )  >URIAuthority0 %URIAuthority1;
 URIFragment = (   (  URIpchar  |  "/"  |  "?"  )*   )  >URIFragment0 %URIFragment1;
-URIQuery = (   (URIpchar  -  "#")*   )  >URIQuery0 %URIQuery1;
+URIQuery = (   (  (  URIpchar  |  "/"  |  "?"  )  -  "#"  )*   )  >URIQuery0 %URIQuery1;
 URIPathRootless = (   URISegment_nz  (  URIslash  URISegment  )* )  >URIPathRootless0 %URIPathRootless1;
 URIhier_part = (   URIAuthority  URIPath?  |  URIPath  |  URIPathRootless ); # no hier_part callback
 URIabsolute_URI = (   URIScheme  URIhier_part?  ("?"  URIQuery)?  ("#"  URIFragment)? ); # no absolute_URI callback
