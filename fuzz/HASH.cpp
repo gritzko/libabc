@@ -58,7 +58,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
         uint32_t key = pair.first;
         uint32_t val = pair.second;
         kv32 fact = {.key = key, .val = 0};
-        status = HASHkv32get(&fact, hashmap);
+        status = HASHkv32Get(&fact, hashmap);
         if (status != OK || fact.val != val)
             fprintf(stderr, "? %u: %u!=%u (%lx)\n", key, val, fact.val, status);
         assert(status == OK);
