@@ -726,7 +726,10 @@ ok64 FILEScan(path8 path, FILE_SCAN mode, path8f f, voidp arg) {
         }
         switch (dtype) {
             case DT_DIR:
-                if (o == OK && (mode & FILE_SCAN_DIRS)) o = f(arg, path);
+                if (o == OK && (mode & FILE_SCAN_DIRS)) {
+                    u8sFeed1(u8bIdle(path), '/');
+                    o = f(arg, path);
+                }
                 if (o == FILESKIP)
                     o = OK;  // Skip recursion but continue scan
                 else if (o == OK && (mode & FILE_SCAN_DEEP))
