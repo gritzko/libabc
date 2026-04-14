@@ -507,7 +507,7 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     // Round up to system page boundaries (16KB on Apple Silicon)
     size_t sp = FILESysPage();
     book_size = roundup(book_size, sp);
-    file_size = roundup(file_size, sp);
+    file_size = roundup(file_size ? file_size : 1, sp);
     test(file_size <= book_size, BADARG);
 
     // Slot must be free
