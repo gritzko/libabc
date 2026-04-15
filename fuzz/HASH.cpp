@@ -39,7 +39,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
             break;
         }
         if (e.val) {
-            status = HASHkv32put(hashmap, &e);
+            status = HASHkv32Put(hashmap, &e);
             if (OK != status) {
                 if (status == HASHNOROOM) break;
                 fprintf(stderr, "\n\nPUT %u,%u failed %lx\n\n", e.key, e.val,
@@ -48,7 +48,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
             assert(OK == status);
             ref[e.key] = e.val;
         } else {
-            HASHkv32del(hashmap, &e);
+            HASHkv32Del(hashmap, &e);
             ref.erase(e.key);
         }
         p += rd;
