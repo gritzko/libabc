@@ -687,7 +687,7 @@ ok64 FILEUnBook(u8bp buf) {
     done;
 }
 
-ok64 FILEScan(path8 path, FILE_SCAN mode, path8f f, voidp arg) {
+ok64 FILEScan(path8 path, FILE_SCAN mode, path8f f, void0p arg) {
     sane(PATHu8bSane(path) && f);
     DIR *dir = opendir((const char *)*path);
     if (dir == NULL) {

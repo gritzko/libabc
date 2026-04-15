@@ -36,16 +36,17 @@ fun void u8sFill(u8s s, u8 v) { memset((void *)*s, v, $size(s)); }
 #include "Bx.h"
 #undef X
 
-typedef void *voidp;
-typedef void const *voidcp;
+typedef void void0;
+typedef void *void0p;
+typedef void const *void0cp;
 
-fun int voidpcmp(void *const *a, void *const *b) {
+fun int void0pcmp(void *const *a, void *const *b) {
     if (*a < *b) return -1;
     if (*a > *b) return 1;
     return 0;
 }
 
-#define X(M, name) M##voidp##name
+#define X(M, name) M##void0p##name
 #include "Bx.h"
 #undef X
 

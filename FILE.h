@@ -174,7 +174,7 @@ typedef int *FILE;
 // Legacy path8 buffer type (for code that needs to own/modify paths)
 typedef u8b path8;
 typedef u8bp path8p;
-typedef ok64 (*path8f)(voidp arg, path8p path);
+typedef ok64 (*path8f)(void0p arg, path8p path);
 
 // a_path moved to PATH.h (variadic, supports segments)
 
@@ -209,7 +209,7 @@ typedef enum {
     FILE_SCAN_LINKS = 8,
     FILE_SCAN_ALL = 14,
 } FILE_SCAN;
-ok64 FILEScan(path8p path, FILE_SCAN mode, path8f f, voidp arg);
+ok64 FILEScan(path8p path, FILE_SCAN mode, path8f f, void0p arg);
 
 // File tree iterator (into/next/outo pattern)
 // Usage:
@@ -233,7 +233,7 @@ typedef struct fileit {
     u8 type;       // DT_REG, DT_DIR, DT_LNK, etc (from dirent.h)
     u8 flags;      // reserved
     u8p dirend;    // saved path end (dir portion, before entry name)
-    voidp dir;     // DIR* handle (void* to avoid dirent.h in header)
+    void0p dir;     // DIR* handle (void* to avoid dirent.h in header)
     path8gp path;  // shared path gauge
     // Sorted mode fields (NULL = unsorted):
     u8csz sort;    // comparator (inherited by children)
@@ -280,17 +280,17 @@ ok64 FILENext(fileitp it);
 ok64 FILEInto(fileitp child, fileitp parent);
 // Ascend from directory
 ok64 FILEOuto(fileitp child, fileitp parent);
-fun ok64 FILEScanDir(path8p path, path8f f, voidp arg) {
+fun ok64 FILEScanDir(path8p path, path8f f, void0p arg) {
     return FILEScan(path, FILE_SCAN_ALL, f, arg);
 }
-fun ok64 FILEScanFiles(path8p path, path8f f, voidp arg) {
+fun ok64 FILEScanFiles(path8p path, path8f f, void0p arg) {
     return FILEScan(path, FILE_SCAN_FILES, f, arg);
 }
-fun ok64 FILEDeepScanFiles(path8p path, path8f f, voidp arg) {
+fun ok64 FILEDeepScanFiles(path8p path, path8f f, void0p arg) {
     return FILEScan(path, (FILE_SCAN)(FILE_SCAN_FILES | FILE_SCAN_DEEP), f,
                     arg);
 }
-fun ok64 FILEDeepScanDir(path8p path, path8f f, voidp arg) {
+fun ok64 FILEDeepScanDir(path8p path, path8f f, void0p arg) {
     return FILEScan(path, (FILE_SCAN)(FILE_SCAN_ALL | FILE_SCAN_DEEP), f, arg);
 }
 

@@ -274,7 +274,7 @@ typedef struct {
     u8cs last_val;
 } ScanCtx;
 
-static ok64 ScanCB(voidp arg, u8cs key, u8cs val) {
+static ok64 ScanCB(void0p arg, u8cs key, u8cs val) {
     ScanCtx *ctx = (ScanCtx *)arg;
     ctx->count++;
     size_t kl = $len(key);
@@ -290,7 +290,7 @@ static ok64 ScanCB(voidp arg, u8cs key, u8cs val) {
     return OK;
 }
 
-static ok64 ScanStopCB(voidp arg, u8cs key, u8cs val) {
+static ok64 ScanStopCB(void0p arg, u8cs key, u8cs val) {
     ScanCtx *ctx = (ScanCtx *)arg;
     ctx->count++;
     if (ctx->count >= 2) return ROCKFAIL;  // stop after 2

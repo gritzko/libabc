@@ -332,7 +332,7 @@ ok64 ROCKBatchClose(ROCKbatchp wb) {
 }
 
 // Prefix scan with callback
-ok64 ROCKScan(ROCKdbp db, u8cs prefix, ROCKscanf f, voidp arg) {
+ok64 ROCKScan(ROCKdbp db, u8cs prefix, ROCKscanf f, void0p arg) {
     sane(db != NULL && db->db != NULL && f != NULL);
     ROCKiter it = {};
     call(ROCKIterOpen, &it, db);

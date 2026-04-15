@@ -62,7 +62,7 @@ typedef f64 *f64p;
 typedef f32 const *f32cp;
 typedef f64 const *f64cp;
 
-typedef void *voidp;
+typedef void *void0p;
 typedef void const *voidcp;
 
 typedef u8 bl00[1];
@@ -432,6 +432,6 @@ fun int64_t u64Zag(u64 u) {
     return (i64)(half ^ mask);
 }
 
-typedef ok64 (*voidf)(voidp p);
+typedef ok64 (*voidf)(void0p p);
 
 #endif
