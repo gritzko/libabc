@@ -29,6 +29,8 @@ con ok64 FILENOOPEN = 0x3d254e5d8619397;
 con ok64 FILENOCLSE = 0x3d254e5d831570e;
 con ok64 FILENOSTAT = 0x3d254e5d871d29d;
 con ok64 FILEWRONG = 0xf4953a06d85d0;
+con ok64 FILESPAWN = 0xf49539c64a817;
+con ok64 FILESIGNAL = 0x3d254e712417295;
 con ok64 FILENORESZ = 0x3d254e5d86ce723;
 con ok64 FILEEND = 0xf49538e5cd;
 con ok64 FILENONE = 0x3d254e5d85ce;
@@ -459,6 +461,27 @@ ok64 FILEUnLink(path8cg name);
 
 // Read getcwd into a path buffer. NUL-terminates and feeds DATA.
 ok64 FILEGetCwd(path8b out);
+
+// Spawn a child process running `path` (slice — copied + NUL-termed
+// internally for execv).  `argv` is a slice of u8cs slices; each
+// element is an argument (also copied + NUL-termed).  argv[0] is the
+// program name as the child sees it.  No shell.
+//
+//   stdin_w  : if non-NULL, *stdin_w receives a write fd to child stdin.
+//   stdout_r : if non-NULL, *stdout_r receives a read fd from child stdout.
+//   stderr is inherited from the parent.
+//   pid_out  : *pid_out receives the child pid (caller reaps via FILEReap).
+//
+// Returns OK on successful fork+exec setup.  exec failures inside the
+// child show up at FILEReap time as a non-zero exit_code (127).
+ok64 FILESpawn(u8csc path, u8css argv,
+               int *stdin_w, int *stdout_r, pid_t *pid_out);
+
+// Wait for `pid` to terminate.  *exit_code (NULL ok) gets the WEXITSTATUS.
+// Returns OK on clean exit (any status, including non-zero — caller checks
+// *exit_code).  Returns FILESIGNAL if the process died from a signal;
+// *exit_code is set to the signal number.
+ok64 FILEReap(pid_t pid, int *exit_code);
 
 fun int flags2prot(int flags) {
     int prot = PROT_READ;

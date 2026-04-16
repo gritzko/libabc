@@ -51,13 +51,11 @@ ok64 JSONCompactTest() {
 
     for (int i = 0; i < ncases; ++i) {
         a_pad(u8, out, 1 << 16);
-        u8cs json = {(u8c *)cases[i].input,
-                     (u8c *)cases[i].input + strlen(cases[i].input)};
+        u8cs json = u8scstr(cases[i].input);
         call(JSONFmt, out_idle, json, no_indent);
 
         u8cs result = {out[1], out_idle[0]};
-        u8cs expect = {(u8c *)cases[i].expected,
-                       (u8c *)cases[i].expected + strlen(cases[i].expected)};
+        u8cs expect = u8scstr(cases[i].expected);
 
         if (!u8csEq(result, expect)) {
             fprintf(stderr, "FAIL case %d: '%s'\n", i, cases[i].input);
@@ -95,13 +93,11 @@ ok64 JSONPrettyTest() {
 
     for (int i = 0; i < ncases; ++i) {
         a_pad(u8, out, 1 << 16);
-        u8cs json = {(u8c *)cases[i].input,
-                     (u8c *)cases[i].input + strlen(cases[i].input)};
+        u8cs json = u8scstr(cases[i].input);
         call(JSONFmt, out_idle, json, indent);
 
         u8cs result = {out[1], out_idle[0]};
-        u8cs expect = {(u8c *)cases[i].expected,
-                       (u8c *)cases[i].expected + strlen(cases[i].expected)};
+        u8cs expect = u8scstr(cases[i].expected);
 
         if (!u8csEq(result, expect)) {
             fprintf(stderr, "FAIL pretty case %d: '%s'\n", i, cases[i].input);
@@ -134,12 +130,10 @@ ok64 JSONEscapeTest() {
 
     for (int i = 0; i < ncases; ++i) {
         a_pad(u8, buf, 1024);
-        u8cs from = {(u8c *)cases[i].unescaped,
-                     (u8c *)cases[i].unescaped + strlen(cases[i].unescaped)};
+        u8cs from = u8scstr(cases[i].unescaped);
         call(JSONEscapeAll, buf_idle, from);
         u8cs result = {buf[1], buf_idle[0]};
-        u8cs expect = {(u8c *)cases[i].escaped,
-                       (u8c *)cases[i].escaped + strlen(cases[i].escaped)};
+        u8cs expect = u8scstr(cases[i].escaped);
         want(u8csEq(result, expect));
     }
     done;

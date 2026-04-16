@@ -25,6 +25,12 @@ target_compile_options(ANSItest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(ANSItest abc-core)
 add_test(NAME ANSItest COMMAND ANSItest)
 
+add_executable(SPAWNtest SPAWN.c)
+target_link_options(SPAWNtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(SPAWNtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(SPAWNtest abc-core)
+add_test(NAME SPAWNtest COMMAND SPAWNtest)
+
 add_executable(Stest S.c)
 target_link_options(Stest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(Stest PRIVATE ${TEST_CXX_FLAGS})

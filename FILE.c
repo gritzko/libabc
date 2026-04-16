@@ -2,6 +2,7 @@
 
 #include <dirent.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <time.h>
 
 #include "01.h"
@@ -130,6 +131,93 @@ ok64 FILEGetCwd(path8b out) {
     call(u8bFed, out, len);
     call(PATHu8gTerm, PATHu8gIn(out));
     done;
+}
+
+// Limits for the per-spawn stack scratch (argv pointers + NUL-term bytes).
+#define FILE_SPAWN_MAX_ARGS    64
+#define FILE_SPAWN_SCRATCH_LEN (16 * 1024)
+
+ok64 FILESpawn(u8csc path, u8css argv,
+               int *stdin_w, int *stdout_r, pid_t *pid_out) {
+    sane($ok(path) && pid_out != NULL);
+
+    // Build NUL-terminated C-string path + argv for execv.  Path and
+    // each argv slice are fed into a single scratch buffer; the
+    // intra-buffer offsets become the char* entries in cargv.
+    a_pad(u8, scratch, FILE_SPAWN_SCRATCH_LEN);
+    char *cargv[FILE_SPAWN_MAX_ARGS + 1];
+
+    char *cpath = (char *)u8bIdleHead(scratch);
+    call(u8bFeed, scratch, path);
+    call(u8bFeed1, scratch, 0);
+
+    int nargs = 0;
+    $for(u8cs, a, argv) {
+        if (nargs >= FILE_SPAWN_MAX_ARGS) fail(FILESPAWN);
+        cargv[nargs++] = (char *)u8bIdleHead(scratch);
+        call(u8bFeed, scratch, *a);
+        call(u8bFeed1, scratch, 0);
+    }
+    cargv[nargs] = NULL;
+
+    // Pipes are (read_end, write_end).  Child reads from in[0], writes to out[1];
+    // parent gets the opposite ends.
+    int in_pipe[2]  = {-1, -1};
+    int out_pipe[2] = {-1, -1};
+    if (stdin_w  && pipe(in_pipe)  != 0) failc(FILESPAWN);
+    if (stdout_r && pipe(out_pipe) != 0) {
+        if (in_pipe[0] >= 0) { close(in_pipe[0]); close(in_pipe[1]); }
+        failc(FILESPAWN);
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        if (in_pipe[0]  >= 0) { close(in_pipe[0]);  close(in_pipe[1]);  }
+        if (out_pipe[0] >= 0) { close(out_pipe[0]); close(out_pipe[1]); }
+        failc(FILESPAWN);
+    }
+    if (pid == 0) {
+        // Child: rewire fds, exec.
+        if (stdin_w) {
+            close(in_pipe[1]);
+            dup2(in_pipe[0], STDIN_FILENO);
+            close(in_pipe[0]);
+        }
+        if (stdout_r) {
+            close(out_pipe[0]);
+            dup2(out_pipe[1], STDOUT_FILENO);
+            close(out_pipe[1]);
+        }
+        execv((char const *)*path, cargv);
+        _exit(127);
+    }
+
+    // Parent: keep our ends, drop the child's.
+    if (stdin_w)  { close(in_pipe[0]);  *stdin_w  = in_pipe[1];  }
+    if (stdout_r) { close(out_pipe[1]); *stdout_r = out_pipe[0]; }
+    *pid_out = pid;
+    done;
+}
+
+ok64 FILEReap(pid_t pid, int *exit_code) {
+    sane(pid > 0);
+    int st = 0;
+    for (;;) {
+        pid_t r = waitpid(pid, &st, 0);
+        if (r == pid) break;
+        if (r < 0 && errno == EINTR) continue;
+        failc(FILEFAIL);
+    }
+    if (WIFEXITED(st)) {
+        if (exit_code) *exit_code = WEXITSTATUS(st);
+        done;
+    }
+    if (WIFSIGNALED(st)) {
+        if (exit_code) *exit_code = WTERMSIG(st);
+        return FILESIGNAL;
+    }
+    if (exit_code) *exit_code = -1;
+    fail(FILEFAIL);
 }
 
 ok64 FILEHardLink(path8cg dst, path8cg src) {

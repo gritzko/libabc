@@ -195,6 +195,19 @@ con char *_pro_indent =
 #define trace(...) ;
 #endif
 
+// --- Process argv as a typed buffer ---
+//
+// `STD_ARGS` is a u8csb (buffer of u8cs slices) holding this process's
+// argv as parsed by MAIN/TEST/FUZZ at startup.  Each element is a
+// u8cs slice borrowing from the original argv[i] memory; argv[i] is
+// NUL-terminated so the slice's pointers can be safely passed where
+// a NUL-term char* is needed.
+//
+// Use `$arglen` for argv count, `$arg(i)` to get the i-th slice by
+// value, `a$rg(name, i)` to bind a u8cs local, `an_arg(name, i)` for
+// a safe optional bind (empty if i >= argc).  Pass `u8csbDataC(STD_ARGS)`
+// to anything wanting a u8css over the whole argv (e.g. FILESpawn for
+// self-exec).
 extern u8cs _STD_ARGS[];
 extern u8cs *STD_ARGS[];
 

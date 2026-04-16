@@ -158,6 +158,14 @@ typedef int (*$cmpfn)($cc a, $cc b);
 
 #define a_cstr(n, c) u8 const *n[2] = {(u8c *)(c), (u8c *)((c) + strlen(c))}
 
+// u8cs initializer for a string literal — compile-time, no strlen.
+// Usage: u8cs args[] = {u8slit("git"), u8slit("-C"), …};
+#define u8slit(s) {(u8c *)(s), (u8c *)(s) + sizeof(s) - 1}
+
+// u8cs initializer for a runtime NUL-terminated char* (uses strlen).
+// Usage in an array: u8cs args[] = { ..., u8scstr(nstr[k]), ... };
+#define u8scstr(c) {(u8c *)(c), (u8c *)(c) + strlen(c)}
+
 #define a_u8cs(n, ...)          \
     u8c _##n[] = {__VA_ARGS__}; \
     u8c *n[2] = {_##n, _##n + sizeof(_##n)};

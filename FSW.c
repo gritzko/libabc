@@ -70,8 +70,7 @@ ok64 FSWDrain(int wfd, FSWcb cb, void *ctx) {
         while (p < buf + n) {
             struct inotify_event *ev = (struct inotify_event *)p;
             if (cb && ev->len > 0) {
-                u8cs name = {(u8c *)ev->name,
-                             (u8c *)ev->name + strlen(ev->name)};
+                u8cs name = u8scstr(ev->name);
                 ok64 o = cb(name, ctx);
                 if (o != OK) return o;
             }
