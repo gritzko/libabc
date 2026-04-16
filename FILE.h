@@ -457,6 +457,9 @@ ok64 FILErmrf(path8cg name);
 
 ok64 FILEUnLink(path8cg name);
 
+// Read getcwd into a path buffer. NUL-terminates and feeds DATA.
+ok64 FILEGetCwd(path8b out);
+
 fun int flags2prot(int flags) {
     int prot = PROT_READ;
     if ((flags & O_RDWR) == O_RDWR) prot |= PROT_WRITE;

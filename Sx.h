@@ -225,7 +225,26 @@ fun T X(, csAt)(X(, cs) s, size_t pos) { return s[0][pos]; }
 fun T *X(, sAtP)(X(, s) s, size_t pos) { return s[0] + pos; }
 fun T const *X(, csAtP)(X(, cs) s, size_t pos) { return s[0] + pos; }
 
-// some data is used; advances the left border of the slice
+// --- Slice boundary movers ---
+//
+// A slice is a [head, term) pair.  Moving these borders is how a slice
+// is consumed (a finite, sequential operation; no memory copies).
+//
+//        sUsed (head++)       sShed (term--)
+//             v                     v
+//   ... PAST | DATA . . . . . . . . | (rest)
+//          s[0]                   s[1]
+//
+//   sUsed : the left border advances; the prefix is "used up".
+//           Typical for parsers walking input.
+//   sShed : the right border retreats; the suffix is dropped.
+//           Typical for trimming staged output you decided not to keep.
+//   *Used1 / *Shed1 : single-element variants.
+//   *UsedAll / *ShedAll : collapse the slice to empty in either direction.
+//
+// Both return MISS if asked to move beyond the opposite border.
+
+// sUsed*: advance head (consume from the left).
 fun ok64 X(, sUsed)(X(, s) s, size_t len) {
     if (unlikely(len > $len(s))) return MISS;
     s[0] += len;
@@ -242,7 +261,7 @@ fun ok64 X(, sUsedAll)(X(, s) s) {
 }
 fun ok64 X(, csUsedAll)(X(, cs) s) { return X(, sUsedAll)((T **)s); }
 
-// sheds data on the right border of the slice
+// sShed*: retreat term (drop from the right).
 fun ok64 X(, sShed)(X(, s) s, size_t len) {
     if (unlikely(len > $len(s))) return MISS;
     s[1] -= len;
@@ -526,6 +545,19 @@ fun ok64 X(, gPopN)(X(, g) g, size_t n, X(, cs) popped) {
 }
 #endif
 
+// --- Slice writers ---
+//
+// `into` is the writable area; head advances as bytes are appended.
+// Returns SNOROOM when full.
+//
+//   sFeed* : write a value (or N values) into the slice and advance.
+//   sFed*  : do *not* write — just advance head as if N elements were
+//            written by the caller (used after a low-level write that
+//            already touched memory directly).
+//
+// Pair sFed with the producer that filled the bytes (e.g. a posix
+// read() or memcpy via raw pointer); pair sFeed with cases where the
+// macro itself writes the value.
 fun ok64 X(, sFeed1)(X(, s) into, T what) {
     if ($empty(into)) return SNOROOM;
 #ifndef ABC_X_$
@@ -541,6 +573,9 @@ fun ok64 X(, gFeed1)(X(, g) into, T what) {
     return X(, sFeed1)(X(, gRest)(into), what);
 }
 
+// sFed*: head advances by len without writing — caller already filled
+// the bytes (e.g. via a syscall or a downstream serializer that took a
+// raw pointer).
 fun ok64 X(, sFed1)(X(, s) into) {
     if (unlikely(into[0] >= into[1])) return SNOROOM;
     ++*into;

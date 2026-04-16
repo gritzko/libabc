@@ -147,6 +147,11 @@ typedef int (*$cmpfn)($cc a, $cc b);
         *into += $size(into) < l ? $size(into) : l;                     \
     }
 
+// Expand a slice as the (length, pointer) pair printf("%.*s", ...) wants.
+// Use as: printf("got '" $FMT_S "'\n", $ARG(my_slice));
+#define $FMT_S    "%.*s"
+#define $ARG(s)   (int)$len(s), (char const *)(s)[0]
+
 #define a$str(n, s)          \
     char const *__##n = (s); \
     u8 const *n[2] = {(u8 *)__##n, (u8 *)__##n + strlen(__##n)};

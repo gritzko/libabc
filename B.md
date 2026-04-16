@@ -4,7 +4,8 @@
 
 An ABC buffer is an array of four pointers dividing a memory
 range into three [slices][S]: PAST, DATA and IDLE.
-Consumption of a slice (DATA or IDLE) enlarges the adjoined slice (PAST or DATA resp).
+Consumption of a slice (DATA or IDLE) enlarges the adjoined slice 
+(PAST or DATA resp).
 
 ```
        PAST         DATA             IDLE

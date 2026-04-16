@@ -72,3 +72,34 @@
 | Yx.h | Y-merge template for multi-way merge operations |
 | ZINT.h | Variable-length integer encoding (1, 2, 4, or 8 bytes) |
 | rapidhash.h | Fast platform-independent hash algorithm (based on wyhash) |
+
+## Slice / buffer boundary movers
+
+`Sx.h` (`u8s`, `u32s`, …) and `Bx.h` (`u8b`, `u32b`, …) generate the
+boundary-moving functions that all consumption / production goes
+through. They never copy memory — they move the head/term/idle
+pointers.
+
+Slices (`[head, term)`):
+
+| Function | Border | Effect |
+|----------|--------|--------|
+| `sFeed`/`sFeed1` | head | append value(s) to a writable slice |
+| `sFed`/`sFed1`   | head | advance head as if N were written (caller already filled the bytes) |
+| `sUsed`/`sUsed1`/`sUsedAll` | head | consume from the left (head advances) |
+| `sShed`/`sShed1`/`sShedAll` | term | drop from the right (term retreats) |
+
+Buffers (`[past][data][idle]`, four pointers):
+
+| Function | Border | Effect |
+|----------|--------|--------|
+| `bFeed`/`bFeed1` | data/idle | append to DATA, IDLE shrinks |
+| `bFed`/`bFed1`   | data/idle | advance DATA without writing (caller already filled IDLE) |
+| `bUsed`/`bUsedAll` | past/data | consume DATA from the left (PAST grows) |
+| `bShed`/`bShed1`/`bShedAll` | data/idle | trim DATA from the right (IDLE grows) |
+
+Common pattern: a producer `bFed`s after a `read(2)` (which wrote into
+`bIdleHead`); a parser `bUsed`s as it processes the prefix; failed work
+is rolled back with `bShed*`. To rewind an arena where DATA is kept
+empty and IDLE is the scratchpad, `bShedAll(arena)` makes IDLE span the
+whole buffer again — preferred over the cast `((T**)arena)[2] = arena[1]`.

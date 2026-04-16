@@ -122,6 +122,16 @@ ok64 FILEUnLink(path8cg path) {
     done;
 }
 
+ok64 FILEGetCwd(path8b out) {
+    sane(out != NULL);
+    char *got = getcwd((char *)u8bIdleHead(out), u8bIdleLen(out));
+    if (got == NULL) failc(FILEFAIL);
+    size_t len = strlen(got);
+    call(u8bFed, out, len);
+    call(PATHu8gTerm, PATHu8gIn(out));
+    done;
+}
+
 ok64 FILEHardLink(path8cg dst, path8cg src) {
     sane($ok(dst) && $ok(src));
     int rc = link((char const *)*src, (char const *)*dst);

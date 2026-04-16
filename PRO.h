@@ -35,6 +35,19 @@ con char *_pro_indent =
 #define sane(c) ok64 __ = OK;
 #endif
 
+// `call` propagates errors by `return`-ing immediately on failure.  This
+// implies a strict resource-management discipline: a function that owns
+// resources (mmap, malloc, fd, raw-mode terminal, child pid…) cannot
+// release them in scattered `if (failed) cleanup;` blocks, because any
+// nested `call(...)` may abort before reaching them.
+//
+// The convention is **acquire at the top of the call chain**.  A
+// top-level entry point opens every resource it needs, then delegates
+// the work — passing buffers, file descriptors and state down by
+// pointer.  Nested helpers never own.  
+//
+// In short: orthogonal resource mgmt vs control flow.  `call` only
+// propagates errors; releasing belongs to the owner.
 #define call(f, ...)                                                    \
     {                                                                   \
         u8 __depth = _pro_depth++;                                      \

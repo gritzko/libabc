@@ -122,10 +122,35 @@ fun void X(B, eat)(X(B, ) buf) {
 
 fun void X(, bZero)(X(, b) buf) { memset((void *)*buf, 0, Bsize(buf)); }
 
+// --- Boundary movers ---
+//
+// PAST | DATA | IDLE  (see B.md).  bFed/bShed move the DATA↔IDLE
+// boundary (buf[2]); bUsed moves the PAST↔DATA boundary (buf[1]).
+//
+//                bUsed      bFed/bShed
+//                  v          v
+//   ... PAST ... | DATA ... | IDLE ...
+//   buf[0]      buf[1]      buf[2]      buf[3]
+//
+//   Fed  : grow DATA into IDLE (DATA gained, IDLE shrank).
+//   Shed : shrink DATA from the IDLE side (DATA lost, IDLE grew).
+//   Used : consume DATA from the PAST side (DATA lost, PAST grew).
+//
+// Use case: producers `bFed1`/`bFed` to append; consumers `bUsed` to
+// drop the prefix once handled (typical for parsers with a moving
+// cursor); `bShed*` rolls back recently appended data — useful when a
+// staging area must be rewound on failure or arena reuse (e.g. an arena
+// where DATA is intentionally kept empty and IDLE is the scratchpad:
+// `bShedAll` empties DATA which makes IDLE span the whole buffer
+// again).  Note that `bShedAll` is the typed equivalent of the cast
+// idiom `((T **)buf)[2] = buf[1]`.
+
 fun ok64 X(, bFed)(X(, b) buf, size_t len) {
     return X(, sFed)(X(, bIdle)(buf), len);
 }
 
+// bShed*: roll the DATA/IDLE boundary back into DATA (data shrinks,
+// idle grows).  No memory move.
 fun ok64 X(, bShed1)(X(, b) buf) { return X(, gShed1)(X(, bDataIdle)(buf)); }
 fun ok64 X(, bShed)(X(, b) buf, size_t l) {
     return X(, gShed)(X(, bDataIdle)(buf), l);
@@ -136,8 +161,8 @@ fun ok64 X(, bShedAll)(X(, b) buf) {
 fun ok64 X(, bUsedAll)(X(, b) buf) {
     return X(, gUsedAll)(X(, bPastData)(buf));
 }
-// Consume data from buffer start (advance buf[1])
-// This is the counterpart to bShed which removes from end
+// bUsed: consume DATA from buffer start (advance buf[1]).
+// Counterpart to bShed (which trims from the IDLE side).
 fun ok64 X(, bUsed)(X(, b) buf, size_t len) {
     return X(, gUsed)(X(, bPastData)(buf), len);
 }
