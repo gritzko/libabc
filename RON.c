@@ -56,7 +56,15 @@ ok64 RONutf8sDrain(ok64* o, u8c* const* from) {
     return OK;
 }
 
-ok64 RONOfTime(ron60* r, struct tm* t) {
+// Layout: YYMDDhmsll (10 RON64 digits = 60 bits)
+//   [9][8] year tens/ones (0-9 each, since tm_year-100 in 00..99)
+//   [7]    month (1-12)
+//   [6][5] day tens/ones (0-3, 0-9)
+//   [4]    hour (0-23)
+//   [3]    minute (0-59)
+//   [2]    second (0-59)
+//   [1][0] milliseconds, packed: ms = [1]*64 + [0]  (0-999)
+ok64 RONOfTime(ron60* r, struct tm* t, u32 ms) {
     if (!r || !t) return BADARG;
     u64 y = t->tm_year - 100;
     if (y >= 100) return BADARG;
@@ -65,38 +73,49 @@ ok64 RONOfTime(ron60* r, struct tm* t) {
     if (t->tm_hour < 0 || t->tm_hour >= 24) return BADARG;
     if (t->tm_min < 0 || t->tm_min >= 60) return BADARG;
     if (t->tm_sec < 0 || t->tm_sec >= 60) return BADARG;
+    if (ms >= 1000) return BADARG;
     *r = 0;
     *r |= ((y / 10) << (9 * 6));
     *r |= ((y % 10) << (8 * 6));
     *r |= ((u64)(t->tm_mon + 1) << (7 * 6));
-    *r |= ((u64)(t->tm_mday) << (6 * 6));
-    *r |= ((u64)(t->tm_hour) << (5 * 6));
-    *r |= ((u64)(t->tm_min) << (4 * 6));
-    *r |= ((u64)(t->tm_sec) << (3 * 6));
+    *r |= ((u64)(t->tm_mday / 10) << (6 * 6));
+    *r |= ((u64)(t->tm_mday % 10) << (5 * 6));
+    *r |= ((u64)(t->tm_hour) << (4 * 6));
+    *r |= ((u64)(t->tm_min) << (3 * 6));
+    *r |= ((u64)(t->tm_sec) << (2 * 6));
+    *r |= (((u64)ms / 64) << (1 * 6));
+    *r |= (((u64)ms % 64) << (0 * 6));
     return OK;
 }
 
-ok64 RONToTime(ron60 r, struct tm* t) {
+ok64 RONToTime(ron60 r, struct tm* t, u32 *ms) {
     if (!t) return BADARG;
-    u64 y1 = (r >> (9 * 6)) & 63;
-    u64 y0 = (r >> (8 * 6)) & 63;
-    u64 mon = (r >> (7 * 6)) & 63;
-    u64 mday = (r >> (6 * 6)) & 63;
-    u64 hour = (r >> (5 * 6)) & 63;
-    u64 min = (r >> (4 * 6)) & 63;
-    u64 sec = (r >> (3 * 6)) & 63;
+    u64 y1   = (r >> (9 * 6)) & 63;
+    u64 y0   = (r >> (8 * 6)) & 63;
+    u64 mon  = (r >> (7 * 6)) & 63;
+    u64 d1   = (r >> (6 * 6)) & 63;
+    u64 d0   = (r >> (5 * 6)) & 63;
+    u64 hour = (r >> (4 * 6)) & 63;
+    u64 min  = (r >> (3 * 6)) & 63;
+    u64 sec  = (r >> (2 * 6)) & 63;
+    u64 l1   = (r >> (1 * 6)) & 63;
+    u64 l0   = (r >> (0 * 6)) & 63;
     if (y1 >= 10 || y0 >= 10) return BADARG;
     if (mon < 1 || mon > 12) return BADARG;
-    if (mday < 1 || mday > 31) return BADARG;
+    u64 mday = d1 * 10 + d0;
+    if (d0 >= 10 || d1 >= 4 || mday < 1 || mday > 31) return BADARG;
     if (hour >= 24) return BADARG;
     if (min >= 60) return BADARG;
     if (sec >= 60) return BADARG;
+    u64 msv = l1 * 64 + l0;
+    if (msv >= 1000) return BADARG;
     t->tm_year = 100 + y1 * 10 + y0;
     t->tm_mon = mon - 1;
     t->tm_mday = mday;
     t->tm_hour = hour;
     t->tm_min = min;
     t->tm_sec = sec;
+    if (ms) *ms = (u32)msv;
     return OK;
 }
 

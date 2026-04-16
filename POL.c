@@ -271,8 +271,7 @@ ron60 RONNow() {
     clock_gettime(CLOCK_REALTIME, &ts);
     struct tm* now = localtime(&ts.tv_sec);
     ron60 t = 0;
-    RONOfTime(&t, now);
-    u64 ns = ts.tv_nsec % POLNanosPerSec;
-    t |= (ns >> 12);
+    u32 ms = (u32)(ts.tv_nsec / 1000000);  // 0-999
+    RONOfTime(&t, now, ms);
     return t;
 }

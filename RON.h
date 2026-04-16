@@ -38,11 +38,12 @@ ok64 RONutf8sFeed(u8** into, ok64 val);
 // Decode RON base64 string to u64
 ok64 RONutf8sDrain(ok64* o, u8c* const* from);
 
-// Convert struct tm to RON60 timestamp (months are 1-based in RON60)
-ok64 RONOfTime(ron60* r, struct tm* t);
+// Convert struct tm (+ milliseconds 0-999) to RON60 timestamp.
+// Layout: YYMDDhmsll (10 RON64 digits). Months are 1-based in RON60.
+ok64 RONOfTime(ron60* r, struct tm* t, u32 ms);
 
-// Convert RON60 timestamp to struct tm (months are 1-based in RON60)
-ok64 RONToTime(ron60 r, struct tm* t);
+// Convert RON60 timestamp to struct tm + ms (ms may be NULL).
+ok64 RONToTime(ron60 r, struct tm* t, u32 *ms);
 
 // RONBAD defined in OK.h
 

@@ -13,16 +13,18 @@ ok64 RONTestFromTm() {
         .tm_sec = 0,
     };
     ron60 r = 0;
-    call(RONOfTime, &r, &t);
+    call(RONOfTime, &r, &t, 456);
     // Verify round-trip
     struct tm t2 = {};
-    call(RONToTime, r, &t2);
+    u32 ms2 = 0;
+    call(RONToTime, r, &t2, &ms2);
     testeq(t.tm_year, t2.tm_year);
     testeq(t.tm_mon, t2.tm_mon);
     testeq(t.tm_mday, t2.tm_mday);
     testeq(t.tm_hour, t2.tm_hour);
     testeq(t.tm_min, t2.tm_min);
     testeq(t.tm_sec, t2.tm_sec);
+    testeq(456, (u32)ms2);
     done;
 }
 
@@ -34,27 +36,30 @@ ok64 RONTestInvalid() {
     bad_month |= ((u64)2 << (9 * 6));   // year tens
     bad_month |= ((u64)6 << (8 * 6));   // year ones
     bad_month |= ((u64)14 << (7 * 6));  // month 14 (invalid)
-    bad_month |= ((u64)1 << (6 * 6));   // day
-    want(RONToTime(bad_month, &t) == BADARG);
+    bad_month |= ((u64)0 << (6 * 6));   // day tens
+    bad_month |= ((u64)1 << (5 * 6));   // day ones
+    want(RONToTime(bad_month, &t, NULL) == BADARG);
 
     // Invalid hour (25)
     ron60 bad_hour = 0;
     bad_hour |= ((u64)2 << (9 * 6));
     bad_hour |= ((u64)6 << (8 * 6));
     bad_hour |= ((u64)1 << (7 * 6));   // month 1
-    bad_hour |= ((u64)1 << (6 * 6));   // day 1
-    bad_hour |= ((u64)25 << (5 * 6));  // hour 25 (invalid)
-    want(RONToTime(bad_hour, &t) == BADARG);
+    bad_hour |= ((u64)0 << (6 * 6));   // day tens
+    bad_hour |= ((u64)1 << (5 * 6));   // day ones
+    bad_hour |= ((u64)25 << (4 * 6));  // hour 25 (invalid)
+    want(RONToTime(bad_hour, &t, NULL) == BADARG);
 
     // Invalid minute (60)
     ron60 bad_min = 0;
     bad_min |= ((u64)2 << (9 * 6));
     bad_min |= ((u64)6 << (8 * 6));
     bad_min |= ((u64)1 << (7 * 6));
-    bad_min |= ((u64)1 << (6 * 6));
-    bad_min |= ((u64)0 << (5 * 6));
-    bad_min |= ((u64)60 << (4 * 6));  // min 60 (invalid)
-    want(RONToTime(bad_min, &t) == BADARG);
+    bad_min |= ((u64)0 << (6 * 6));
+    bad_min |= ((u64)1 << (5 * 6));
+    bad_min |= ((u64)0 << (4 * 6));
+    bad_min |= ((u64)60 << (3 * 6));  // min 60 (invalid)
+    want(RONToTime(bad_min, &t, NULL) == BADARG);
 
     done;
 }
