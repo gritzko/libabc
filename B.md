@@ -61,6 +61,9 @@ size_t n = u8bDataLen(buf);       // check length
 u8cs data = u8bDataC(buf);        // get data as const slice
 ```
 
+Note that Feed- and Drain- functions move slice borders, so no
+separate signaling of lengths and consumed counts is ever needed.
+
 ##  Why buffers?
 
 ABC discourages small heap allocations and pointer-heavy structures.

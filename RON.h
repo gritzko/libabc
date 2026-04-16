@@ -99,4 +99,6 @@ fun b8 ron60Z(ron60cp a, ron60cp b) {
     return aa < bb;
 }
 
+ron60 RONNow();
+
 #endif

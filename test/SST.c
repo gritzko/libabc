@@ -45,7 +45,7 @@ fun ok64 latest($u8 into, u8css from) {
     return OK;
 }
 
-con ok64 SrcAlice = 0x299edc0a;
+con ok64 SrcAlice = 0x7369cac2d9e9;
 
 ok64 SST0() {
     sane(1);

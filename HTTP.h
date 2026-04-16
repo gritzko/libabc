@@ -4,7 +4,7 @@
 #include "BUF.h"
 
 con ok64 HTTPFAIL = 0x45d7593ca495;
-con ok64 HTTPBAD = 0x45d759a25dab;
+con ok64 HTTPBAD = 0x1175d64b28d;
 con ok64 HTTPNONE = 0x45d7595d85ce;
 
 #define HTTPenum 0

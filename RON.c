@@ -152,3 +152,13 @@ ok64 RONSpliceBase(ok64 *base, u8 *width, u64 rand, u64 prob, ok64 n) {
     *base = rand % avail;
     return OK;
 }
+
+ron60 RONNow() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    struct tm* now = localtime(&ts.tv_sec);
+    ron60 t = 0;
+    u32 ms = (u32)(ts.tv_nsec / 1000000);  // 0-999
+    RONOfTime(&t, now, ms);
+    return t;
+}

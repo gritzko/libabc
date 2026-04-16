@@ -7,7 +7,7 @@
 #include "PRO.h"
 
 con ok64 TESTFAIL = 0x74e71d3ca495;
-con ok64 TESTFAILEQ = 0x74e71d3ca495a75;
+con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
 
 #define want(cond) \
     if (!(cond)) fail(TESTFAIL);

@@ -266,12 +266,3 @@ ok64 POLLoop(u64 timens) {
     return OK;
 }
 
-ron60 RONNow() {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    struct tm* now = localtime(&ts.tv_sec);
-    ron60 t = 0;
-    u32 ms = (u32)(ts.tv_nsec / 1000000);  // 0-999
-    RONOfTime(&t, now, ms);
-    return t;
-}

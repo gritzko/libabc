@@ -501,14 +501,20 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
 
     call(FILEBookInit);
 
-    size_t file_size;
-    call(FILESize, &file_size, fd);
+    size_t actual_size;
+    call(FILESize, &actual_size, fd);
 
-    // Round up to system page boundaries (16KB on Apple Silicon)
+    // VA reservation and mmap require page-aligned sizes. For a
+    // non-empty file the kernel zero-fills the tail of the last page,
+    // so b[3] = map + rounded is safe (and must stay page-aligned so
+    // FILEBookExtend's later mmap(MAP_FIXED, offset=b[3]-base) works).
+    // A 0-byte file has NO backing page, and SHARED-mmap reads of the
+    // dummy page SIGBUS — so b[3] must stay at map (empty buffer)
+    // until a caller FILEBookEnsure-s and grows the file.
     size_t sp = FILESysPage();
     book_size = roundup(book_size, sp);
-    file_size = roundup(file_size ? file_size : 1, sp);
-    test(file_size <= book_size, BADARG);
+    size_t map_size = roundup(actual_size ? actual_size : 1, sp);
+    test(map_size <= book_size, BADARG);
 
     // Slot must be free
     u8bp slot = FILE_WANT_BUFS[*fd];
@@ -520,17 +526,19 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     FILETestC(base != MAP_FAILED);
 
     // Map the file at the start of the reserved range
-    u8 *map = (u8 *)mmap(base, file_size, PROT_READ | PROT_WRITE,
+    u8 *map = (u8 *)mmap(base, map_size, PROT_READ | PROT_WRITE,
                          MAP_FILE | MAP_SHARED | MAP_FIXED, *fd, 0);
     if (map == MAP_FAILED) {
         munmap(base, book_size);
         FILETestC(0);  // return errno
     }
 
-    // Setup buffer slot
+    // For empty files, leave b[3] at map: no DATA, no IDLE, callers
+    // must grow the file first. For non-empty files, b[3] is the
+    // page-aligned map end (the tail past EOF reads as zero, safe).
     uint8_t **b = (uint8_t **)slot;
     b[0] = b[1] = b[2] = map;
-    b[3] = map + file_size;
+    b[3] = map + (actual_size ? map_size : 0);
 
     // Track the mapping and booked end
     call(FILEInit);

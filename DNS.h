@@ -3,11 +3,11 @@
 
 #include "INT.h"
 
-con ok64 DNSFAIL = 0x1b3593ca495;
-con ok64 DNSBAD = 0x1b359a25dab;
-con ok64 DNSNOROOM = 0x1b35d86d8616;
-con ok64 DNSNODATA = 0x1b35d834a74a;
-con ok64 DNSBADNAME = 0x6cd72ca35d85ce;
+con ok64 DNSFAIL = 0xd5dc3ca495;
+con ok64 DNSBAD = 0x35770b28d;
+con ok64 DNSNOROOM = 0xd5dc5d86d8616;
+con ok64 DNSNODATA = 0xd5dc5d834a74a;
+con ok64 DNSBADNAME = 0x35770b28d5ca58e;
 
 #define flip16(x) ((u16)(((x) >> 8) | ((x) << 8)))
 

@@ -21,7 +21,7 @@ typedef u256 blake256;
 
 con ok64 NACLBAD = 0x1728c54b28d;
 con ok64 NACLFAIL = 0x5ca3153ca495;
-con ok64 NACLFAIL0 = 0x1728c56a96dc00;
+con ok64 NACLFAIL0 = 0x1728c54f292540;
 
 fun ok64 NACLed25519create(edpub256 *publicKey, edsec512 *secretKey) {
     int ret = crypto_sign_ed25519_keypair((u8 *)publicKey, (u8 *)secretKey);

@@ -60,7 +60,6 @@ fun u64 POLNow() {
     return u64timespec(ts);
 }
 
-ron60 RONNow();
 
 int POLMaxFiles();
 

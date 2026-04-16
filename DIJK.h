@@ -11,8 +11,8 @@
 #include "HASH.h"
 #include "KV.h"
 
-con ok64 DIJKNOROOM = 0x4c2d1d86d8616;
-con ok64 DIJKNOPATH = 0x4c2d1db0a7c4;
+con ok64 DIJKNOROOM = 0x3524d45d86d8616;
+con ok64 DIJKNOPATH = 0x3524d45d864a751;
 
 fun b8 kv64Zval(kv64cp a, kv64cp b) { return a->val < b->val; }
 
