@@ -19,6 +19,12 @@ target_compile_options(01test PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(01test abc)
 add_test(NAME 01test COMMAND 01test)
 
+add_executable(ANSItest ANSI.c)
+target_link_options(ANSItest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(ANSItest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(ANSItest abc-core)
+add_test(NAME ANSItest COMMAND ANSItest)
+
 add_executable(Stest S.c)
 target_link_options(Stest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(Stest PRIVATE ${TEST_CXX_FLAGS})

@@ -3,6 +3,38 @@
 
 #include "BUF.h"
 
+con ok64 ANSIBAD = 0x1d524b28d;
+
+// --- CSI parser (input side) ---
+//
+// Control Sequence Introducer (ECMA-48): ESC '[' [private] [params] final
+//   private : optional 0x3C..0x3F prefix ('<' '=' '>' '?')
+//   params  : optional decimal integers separated by ';'
+//   final   : single byte 0x40..0x7E (the operation code)
+//
+// Examples:
+//   "\033[H"          → final='H', no params  (cursor home)
+//   "\033[5n"         → final='n', params={5}  (status request)
+//   "\033[12;40H"     → final='H', params={12,40}  (cursor move)
+//   "\033[<0;5;10M"   → private='<', final='M', params={0,5,10}  (SGR mouse)
+
+#define CSI_MAX_PARAMS 8
+
+typedef struct {
+    u8  private;                  // private prefix byte, or 0
+    u8  final;                    // final byte
+    u8  nparams;                  // count of decoded params
+    u32 params[CSI_MAX_PARAMS];   // decoded decimal values
+} csi;
+
+typedef csi *csip;
+typedef csi const *csicp;
+
+// Parse one CSI sequence from the head of `input`.  Advances input[0]
+// past the sequence on success.  Returns ANSIBAD on malformed input or
+// truncated sequence; the caller may need more bytes and retry.
+ok64 ANSIu8sDrainCSI(u8cs input, csip out);
+
 typedef enum {
     BOLD = 1,
     WEAK = 2,
