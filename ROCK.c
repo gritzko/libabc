@@ -36,7 +36,7 @@ ok64 ROCKInit(ROCKdbp db, b8 create) {
 }
 
 // Internal: null-terminate a path gauge on stack
-static ok64 ROCKPath(char *buf, size_t bufsz, path8cg path) {
+static ok64 ROCKPath(char *buf, size_t bufsz, path8s path) {
     size_t len = path[1] - path[0];
     if (len + 1 > bufsz) return ROCKBAD;
     memcpy(buf, path[0], len);
@@ -45,7 +45,7 @@ static ok64 ROCKPath(char *buf, size_t bufsz, path8cg path) {
 }
 
 // Open DB with current options
-ok64 ROCKOpenDB(ROCKdbp db, path8cg path) {
+ok64 ROCKOpenDB(ROCKdbp db, path8s path) {
     sane(db != NULL && db->opt != NULL && path != NULL && path[0] != NULL);
     char pbuf[4096];
     call(ROCKPath, pbuf, sizeof(pbuf), path);
@@ -60,13 +60,13 @@ ok64 ROCKOpenDB(ROCKdbp db, path8cg path) {
 }
 
 // Convenience: init defaults + open
-ok64 ROCKOpen(ROCKdbp db, path8cg path) {
+ok64 ROCKOpen(ROCKdbp db, path8s path) {
     sane(db != NULL && path != NULL && path[0] != NULL);
     call(ROCKInit, db, YES);
     return ROCKOpenDB(db, path);
 }
 
-ok64 ROCKOpenRO(ROCKdbp db, path8cg path) {
+ok64 ROCKOpenRO(ROCKdbp db, path8s path) {
     sane(db != NULL && path != NULL && path[0] != NULL);
     call(ROCKInit, db, NO);
     char pbuf[4096];
@@ -181,7 +181,7 @@ static char *ROCKmerge_partial(void *state, const char *key,
                           new_value_length);
 }
 
-ok64 ROCKOpenMerge(ROCKdbp db, path8cg path, u8ys merge) {
+ok64 ROCKOpenMerge(ROCKdbp db, path8s path, u8ys merge) {
     sane(db != NULL && path != NULL && path[0] != NULL && merge != NULL);
     call(ROCKInit, db, YES);
 
@@ -424,7 +424,7 @@ ok64 ROCKIterClose(ROCKiterp it) {
     return OK;
 }
 
-ok64 ROCKCheckpoint(ROCKdbp db, path8cg dest) {
+ok64 ROCKCheckpoint(ROCKdbp db, path8s dest) {
     sane(db != NULL && db->db != NULL);
     char pbuf[4096];
     call(ROCKPath, pbuf, sizeof(pbuf), dest);
@@ -466,6 +466,6 @@ ok64 ROCKGetPath(ROCKdbp db, path8g out) {
     ok64 o = u8sFeed(out + 1, pcs);
     free(path);
     if (o != OK) return o;
-    call(PATHu8gTerm, out);
+    call(PATHu8bTerm, out);
     done;
 }

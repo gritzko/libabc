@@ -262,7 +262,7 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
     u8cs $namet = $u8str("$s.lex");
     $feedf(name_idle, $namet, mod);
     int fd;
-    call(FILEOpen, &fd, PATHu8cgIn(name), O_RDONLY);
+    call(FILEOpen, &fd, $path(name), O_RDONLY);
     call(FILEdrainall, lex_idle, fd);
     call(FILEClose, &fd);
 
@@ -295,7 +295,7 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
     $feedf(rlname_idle, $rnamet, mod, LEX_TEMPL[nlang][LEX_TEMPL_L]);
     PATHu8bTerm(rlname);
     int rfd;
-    call(FILECreate, &rfd, PATHu8cgIn(rlname));
+    call(FILECreate, &rfd, $path(rlname));
     call(FILEFeedAll, rfd, rl_datac);
     call(FILEClose, &rfd);
 

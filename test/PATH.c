@@ -6,8 +6,8 @@
 #include "PRO.h"
 #include "TEST.h"
 
-// Helper: declare const gauge from C string
-#define a_PATHu8cg(name, cstr) u8cg name = PATHu8cgOf(cstr)
+// Helper: declare const path slice from C string
+#define a_PATHu8cg(name, cstr) u8cs name = PATHu8csOf(cstr)
 
 // Table-driven tests for path operations
 
@@ -30,7 +30,7 @@ ok64 PATHTestVerify() {
 
     for (size_t i = 0; i < sizeof(valid) / sizeof(valid[0]); i++) {
         a_PATHu8cg(path, valid[i]);
-        ok64 o = PATHu8gVerify(path);
+        ok64 o = PATHu8sVerify(path);
         if (o != OK) {
             fprintf(stderr, "FAIL verify valid[%zu]: %s\n", i, valid[i]);
             return PATHBAD;
@@ -49,7 +49,7 @@ ok64 PATHTestVerify() {
         u8cp pstart = (u8cp)invalid[i].path;
         u8cp pend = pstart + invalid[i].len;
         u8cg path = {pstart, pend, pend};
-        ok64 o = PATHu8gVerify(path);
+        ok64 o = PATHu8sVerify(path);
         if (o != PATHBAD) {
             fprintf(stderr, "FAIL verify invalid[%zu] should fail\n", i);
             return PATHFAIL;
@@ -73,7 +73,7 @@ ok64 PATHTestIsAbsolute() {
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         a_PATHu8cg(path, cases[i].path);
-        b8 result = PATHu8gIsAbsolute(path);
+        b8 result = PATHu8sIsAbsolute(path);
         if (result != cases[i].expected) {
             fprintf(stderr, "FAIL isAbsolute[%zu]: %s expected %d got %d\n",
                     i, cases[i].path, cases[i].expected, result);
@@ -106,7 +106,7 @@ ok64 PATHTestNext() {
 
         while (cases[i].segments[seg_idx] != NULL) {
             u8cs seg = {};
-            ok64 o = PATHu8gDrain(rem, seg);
+            ok64 o = PATHu8sDrain(rem, seg);
             if (o != OK) {
                 fprintf(stderr, "FAIL next[%zu] seg %zu: unexpected END\n", i, seg_idx);
                 return PATHFAIL;
@@ -123,7 +123,7 @@ ok64 PATHTestNext() {
 
         // Verify END
         u8cs seg = {};
-        ok64 o = PATHu8gDrain(rem, seg);
+        ok64 o = PATHu8sDrain(rem, seg);
         if (o != END) {
             fprintf(stderr, "FAIL next[%zu]: expected END after segments\n", i);
             return PATHFAIL;
@@ -177,14 +177,14 @@ ok64 PATHTestNorm() {
         u8cs expected = {(u8cp)cases[i].expected, (u8cp)(cases[i].expected + strlen(cases[i].expected))};
 
         a_pad(u8, normbuf, 256);
-        u8gp norm = u8bDataIdle(normbuf);
-        ok64 o = PATHu8gNorm(norm, input);
+        /* gauge norm removed */
+        ok64 o = PATHu8bNorm(normbuf, input);
         if (o != OK) {
             fprintf(stderr, "FAIL norm[%zu]: %s returned %s\n", i, cases[i].input, ok64str(o));
             return o;
         }
 
-        u8cs result = {normbuf[1], norm[1]};
+        a_dup(u8c, result, u8bDataC(normbuf));
         if (!$eq(result, expected)) {
             fprintf(stderr, "FAIL norm[%zu]: '%s' expected '%s' got '%.*s'\n",
                     i, cases[i].input, cases[i].expected, (int)$len(result), *result);
@@ -232,14 +232,14 @@ ok64 PATHTestRelative() {
         u8cs expected = {(u8cp)cases[i].expected, (u8cp)(cases[i].expected + strlen(cases[i].expected))};
 
         a_pad(u8, relbuf, 256);
-        u8gp rel = u8bDataIdle(relbuf);
-        ok64 o = PATHu8gRelative(rel, base, target);
+        /* gauge rel removed */
+        ok64 o = PATHu8bRel(relbuf, base, target);
         if (o != OK) {
             fprintf(stderr, "FAIL relative[%zu]: returned %s\n", i, ok64str(o));
             return o;
         }
 
-        u8cs result = {relbuf[1], rel[1]};
+        a_dup(u8c, result, u8bDataC(relbuf));
         if (!$eq(result, expected)) {
             fprintf(stderr, "FAIL relative[%zu]: base='%s' target='%s' expected='%s' got='%.*s'\n",
                     i, cases[i].base, cases[i].target, cases[i].expected,
@@ -284,14 +284,14 @@ ok64 PATHTestAbsolute() {
         u8cs expected = {(u8cp)cases[i].expected, (u8cp)(cases[i].expected + strlen(cases[i].expected))};
 
         a_pad(u8, absbuf, 256);
-        u8gp abs = u8bDataIdle(absbuf);
-        ok64 o = PATHu8gAbsolute(abs, base, relpath);
+        /* gauge abs removed */
+        ok64 o = PATHu8bAbs(absbuf, base, relpath);
         if (o != OK) {
             fprintf(stderr, "FAIL absolute[%zu]: returned %s\n", i, ok64str(o));
             return o;
         }
 
-        u8cs result = {absbuf[1], abs[1]};
+        a_dup(u8c, result, u8bDataC(absbuf));
         if (!$eq(result, expected)) {
             fprintf(stderr, "FAIL absolute[%zu]: base='%s' rel='%s' expected='%s' got='%.*s'\n",
                     i, cases[i].base, cases[i].rel, cases[i].expected,
@@ -307,13 +307,13 @@ ok64 PATHTestPush() {
     sane(1);
 
     a_pad(u8, pathbuf, 256);
-    u8gp path = u8bDataIdle(pathbuf);
+    /* gauge path removed */
 
     // Start with empty
     u8cs seg1 = {(u8cp)"first", (u8cp)"first" + 5};
-    call(PATHu8gPush, path, seg1);
+    call(PATHu8bPush, pathbuf, seg1);
     u8cs expected1 = {(u8cp)"first", (u8cp)"first" + 5};
-    u8cs result1 = {pathbuf[1], path[1]};
+    a_dup(u8c, result1, u8bDataC(pathbuf));
     if (!$eq(result1, expected1)) {
         fprintf(stderr, "FAIL push[0]: expected 'first' got '%.*s'\n", (int)$len(result1), *result1);
         return PATHFAIL;
@@ -321,9 +321,9 @@ ok64 PATHTestPush() {
 
     // Push second
     u8cs seg2 = {(u8cp)"second", (u8cp)"second" + 6};
-    call(PATHu8gPush, path, seg2);
+    call(PATHu8bPush, pathbuf, seg2);
     u8cs expected2 = {(u8cp)"first/second", (u8cp)"first/second" + 12};
-    u8cs result2 = {pathbuf[1], path[1]};
+    a_dup(u8c, result2, u8bDataC(pathbuf));
     if (!$eq(result2, expected2)) {
         fprintf(stderr, "FAIL push[1]: expected 'first/second' got '%.*s'\n", (int)$len(result2), *result2);
         return PATHFAIL;
@@ -331,11 +331,11 @@ ok64 PATHTestPush() {
 
     // Test invalid segments are rejected
     a_pad(u8, badbuf, 256);
-    u8gp badpath = u8bDataIdle(badbuf);
+    /* gauge badpath removed */
 
     // Segment with slash should fail
     u8cs bad_slash = {(u8cp)"a/b", (u8cp)"a/b" + 3};
-    ok64 o1 = PATHu8gPush(badpath, bad_slash);
+    ok64 o1 = PATHu8bPush(badbuf, bad_slash);
     if (o1 != PATHBAD) {
         fprintf(stderr, "FAIL push: segment with slash should fail\n");
         return PATHFAIL;
@@ -343,7 +343,7 @@ ok64 PATHTestPush() {
 
     // Segment with tab should fail
     u8cs bad_tab = {(u8cp)"a\tb", (u8cp)"a\tb" + 3};
-    ok64 o2 = PATHu8gPush(badpath, bad_tab);
+    ok64 o2 = PATHu8bPush(badbuf, bad_tab);
     if (o2 != PATHBAD) {
         fprintf(stderr, "FAIL push: segment with tab should fail\n");
         return PATHFAIL;
@@ -372,7 +372,7 @@ ok64 PATHTestBase() {
         u8cs expected = {(u8cp)cases[i].expected, (u8cp)(cases[i].expected + strlen(cases[i].expected))};
 
         u8cs base = {};
-        PATHu8gBase(base, path);
+        PATHu8sBase(base, path);
 
         if ($len(base) != $len(expected) || ($len(base) > 0 && 0 != $cmp(base, expected))) {
             fprintf(stderr, "FAIL base[%zu]: '%s' expected '%s' got '%.*s'\n",
@@ -405,7 +405,7 @@ ok64 PATHTestDir() {
         u8cs expected = {(u8cp)cases[i].expected, (u8cp)(cases[i].expected + strlen(cases[i].expected))};
 
         u8cs dir = {};
-        PATHu8gDir(dir, path);
+        PATHu8sDir(dir, path);
 
         if ($len(dir) != $len(expected) || ($len(dir) > 0 && 0 != $cmp(dir, expected))) {
             fprintf(stderr, "FAIL dir[%zu]: '%s' expected '%s' got '%.*s'\n",
@@ -420,7 +420,7 @@ ok64 PATHTestDir() {
 ok64 PATHTestRoundTrip() {
     sane(1);
 
-    // Verify: PATHu8gRelative + PATHu8gAbsolute round-trips
+    // Verify: PATHu8bRel + PATHu8bAbs round-trips
     static struct { char const* base; char const* target; } cases[] = {
         {"/a/b/c", "/x/y/z"},
         {"/home/user", "/var/log/syslog"},
@@ -435,21 +435,21 @@ ok64 PATHTestRoundTrip() {
 
         // Compute relative
         a_pad(u8, relbuf, 256);
-        u8gp relg = u8bDataIdle(relbuf);
-        call(PATHu8gRelative, relg, base, target);
-        u8cg rel = {relbuf[1], relg[1], relg[2]};
+        /* gauge relg removed */
+        call(PATHu8bRel, relbuf, base, target);
+        a_dup(u8c, rel, u8bDataC(relbuf));
 
         // Resolve back
         a_pad(u8, absbuf, 256);
-        u8gp absg = u8bDataIdle(absbuf);
-        call(PATHu8gAbsolute, absg, base, rel);
-        u8cs resolved = {absbuf[1], absg[1]};
+        /* gauge absg removed */
+        call(PATHu8bAbs, absbuf, base, rel);
+        a_dup(u8c, resolved, u8bDataC(absbuf));
 
         // Normalize target for comparison
         a_pad(u8, normbuf, 256);
-        u8gp normg = u8bDataIdle(normbuf);
-        call(PATHu8gNorm, normg, target);
-        u8cs norm_target = {normbuf[1], normg[1]};
+        /* gauge normg removed */
+        call(PATHu8bNorm, normbuf, target);
+        a_dup(u8c, norm_target, u8bDataC(normbuf));
 
         if (!$eq(resolved, norm_target)) {
             fprintf(stderr, "FAIL roundtrip[%zu]: base='%s' target='%s' rel='%.*s' resolved='%.*s'\n",

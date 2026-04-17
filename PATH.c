@@ -8,404 +8,356 @@
 #include "PRO.h"
 #include "UTF8.h"
 
-// --- u8s core implementations ---
+// Internal scratch-buffer size for in-place Norm/Abs/Join.
+#define PATH_SCRATCH_LEN 4096
+
+// --- Slice validators ---
 
 ok64 PATHu8sVerifySegment(u8cs segment) {
     if (!$ok(segment)) return PATHBAD;
-    // Check UTF-8 validity
     a_dup(u8c, check, segment);
-    ok64 o = utf8sValid(check);
-    if (o != OK) return PATHBAD;
-    // Check for forbidden characters and slashes
+    if (utf8sValid(check) != OK) return PATHBAD;
     $for(u8c, c, segment) {
-        if (*c == '\r' || *c == '\t' || *c == '\n' || *c == '\0' || *c == '/') {
+        if (*c == '\r' || *c == '\t' || *c == '\n' || *c == '\0' || *c == '/')
             return PATHBAD;
-        }
     }
     return OK;
 }
 
-ok64 PATHu8sVerify(u8csc path) {
+ok64 PATHu8sVerify(u8cs path) {
     sane($ok(path));
-    // Check UTF-8 validity
     a_dup(u8c, check, path);
-    ok64 o = utf8sValid(check);
-    test(o == OK, PATHBAD);
-    // Check for forbidden characters
+    test(utf8sValid(check) == OK, PATHBAD);
     $for(u8c, c, path) {
         test(*c != '\r' && *c != '\t' && *c != '\n' && *c != '\0', PATHBAD);
     }
     done;
 }
 
-ok64 PATHu8sFeed(u8s idle, u8csc data) {
-    sane($ok(idle) && $ok(data));
-    call(u8sFeed, idle, data);
-    call(PATHu8sTerm, idle);
-    done;
-}
+// --- Slice extractors ---
 
-ok64 PATHu8sDrain(u8cs path, u8csp segment) {
-    sane($ok(path) && segment != NULL);
-    if ($empty(path)) return END;
-    // Skip leading slash if present
-    if (*path[0] == '/') path[0]++;
-    if ($empty(path)) return END;
-    // Find next slash or end
-    u8cp start = path[0];
-    while (!$empty(path) && *path[0] != '/') path[0]++;
-    segment[0] = start;
-    segment[1] = path[0];
-    done;
-}
-
-void PATHu8sBase(u8csp out, u8csc path) {
+void PATHu8sBase(u8csp out, u8cs path) {
     if (!$ok(path) || $empty(path)) {
         out[0] = out[1] = NULL;
         return;
     }
-    // Find last slash by scanning backward
     u8cp p = path[1];
     while (p > path[0] && *(p - 1) != '/') p--;
     out[0] = p;
     out[1] = path[1];
 }
 
-void PATHu8sDir(u8csp out, u8csc path) {
+// Immutable "." for the no-slash-but-non-empty case. Callers treat
+// the view as read-only (u8cs is const-value), so the aliasing is safe.
+static u8c PATH_DOT[1] = {'.'};
+
+void PATHu8sDir(u8csp out, u8cs path) {
     if (!$ok(path) || $empty(path)) {
         out[0] = out[1] = NULL;
         return;
     }
-    // Find last slash by scanning backward
     u8cp p = path[1];
     while (p > path[0] && *(p - 1) != '/') p--;
     if (p == path[0]) {
-        // No slash found - return "." as static
-        static u8c dot[1] = {'.'};
-        out[0] = dot;
-        out[1] = dot + 1;
+        // No slash: synthesize "." view.
+        out[0] = PATH_DOT;
+        out[1] = PATH_DOT + 1;
         return;
     }
-    // Skip trailing slash unless at root
+    // Drop trailing slash unless root
     u8cp end = p - 1;
     if (end == path[0] && *path[0] == '/') end++;
     out[0] = path[0];
     out[1] = end;
 }
 
-void PATHu8sExt(u8csp out, u8csc path) {
+void PATHu8sExt(u8csp out, u8cs path) {
     out[0] = out[1] = NULL;
     if (!$ok(path) || $empty(path)) return;
-    // find basename start (after last /)
     u8cp bstart = path[1];
     while (bstart > path[0] && *(bstart - 1) != '/') bstart--;
-    if (bstart >= path[1]) return;  // trailing slash or empty
-    // find last dot in basename
+    if (bstart >= path[1]) return;
     u8cp p = path[1];
     while (p > bstart && *(p - 1) != '.') p--;
-    if (p <= bstart || p == bstart + 1) return;  // no dot or dotfile
+    if (p <= bstart || p == bstart + 1) return;
     out[0] = p;
     out[1] = path[1];
 }
 
-ok64 PATHu8sAddTmp(u8s idle, u8cs tmpl, u8csc data) {
-    sane($ok(idle) && $ok(tmpl) && !$empty(tmpl));
-    // Add separator if data is non-empty and doesn't end with /
-    if ($ok(data) && !$empty(data)) {
-        u8c last = *(data[1] - 1);
+// --- Slice iteration ---
+
+ok64 PATHu8sDrain(u8cs cursor, u8csp seg) {
+    sane($ok(cursor) && seg != NULL);
+    if ($empty(cursor)) return END;
+    if (*cursor[0] == '/') cursor[0]++;
+    if ($empty(cursor)) return END;
+    u8cp start = cursor[0];
+    while (!$empty(cursor) && *cursor[0] != '/') cursor[0]++;
+    seg[0] = start;
+    seg[1] = cursor[0];
+    done;
+}
+
+ok64 PATHu8sDrainNE(u8cs cursor, u8csp seg) {
+    for (;;) {
+        ok64 o = PATHu8sDrain(cursor, seg);
+        if (o != OK) return o;
+        if (seg[1] > seg[0]) return OK;
+    }
+}
+
+// --- Buffer composition ---
+
+ok64 PATHu8bFeed(path8b p, u8cs data) {
+    sane(u8bOK(p) && $ok(data));
+    call(PATHu8sVerify, data);
+    u8sp idle = u8bIdle(p);
+    test($len(idle) > $len(data), PATHNOROOM);
+    call(u8sFeed, idle, data);
+    call(PATHu8bTerm, p);
+    done;
+}
+
+ok64 PATHu8bPush(path8b p, u8cs segment) {
+    sane(u8bOK(p) && $ok(segment));
+    call(PATHu8sVerifySegment, segment);
+    u8sp idle = u8bIdle(p);
+    // Insert separator if DATA non-empty and doesn't end with '/'.
+    if (u8bDataLen(p) > 0) {
+        u8c last = *(u8bIdleHead(p) - 1);
         if (last != '/') {
+            test($len(idle) > 1, PATHNOROOM);
             call(u8sFeed1, idle, '/');
         }
     }
-    // Remember where we started adding
-    u8p start = idle[0];
-    // Add template
+    test($len(idle) > $len(segment), PATHNOROOM);
+    call(u8sFeed, idle, segment);
+    call(PATHu8bTerm, p);
+    done;
+}
+
+ok64 PATHu8bPop(path8b p) {
+    sane(u8bOK(p));
+    if (u8bDataLen(p) == 0) done;
+    u8p end = u8bIdleHead(p);
+    u8p head = u8bDataHead(p);
+    while (end > head && *(end - 1) != '/') end--;
+    if (end > head) end--;  // Eat the separator
+    // Root case: keep at least '/'
+    if (end == head && u8bDataLen(p) > 0 && *head == '/') end++;
+    *u8bIdle(p) = end;
+    call(PATHu8bTerm, p);
+    done;
+}
+
+ok64 PATHu8bDup(path8b into, u8cs src) {
+    sane(u8bOK(into) && $ok(src));
+    u8bReset(into);
+    call(PATHu8bFeed, into, src);
+    done;
+}
+
+ok64 PATHu8bAdd(path8b into, u8cs rel) {
+    sane(u8bOK(into) && $ok(rel));
+    a_dup(u8c, rem, rel);
+    u8cs seg = {};
+    while (PATHu8sDrain(rem, seg) == OK) {
+        if ($empty(seg)) continue;  // tolerate double-slashes in input
+        call(PATHu8bPush, into, seg);
+    }
+    call(PATHu8bTerm, into);
+    done;
+}
+
+ok64 PATHu8bJoin(path8b out, u8cs a, u8cs b) {
+    sane(u8bOK(out) && $ok(a) && $ok(b));
+    u8bReset(out);
+    if (!$empty(a)) call(PATHu8bFeed, out, a);
+    if (!$empty(b)) call(PATHu8bAdd, out, b);
+    // Normalize in place
+    a_pad(u8, tmp, PATH_SCRATCH_LEN);
+    call(PATHu8bDup, tmp, u8bDataC(out));
+    call(PATHu8bNorm, out, u8bDataC(tmp));
+    done;
+}
+
+ok64 PATHu8bAddTmp(path8b p, u8cs tmpl) {
+    sane(u8bOK(p) && $ok(tmpl) && !$empty(tmpl));
+    u8sp idle = u8bIdle(p);
+    // Add separator if DATA non-empty and doesn't end with '/'.
+    if (u8bDataLen(p) > 0) {
+        u8c last = *(u8bIdleHead(p) - 1);
+        if (last != '/') {
+            test($len(idle) > 1, PATHNOROOM);
+            call(u8sFeed1, idle, '/');
+        }
+    }
+    u8p start = *idle;
+    test($len(idle) > $len(tmpl), PATHNOROOM);
     call(u8sFeed, idle, tmpl);
-    call(PATHu8sTerm, idle);
-    // Randomize 'X' characters
+    call(PATHu8bTerm, p);
+    // Randomize 'X' chars via LCG seeded by pid^time
     static u32 seed = 0;
     if (seed == 0) seed = (u32)getpid() ^ (u32)time(NULL);
-    for (u8p p = start; p < idle[0]; p++) {
-        if (*p == 'X') {
+    for (u8p q = start; q < *idle; q++) {
+        if (*q == 'X') {
             seed = seed * 1103515245 + 12345;
-            *p = "abcdefghijklmnopqrstuvwxyz0123456789"[(seed >> 16) % 36];
+            *q = "abcdefghijklmnopqrstuvwxyz0123456789"[(seed >> 16) % 36];
         }
     }
     done;
 }
 
-// --- u8g functions (gauge-level) ---
+ok64 PATHu8bNorm(path8b out, u8cs orig) {
+    sane(u8bOK(out) && $ok(orig));
 
-ok64 PATHu8gDup(path8g into, path8cg orig) {
-    sane($ok(into) && $ok(orig));
-    a_dup(u8c,odata,orig);
-    call(PATHu8sFeed, into + 1, odata);
-    done;
-}
+    // Collect segments (views into `orig`) resolving . and ..
+    u8cp segs[256][2];
+    u64 n = 0;
+    b8 is_abs = PATHu8sIsAbsolute(orig);
 
-ok64 PATHu8gPush(path8g path, u8cs segment) {
-    sane($ok(path) && $ok(segment));
-    // Validate segment (raw u8cs, not path8g)
-    call(PATHu8sVerifySegment, segment);
-    // Add separator if path is non-empty and doesn't end with /
-    if (!$empty(path)) {
-        u8c last = *(path[1] - 1);
-        if (last != '/') {
-            call(u8sFeed1, path + 1, '/');
-        }
-    }
-    // Add segment
-    call(u8sFeed, path + 1, segment);
-    call(PATHu8sTerm, path + 1);
-    done;
-}
-
-ok64 PATHu8gPop(path8g path) {
-    sane($ok(path));
-    if ($empty(path)) done;  // Nothing to pop
-    // Find last / in path (search backwards from path[1])
-    u8p p = path[1];
-    while (p > path[0] && *(p - 1) != '/') p--;
-    if (p > path[0]) p--;  // Skip the slash too (unless at root)
-    // Handle root case: keep at least "/"
-    if (p == path[0] && *path[0] == '/') p++;
-    path[1] = p;
-    call(PATHu8sTerm, path + 1);
-    done;
-}
-
-ok64 PATHu8gAddTmp(path8g path, u8cs tmpl) {
-    sane($ok(path) && $ok(tmpl) && !$empty(tmpl));
-    a_dup(u8c,data,path);
-    call(PATHu8sAddTmp, path + 1, tmpl, data);
-    done;
-}
-
-ok64 PATHu8gAdd(path8g into, path8cg rel) {
-    sane($ok(into) && $ok(rel));
-    // Add relative path segment by segment
-    a_dupcg(u8, rem, rel);
+    a_dup(u8c, rem, orig);
     u8cs seg = {};
-    while (PATHu8gDrain(rem, seg) == OK) {
-        call(PATHu8gPush, into, seg);
+    while (PATHu8sDrain(rem, seg) == OK) {
+        if ($empty(seg)) continue;
+        if ($len(seg) == 1 && seg[0][0] == '.') continue;
+        if ($len(seg) == 2 && seg[0][0] == '.' && seg[0][1] == '.') {
+            if (n > 0) {
+                u8cp ps = segs[n - 1][0], pe = segs[n - 1][1];
+                b8 prev_dd = (pe - ps == 2 && ps[0] == '.' && ps[1] == '.');
+                if (!prev_dd) { n--; continue; }
+            }
+            if (!is_abs) {
+                test(n < 256, PATHFAIL);
+                segs[n][0] = seg[0]; segs[n][1] = seg[1]; n++;
+            }
+            continue;
+        }
+        test(n < 256, PATHFAIL);
+        segs[n][0] = seg[0]; segs[n][1] = seg[1]; n++;
     }
-    call(PATHu8sTerm, into + 1);
+
+    // Build result into `out`.  When out aliases orig, the collected
+    // segment pointers still reference orig's original storage; we must
+    // avoid overwriting before we've read — so stage into scratch.
+    a_pad(u8, tmp, PATH_SCRATCH_LEN);
+    u8sp ti = u8bIdle(tmp);
+    if (is_abs) call(u8sFeed1, ti, '/');
+    for (u64 i = 0; i < n; i++) {
+        if (i > 0) call(u8sFeed1, ti, '/');
+        u8cs si = {segs[i][0], segs[i][1]};
+        call(u8sFeed, ti, si);
+    }
+    if (u8bDataLen(tmp) == 0) call(u8sFeed1, ti, '.');
+    call(PATHu8bTerm, tmp);
+
+    u8bReset(out);
+    call(u8bFeed, out, u8bDataC(tmp));
+    call(PATHu8bTerm, out);
     done;
 }
 
-ok64 PATHu8gRelative(path8g rel, path8cg absbase, path8cg abs) {
-    sane($ok(rel) && $ok(absbase) && $ok(abs));
-    test(PATHu8gIsAbsolute(absbase) && PATHu8gIsAbsolute(abs), PATHBAD);
+ok64 PATHu8bAbs(path8b out, u8cs base, u8cs rel) {
+    sane(u8bOK(out) && $ok(base) && $ok(rel));
+    a_pad(u8, tmp, PATH_SCRATCH_LEN);
+    if (PATHu8sIsAbsolute(rel)) {
+        call(PATHu8bFeed, tmp, rel);
+    } else {
+        call(PATHu8bFeed, tmp, base);
+        call(PATHu8bAdd, tmp, rel);
+    }
+    u8bReset(out);
+    call(PATHu8bNorm, out, u8bDataC(tmp));
+    done;
+}
 
-    // Special case: identical paths return "."
+ok64 PATHu8bRel(path8b out, u8cs absbase, u8cs abs) {
+    sane(u8bOK(out) && $ok(absbase) && $ok(abs));
+    test(PATHu8sIsAbsolute(absbase) && PATHu8sIsAbsolute(abs), PATHBAD);
+
+    u8bReset(out);
+
+    // Identical paths
     if ($len(absbase) == $len(abs) && 0 == $cmp(absbase, abs)) {
-        rel[1] = rel[0];  // Reset output
         u8c dot[1] = {'.'};
         u8cs dot_seg = {dot, dot + 1};
-        call(PATHu8gPush, rel, dot_seg);
-        call(PATHu8sTerm, rel + 1);
+        call(PATHu8bPush, out, dot_seg);
         done;
     }
 
-    // Check if abs starts with base as directory prefix
-    // If so, just return the remaining part of abs
+    // abs starts with absbase as a directory prefix
     size_t base_len = $len(absbase);
     u8cs abs_prefix = {abs[0], abs[0] + base_len};
     if ($len(abs) > base_len && $eq(absbase, abs_prefix) &&
         (absbase[1][-1] == '/' || abs[0][base_len] == '/')) {
-        // abs starts with base as directory
-        rel[1] = rel[0];
         u8cp start = abs[0] + base_len;
-        if (*start == '/') start++;  // skip separator
+        if (*start == '/') start++;
         u8cs remainder = {start, abs[1]};
-        call(u8sFeed, rel + 1, remainder);
-        call(PATHu8sTerm, rel + 1);
+        call(PATHu8bFeed, out, remainder);
         done;
     }
 
-    // Treat all paths as directories (Python os.path.relpath semantics)
-    // Find common prefix by comparing segments
-    a_dupcg(u8, base_rem, absbase);
-    a_dupcg(u8, abs_rem, abs);
-    u8cs base_seg = {}, abs_seg = {};
-
     // Skip common prefix segments
+    a_dup(u8c, brem, absbase);
+    a_dup(u8c, arem, abs);
+    u8cs bs = {}, as = {};
     ok64 bo = OK, ao = OK;
-    while (1) {
-        bo = PATHu8gDrain(base_rem, base_seg);
-        ao = PATHu8gDrain(abs_rem, abs_seg);
+    for (;;) {
+        bo = PATHu8sDrainNE(brem, bs);
+        ao = PATHu8sDrainNE(arem, as);
         if (bo != OK || ao != OK) break;
-        if ($len(base_seg) != $len(abs_seg)) break;
-        if (0 != $cmp(base_seg, abs_seg)) break;
+        if ($len(bs) != $len(as)) break;
+        if (0 != $cmp(bs, as)) break;
     }
 
-    // Count remaining segments in base (need that many ..)
+    u64 ups = (bo == OK) ? 1 : 0;
     u8cs skip = {};
-    u64 up_count = (bo == OK) ? 1 : 0;
-    while (PATHu8gDrain(base_rem, skip) == OK) up_count++;
+    while (PATHu8sDrainNE(brem, skip) == OK) ups++;
 
-    // If abs exhausted, clear abs_seg so we don't add stale segment
-    if (ao != OK) {
-        abs_seg[0] = abs_seg[1] = NULL;
-    }
-
-    // Build relative path: up_count times ".." + remaining abs segments
-    rel[1] = rel[0];  // Reset output
+    if (ao != OK) as[0] = as[1] = NULL;
 
     u8c dotdot[2] = {'.', '.'};
     u8cs dotdot_seg = {dotdot, dotdot + 2};
-    for (u64 i = 0; i < up_count; i++) {
-        call(PATHu8gPush, rel, dotdot_seg);
-    }
+    for (u64 i = 0; i < ups; i++) call(PATHu8bPush, out, dotdot_seg);
 
-    // Add remaining absolute path segments
-    if (!$empty(abs_seg)) {
-        call(PATHu8gPush, rel, abs_seg);
-    }
-    while (PATHu8gDrain(abs_rem, abs_seg) == OK) {
-        call(PATHu8gPush, rel, abs_seg);
-    }
+    if (!$empty(as)) call(PATHu8bPush, out, as);
+    while (PATHu8sDrainNE(arem, as) == OK) call(PATHu8bPush, out, as);
 
-    // Handle case where paths are equal
-    if ($empty(rel) || rel[0] == rel[1]) {
+    if (u8bDataLen(out) == 0) {
         u8c dot[1] = {'.'};
         u8cs dot_seg = {dot, dot + 1};
-        call(PATHu8gPush, rel, dot_seg);
+        call(PATHu8bPush, out, dot_seg);
     }
 
-    call(PATHu8sTerm, rel + 1);
+    call(PATHu8bTerm, out);
     done;
 }
 
-ok64 PATHu8gAbsolute(path8g abs, path8cg base, path8cg rel) {
-    sane($ok(abs) && $ok(base) && $ok(rel));
-
-    // If rel is absolute, just copy it
-    if (PATHu8gIsAbsolute(rel)) {
-        // Copy rel to temp, then normalize into abs
-        a_pad(u8, tmp, PATH_MAX);
-        a_dup(u8c,reldata,rel);
-        call(u8sFeed, tmp_idle, reldata);
-        u8cg tmp_gc = {tmp[1], *tmp_idle, tmp[3]};
-        abs[1] = abs[0];  // reset abs
-        call(PATHu8gNorm, abs, tmp_gc);
-        done;
-    }
-
-    // Start with base (treat as directory, don't strip)
-    call(PATHu8gDup, abs, base);
-
-    // Add relative path
-    call(PATHu8gAdd, abs, rel);
-
-    // Normalize to resolve . and .. (copy to temp first)
-    a_pad(u8, tmp2, PATH_MAX);
-    a_dup(u8c,abs_data,abs);
-    call(u8sFeed, tmp2_idle, abs_data);
-    u8cg tmp2_gc = {tmp2[1], *tmp2_idle, tmp2[3]};
-    abs[1] = abs[0];  // reset abs
-    call(PATHu8gNorm, abs, tmp2_gc);
-    done;
-}
-
-ok64 PATHu8gReal(path8g real, path8cg path) {
-    sane($ok(real) && $ok(path));
-    test($len(real) >= PATH_MAX, PATHNOROOM);
-
-    // Need null-terminated string for realpath
-    a_dup(u8c, tmp, path);
-    test(!$empty(tmp), PATHBAD);
-
-    // Temporarily null-terminate (path should have space based on gauge
-    // contract)
-    char pathbuf[PATH_MAX];
-    size_t len = $len(path);
-    if (len >= PATH_MAX) len = PATH_MAX - 1;
-    for (size_t i = 0; i < len; i++) pathbuf[i] = (char)path[0][i];
-    pathbuf[len] = 0;
-
+ok64 PATHu8bReal(path8b out, u8cs path) {
+    sane(u8bOK(out) && $ok(path));
+    test(!$empty(path), PATHBAD);
+    // path's NUL-terminator sits at path[1][0] by contract.
     char resolved[PATH_MAX];
-    char* result = realpath(pathbuf, resolved);
-    test(result != NULL, PATHFAIL);
-
-    // Copy result to output
-    real[1] = real[0];
+    if (realpath((char const *)path[0], resolved) == NULL) return PATHFAIL;
+    u8bReset(out);
     size_t rlen = 0;
     while (resolved[rlen] != 0 && rlen < PATH_MAX) rlen++;
-    u8cs res = {(u8c*)resolved, (u8c*)resolved + rlen};
-    call(u8sFeed, real + 1, res);
-    call(PATHu8sTerm, real + 1);
+    u8cs res = {(u8cp)resolved, (u8cp)resolved + rlen};
+    call(PATHu8bFeed, out, res);
     done;
 }
 
-ok64 PATHu8gNorm(path8g norm, path8cg orig) {
-    sane($ok(norm) && $ok(orig));
-
-    // Collect segments, resolving . and ..
-    u8cp segments[256];  // pairs of [start, end] pointers
-    u64 seg_count = 0;
-    b8 is_abs = PATHu8gIsAbsolute(orig);
-
-    a_dupcg(u8, rem, orig);
-    u8cs seg = {};
-    while (PATHu8gDrain(rem, seg) == OK) {
-        // Skip empty segments and "."
-        if ($empty(seg)) continue;
-        if ($len(seg) == 1 && *seg[0] == '.') continue;
-
-        // Handle ".."
-        if ($len(seg) == 2 && seg[0][0] == '.' && seg[0][1] == '.') {
-            if (seg_count > 0) {
-                u8cp prev_start = segments[(seg_count - 1) * 2];
-                u8cp prev_end = segments[(seg_count - 1) * 2 + 1];
-                b8 prev_is_dotdot =
-                    (prev_end - prev_start == 2 && prev_start[0] == '.' &&
-                     prev_start[1] == '.');
-                if (!prev_is_dotdot) {
-                    seg_count--;  // Pop last segment
-                    continue;
-                }
-            }
-            if (!is_abs) {
-                // Keep .. for relative paths that can't go higher
-                test(seg_count < 128, PATHFAIL);
-                segments[seg_count * 2] = seg[0];
-                segments[seg_count * 2 + 1] = seg[1];
-                seg_count++;
-            }
-            // For absolute paths, ignore .. at root
-            continue;
-        }
-
-        // Regular segment
-        test(seg_count < 128, PATHFAIL);
-        segments[seg_count * 2] = seg[0];
-        segments[seg_count * 2 + 1] = seg[1];
-        seg_count++;
+ok64 PATHu8bBuildN(path8b p, u8c *const **slices) {
+    sane(u8bOK(p));
+    if (!*slices) return OK;
+    u8cs first = {(*slices)[0], (*slices)[1]};
+    call(PATHu8bFeed, p, first);
+    for (slices++; *slices; slices++) {
+        // Each slice may itself be a sub-path (e.g. "dir/sub"); add it
+        // segment-wise so '/' inside is handled as a separator, not a
+        // forbidden char.  Empty-segment tolerance matches PATHu8bAdd.
+        u8cs s = {(*slices)[0], (*slices)[1]};
+        call(PATHu8bAdd, p, s);
     }
-
-    // Build normalized path
-    norm[1] = norm[0];  // Reset output
-
-    if (is_abs) {
-        call(u8sFeed1, norm + 1, '/');
-    }
-
-    for (u64 i = 0; i < seg_count; i++) {
-        if (i > 0) {
-            call(u8sFeed1, norm + 1, '/');
-        }
-        u8cs seg_i = {segments[i * 2], segments[i * 2 + 1]};
-        call(u8sFeed, norm + 1, seg_i);
-    }
-
-    // Handle empty result
-    if (norm[0] == norm[1]) {
-        u8c dot[1] = {'.'};
-        u8cs dot_seg = {dot, dot + 1};
-        call(u8sFeed, norm + 1, dot_seg);
-    }
-
-    call(PATHu8sTerm, norm + 1);
     done;
 }

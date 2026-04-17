@@ -81,10 +81,10 @@ ok64 SKIP1() {
 ok64 SKIP2() {
     sane(1);
     a_path(path, $cstr("/tmp/SKIP2.txt"));
-    FILEUnLink(PATHu8cgIn(path));
+    FILEUnLink($path(path));
     u8bp pad = NULL;
     a_pad(u8, check, SCALE);
-    call(FILEMapCreate, &pad, PATHu8cgIn(path), SCALE);
+    call(FILEMapCreate, &pad, $path(path), SCALE);
     COMBinit(pad);
     SKIPu8tab k = {};
     for (u64 i = 0; i < 8; ++i) {
@@ -105,7 +105,7 @@ ok64 SKIP2() {
         zerob(check);
         call(SKIPcheck, pad, check, &k);
     }
-    call(FILEUnLink, PATHu8cgIn(path));
+    call(FILEUnLink, $path(path));
     done;
 }
 

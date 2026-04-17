@@ -48,10 +48,10 @@ typedef ROCKbatch *ROCKbatchp;
 // Database lifecycle
 ok64 ROCKInit(ROCKdbp db, b8 create);       // alloc default options
 ok64 ROCKSetMerge(ROCKdbp db, u8ys merge);  // set merge op (after Init, before OpenDB)
-ok64 ROCKOpenDB(ROCKdbp db, path8cg path);  // open with current options
-ok64 ROCKOpen(ROCKdbp db, path8cg path);    // init+open (convenience)
-ok64 ROCKOpenRO(ROCKdbp db, path8cg path);
-ok64 ROCKOpenMerge(ROCKdbp db, path8cg path, u8ys merge);
+ok64 ROCKOpenDB(ROCKdbp db, path8s path);  // open with current options
+ok64 ROCKOpen(ROCKdbp db, path8s path);    // init+open (convenience)
+ok64 ROCKOpenRO(ROCKdbp db, path8s path);
+ok64 ROCKOpenMerge(ROCKdbp db, path8s path, u8ys merge);
 ok64 ROCKClose(ROCKdbp db);
 
 // Point operations
@@ -87,7 +87,7 @@ void ROCKIterVal(ROCKiterp it, u8csp out);
 ok64 ROCKIterClose(ROCKiterp it);
 
 // Checkpoint (hard-link SSTs for branching)
-ok64 ROCKCheckpoint(ROCKdbp db, path8cg dest);
+ok64 ROCKCheckpoint(ROCKdbp db, path8s dest);
 
 // Snapshot: pin SST files from compaction
 ok64 ROCKSnapshotCreate(ROCKdbp db);

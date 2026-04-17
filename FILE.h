@@ -173,32 +173,32 @@ typedef int *FILE;
 #define FILE_MAX_OPEN 1024
 #endif
 
-// Legacy path8 buffer type (for code that needs to own/modify paths)
-typedef u8b path8;
-typedef u8bp path8p;
+// Legacy alias — path composition uses a u8b buffer.
+typedef path8b path8;
+typedef path8bp path8p;
 typedef ok64 (*path8f)(void0p arg, path8p path);
 
 // a_path moved to PATH.h (variadic, supports segments)
 
-fun ok64 PATHu8bSane(path8 path) {
+fun b8 PATHu8bSane(path8b path) {
     if (!u8bOK(path) || u8bDataLen(path) == 0) return NO;
     if (u8bIdleLen(path) == 0) return NO;
-    u8c *tp = $term(u8bData(path));
-    if (*tp != 0) *(u8 *)tp = 0;  // :/
+    u8c *tp = u8bIdleHead(path);
+    if (*tp != 0) *(u8 *)tp = 0;
     return YES;
 }
 
-fun ok64 PATHu8bAlloc(path8p path) {
+fun ok64 PATHu8bAlloc(path8bp path) {
     return u8bAllocate(path, FILE_PATH_MAX_LEN);
 }
 
-fun ok64 PATHu8bFree(path8p path) { return u8bFree(path); }
+fun ok64 PATHu8bFree(path8bp path) { return u8bFree(path); }
 
-ok64 FILECreate(int *fd, path8cg path);
+ok64 FILECreate(int *fd, path8s path);
 
-ok64 FILEOpen(int *fd, path8cg path, int flags);
-ok64 FILEOpenAt(int *fd, int const dirfd, path8cg path, int flags);
-fun ok64 FILEOpenDir(int *fd, path8cg path) {
+ok64 FILEOpen(int *fd, path8s path, int flags);
+ok64 FILEOpenAt(int *fd, int const dirfd, path8s path, int flags);
+fun ok64 FILEOpenDir(int *fd, path8s path) {
     return FILEOpen(fd, path, O_RDONLY | O_DIRECTORY);
 }
 // dir entries have / appended
@@ -211,7 +211,7 @@ typedef enum {
     FILE_SCAN_LINKS = 8,
     FILE_SCAN_ALL = 14,
 } FILE_SCAN;
-ok64 FILEScan(path8p path, FILE_SCAN mode, path8f f, void0p arg);
+ok64 FILEScan(path8bp path, FILE_SCAN mode, path8f f, void0p arg);
 
 // File tree iterator (into/next/outo pattern)
 // Usage:
@@ -236,7 +236,7 @@ typedef struct fileit {
     u8 flags;      // reserved
     u8p dirend;    // saved path end (dir portion, before entry name)
     void0p dir;     // DIR* handle (void* to avoid dirent.h in header)
-    path8gp path;  // shared path gauge
+    path8bp path;  // shared path buffer
     // Sorted mode fields (NULL = unsorted):
     u8csz sort;    // comparator (inherited by children)
     u8bp buf;      // shared buffer for entries (inherited)
@@ -271,9 +271,9 @@ fun ok64 FILEentryX(u8csp rec, u8cs stream) {
 fun ok64 FILEentryY(u8s into, u8css recs) { return u8sFeed(into, **recs); }
 
 // Open iterator on directory path
-ok64 FILEIterOpen(fileitp it, path8gp path);
+ok64 FILEIterOpen(fileitp it, path8bp path);
 // Open sorted iterator (buf holds entries, z compares them)
-ok64 FILEIterOpenSorted(fileitp it, path8gp path, u8bp buf, u8csz z);
+ok64 FILEIterOpenSorted(fileitp it, path8bp path, u8bp buf, u8csz z);
 // Close iterator
 ok64 FILEIterClose(fileitp it);
 // Next entry in current directory (returns END when exhausted)
@@ -282,17 +282,17 @@ ok64 FILENext(fileitp it);
 ok64 FILEInto(fileitp child, fileitp parent);
 // Ascend from directory
 ok64 FILEOuto(fileitp child, fileitp parent);
-fun ok64 FILEScanDir(path8p path, path8f f, void0p arg) {
+fun ok64 FILEScanDir(path8bp path, path8f f, void0p arg) {
     return FILEScan(path, FILE_SCAN_ALL, f, arg);
 }
-fun ok64 FILEScanFiles(path8p path, path8f f, void0p arg) {
+fun ok64 FILEScanFiles(path8bp path, path8f f, void0p arg) {
     return FILEScan(path, FILE_SCAN_FILES, f, arg);
 }
-fun ok64 FILEDeepScanFiles(path8p path, path8f f, void0p arg) {
+fun ok64 FILEDeepScanFiles(path8bp path, path8f f, void0p arg) {
     return FILEScan(path, (FILE_SCAN)(FILE_SCAN_FILES | FILE_SCAN_DEEP), f,
                     arg);
 }
-fun ok64 FILEDeepScanDir(path8p path, path8f f, void0p arg) {
+fun ok64 FILEDeepScanDir(path8bp path, path8f f, void0p arg) {
     return FILEScan(path, (FILE_SCAN)(FILE_SCAN_ALL | FILE_SCAN_DEEP), f, arg);
 }
 
@@ -310,15 +310,15 @@ ok64 FILEClose(int *fd);
 
 // ok64 FILEExists(path8 path);
 
-ok64 FILEStat(struct stat *ret, path8cg path);
+ok64 FILEStat(struct stat *ret, path8s path);
 
 ok64 FILESize(size_t *size, int const *fd);
 
-ok64 FILEisdir(path8cg path);
+ok64 FILEisdir(path8s path);
 
 ok64 FILEResize(int const *fd, size_t new_size);
 
-ok64 FILERename(path8cg oldname, path8cg newname);
+ok64 FILERename(path8s oldname, path8s newname);
 
 // Drains the data to the file; if the slice is non empty on return, see errno!
 fun ok64 FILEFeed(int fd, u8 const **data) {
@@ -446,18 +446,18 @@ fun proc Fpread(int fd, path into, size_t offset) {
 }
 */
 
-ok64 FILEMakeDir(path8cg path);
+ok64 FILEMakeDir(path8s path);
 
 // Create directory and parents recursively (like mkdir -p)
-ok64 FILEMakeDirP(path8cg path);
+ok64 FILEMakeDirP(path8s path);
 
-ok64 FILERmDir(path8cg path, bool recursive);
+ok64 FILERmDir(path8s path, bool recursive);
 
-ok64 FILEHardLink(path8cg dst, path8cg src);
+ok64 FILEHardLink(path8s dst, path8s src);
 
-ok64 FILErmrf(path8cg name);
+ok64 FILErmrf(path8s name);
 
-ok64 FILEUnLink(path8cg name);
+ok64 FILEUnLink(path8s name);
 
 // Read getcwd into a path buffer. NUL-terminates and feeds DATA.
 ok64 FILEGetCwd(path8b out);
@@ -495,17 +495,17 @@ ok64 FILEMapFD(u8bp *buf, int const *fd, int mode);
 
 ok64 FILEUnMapFD(u8b buf, int const *fd);
 
-ok64 FILEMapRO(u8bp *buf, path8cg path);
+ok64 FILEMapRO(u8bp *buf, path8s path);
 
-ok64 FILEMapROAt(u8bp *buf, int dir, path8cg path);
+ok64 FILEMapROAt(u8bp *buf, int dir, path8s path);
 
 // Memory-map a file for reading and writing.
-ok64 FILEMapRW(u8bp *buf, path8cg path);
+ok64 FILEMapRW(u8bp *buf, path8s path);
 
 // Create and map a file for reading and writing.
-ok64 FILEMapCreate(u8bp *buf, path8cg path, size_t size);
+ok64 FILEMapCreate(u8bp *buf, path8s path, size_t size);
 
-ok64 FILEMapCreateAt(u8bp *buf, int dir, path8cg path, size_t size);
+ok64 FILEMapCreateAt(u8bp *buf, int dir, path8s path, size_t size);
 
 // Unmaps the buffer (buf must point into FILE_WANT_BUFS).
 ok64 FILEUnMap(u8bp buf);
@@ -542,16 +542,16 @@ fun ok64 FILEremap125(Bu8 buf) {
 //   FILEUnBook(buf);
 
 // Book VA range and map existing file at start
-ok64 FILEBook(u8bp *buf, path8cg path, size_t book_size);
+ok64 FILEBook(u8bp *buf, path8s path, size_t book_size);
 
 // Book VA range and map existing file at dir
-ok64 FILEBookAt(u8bp *buf, int dir, path8cg path, size_t book_size);
+ok64 FILEBookAt(u8bp *buf, int dir, path8s path, size_t book_size);
 
 // Create file, book VA range, map with initial size
-ok64 FILEBookCreate(u8bp *buf, path8cg path, size_t book_size, size_t init_size);
+ok64 FILEBookCreate(u8bp *buf, path8s path, size_t book_size, size_t init_size);
 
 // Create file at dir, book VA range, map with initial size
-ok64 FILEBookCreateAt(u8bp *buf, int dir, path8cg path, size_t book_size,
+ok64 FILEBookCreateAt(u8bp *buf, int dir, path8s path, size_t book_size,
                       size_t init_size);
 
 // Extend file and mapping within booked range (base address unchanged)
