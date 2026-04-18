@@ -618,7 +618,9 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     FILETestC(base != MAP_FAILED);
 
-    // Map the file at the start of the reserved range
+    // Map the file at the start of the reserved range.  Note: 9p/NFS
+    // shared mounts may reject MAP_SHARED|MAP_FIXED with EINVAL — the
+    // caller sees that as FILEINVAL propagating up.
     u8 *map = (u8 *)mmap(base, map_size, PROT_READ | PROT_WRITE,
                          MAP_FILE | MAP_SHARED | MAP_FIXED, *fd, 0);
     if (map == MAP_FAILED) {

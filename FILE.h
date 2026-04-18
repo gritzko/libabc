@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -308,6 +309,22 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed);
 
 ok64 FILEClose(int *fd);
 
+// Advisory file lock (flock(2)).  exclusive=YES → LOCK_EX, else LOCK_SH.
+// Blocks until acquired.  The lock drops automatically when the fd is
+// closed, so callers typically don't need FILEUnlock.
+fun ok64 FILELock(int const *fd, b8 exclusive) {
+    if (!FILEok(*fd)) return FILEBADF;
+    int op = exclusive ? LOCK_EX : LOCK_SH;
+    FILETestC(flock(*fd, op) == 0);
+    return OK;
+}
+
+fun ok64 FILEUnlock(int const *fd) {
+    if (!FILEok(*fd)) return FILEBADF;
+    FILETestC(flock(*fd, LOCK_UN) == 0);
+    return OK;
+}
+
 // ok64 FILEExists(path8 path);
 
 ok64 FILEStat(struct stat *ret, path8s path);
@@ -454,6 +471,15 @@ ok64 FILEMakeDirP(path8s path);
 ok64 FILERmDir(path8s path, bool recursive);
 
 ok64 FILEHardLink(path8s dst, path8s src);
+
+// Create symlink `linkpath` pointing at `target`.  Returns FILEEXIST
+// if linkpath already exists.
+fun ok64 FILESymLink(path8s target, path8s linkpath) {
+    if (!$ok(target) || !$ok(linkpath)) return FILEBADARG;
+    FILETestC(symlink((char const *)target[0],
+                      (char const *)linkpath[0]) == 0);
+    return OK;
+}
 
 ok64 FILErmrf(path8s name);
 
