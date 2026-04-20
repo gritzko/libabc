@@ -197,7 +197,11 @@ ok64 RONTestNowMonotone() {
     for (int i = 1; i < N; i++) {
         test(ts[i] >= ts[i - 1], FAIL);
     }
-    test(ts[N - 1] > ts[0], FAIL);
+    // RONNow has ms resolution; 1000 tight iterations may finish within
+    // a single tick on fast machines, so sleep to guarantee advancement.
+    POLSleep(2 * POLNanosPerMSec);
+    ron60 after = RONNow();
+    test(after > ts[0], FAIL);
     done;
 }
 
