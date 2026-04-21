@@ -790,65 +790,56 @@ ok64 FILEUnBook(u8bp buf) {
     done;
 }
 
-ok64 FILEScan(path8 path, FILE_SCAN mode, path8f f, void0p arg) {
-    sane(PATHu8bSane(path) && f);
-    DIR *dir = opendir((const char *)*path);
-    if (dir == NULL) {
-        // todo
-        fail(FILEBAD);
+// Resolve DT_UNKNOWN via fstatat on the open dir (avoids path concatenation).
+fun u8 FILEresolveDType(DIR *dir, char const *name, u8 dtype) {
+    if (dtype != DT_UNKNOWN) return dtype;
+    struct stat st;
+    if (fstatat(dirfd(dir), name, &st, AT_SYMLINK_NOFOLLOW) != 0) return dtype;
+    if (S_ISREG(st.st_mode)) return DT_REG;
+    if (S_ISDIR(st.st_mode)) return DT_DIR;
+    if (S_ISLNK(st.st_mode)) return DT_LNK;
+    return dtype;
+}
+
+fun ok64 FILEScanRecurse(fileitp it, path8bp path, FILE_SCAN mode, path8f f,
+                          void0p arg) {
+    ok64 o;
+    while ((o = FILENext(it)) == OK) {
+        b8 hit = (it->type == DT_REG && (mode & FILE_SCAN_FILES)) ||
+                 (it->type == DT_LNK && (mode & FILE_SCAN_LINKS)) ||
+                 (it->type == DT_DIR && (mode & FILE_SCAN_DIRS));
+        ok64 cb = OK;
+        if (hit) cb = f(arg, path);
+        if (cb == FILESKIP) continue;
+        if (cb != OK) return cb;
+        if (it->type == DT_DIR && (mode & FILE_SCAN_DEEP)) {
+            fileit child = {};
+            ok64 io = FILEInto(&child, it);
+            if (io != OK) return io;
+            ok64 r = FILEScanRecurse(&child, path, mode, f, arg);
+            FILEOuto(&child, it);
+            if (r != OK) return r;
+        }
     }
-    u8sp idle = u8bIdle(path);
-    u8p saved_end = *idle;
-    struct dirent *entry = 0;
-    ok64 o = OK;
-    while (o == OK && (entry = readdir(dir))) {
-        a_cstr(fn, entry->d_name);
-        // Skip . and .. entries (check length first, then value)
-        u64 nlen = u8csLen(fn);
-        if ((nlen == 1 && fn[0][0] == '.') ||
-            (nlen == 2 && fn[0][0] == '.' && fn[0][1] == '.'))
-            continue;
-        o = PATHu8bPush(path, fn);
-        if (o == BNOROOM) {
-            // Path too long - skip this entry and continue
-            o = OK;
-            *idle = saved_end;
-            continue;
-        }
-        unsigned char dtype = entry->d_type;
-        if (dtype == DT_UNKNOWN) {
-            struct stat st;
-            if (lstat((const char *)*path, &st) == 0) {
-                if (S_ISREG(st.st_mode))
-                    dtype = DT_REG;
-                else if (S_ISDIR(st.st_mode))
-                    dtype = DT_DIR;
-                else if (S_ISLNK(st.st_mode))
-                    dtype = DT_LNK;
-            }
-        }
-        switch (dtype) {
-            case DT_DIR:
-                if (o == OK && (mode & FILE_SCAN_DIRS)) {
-                    u8sFeed1(u8bIdle(path), '/');
-                    o = f(arg, path);
-                }
-                if (o == FILESKIP)
-                    o = OK;  // Skip recursion but continue scan
-                else if (o == OK && (mode & FILE_SCAN_DEEP))
-                    o = FILEScan(path, mode, f, arg);
-                break;
-            case DT_LNK:
-                if (o == OK && (mode & FILE_SCAN_LINKS)) o = f(arg, path);
-                break;
-            case DT_REG:
-                if (o == OK && (mode & FILE_SCAN_FILES)) o = f(arg, path);
-                break;
-            default:
-        }
-        *idle = saved_end;
-    }
-    closedir(dir);
+    return o == END ? OK : o;
+}
+
+ok64 FILEScan(path8bp path, FILE_SCAN mode, path8f f, void0p arg) {
+    sane(path && PATHu8bSane(path) && f);
+    fileit it = {};
+    call(FILEIterOpen, &it, path);
+    ok64 o = FILEScanRecurse(&it, path, mode, f, arg);
+    FILEIterClose(&it);
+    return o;
+}
+
+ok64 FILEScanSorted(path8bp path, FILE_SCAN mode, u8bp buf, u8csz z,
+                    path8f f, void0p arg) {
+    sane(path && PATHu8bSane(path) && f && Bok(buf) && z);
+    fileit it = {};
+    call(FILEIterOpenSorted, &it, path, buf, z);
+    ok64 o = FILEScanRecurse(&it, path, mode, f, arg);
+    FILEIterClose(&it);
     return o;
 }
 
@@ -889,11 +880,16 @@ fun ok64 FILELoadSorted(fileitp it, DIR *dir, u8csz z) {
             if (e->d_name[1] == 0) continue;
             if (e->d_name[1] == '.' && e->d_name[2] == 0) continue;
         }
+        u8 dtype = FILEresolveDType(dir, e->d_name, e->d_type);
         u8cs nm = u8csOf(e->d_name);
-        test(u8csLen(nm) <= 0xff, FILENAMEBAD);
-        // Write entry: [type][len][name]
-        call(u8sFeed2, idle, e->d_type, (u8)$len(nm));
+        u64 nlen = u8csLen(nm);
+        // Dir names get a trailing '/' so the default $cmp comparator orders
+        // dirs as if their name ended in '/' (foo.txt < foo/ < foo0).
+        u64 stored = nlen + (dtype == DT_DIR ? 1 : 0);
+        test(stored <= 0xff, FILENAMEBAD);
+        call(u8sFeed2, idle, dtype, (u8)stored);
         call(u8sFeed, idle, nm);
+        if (dtype == DT_DIR) call(u8sFeed1, idle, '/');
     }
 
     entries[1] = *idle;
@@ -981,9 +977,17 @@ ok64 FILENext(fileitp it) {
             return END;
         }
         it->type = entry[0][0];
-        u8cs name = {entry[0] + 2, entry[1]};  // skip type and len
-        o = PATHu8bPush(it->path, name);
+        // Stored name may carry a trailing '/' (for dirs). Strip before push
+        // (PATHu8bPush rejects '/' in segments), re-append after.
+        u8cs name = {entry[0] + 2, entry[1]};
+        b8 has_slash = ($len(name) > 0 && name[1][-1] == '/');
+        u8cs seg = {name[0], has_slash ? name[1] - 1 : name[1]};
+        o = PATHu8bPush(it->path, seg);
         if (o != OK) return o;
+        if (it->type == DT_DIR) {
+            call(u8sFeed1, u8bIdle(it->path), '/');
+            call(PATHu8bTerm, it->path);
+        }
         return OK;
     }
 
@@ -997,11 +1001,15 @@ ok64 FILENext(fileitp it) {
             if (e->d_name[1] == 0) continue;
             if (e->d_name[1] == '.' && e->d_name[2] == 0) continue;
         }
-        it->type = e->d_type;
+        it->type = FILEresolveDType((DIR *)it->dir, e->d_name, e->d_type);
         a_cstr(name, e->d_name);
         ok64 o = PATHu8bPush(it->path, name);
         if (o == BNOROOM) continue;
         if (o != OK) return o;
+        if (it->type == DT_DIR) {
+            call(u8sFeed1, u8bIdle(it->path), '/');
+            call(PATHu8bTerm, it->path);
+        }
         return OK;
     }
     it->type = 0;

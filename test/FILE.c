@@ -439,11 +439,14 @@ ok64 FILEIterSortedTest() {
     u8 names[4][32] = {};
     int count = 0;
     scan(FILENext, &it) {
-        // Extract just the filename (last component)
-        u8cp p = u8bIdleHead(it.path);
+        // Extract just the filename (last component). Dir paths end with
+        // '/' — back up over it before scanning for the separator.
+        u8cp end = u8bIdleHead(it.path);
         u8cp head = u8bDataHead(it.path);
+        if (end > head && *(end - 1) == '/') end--;
+        u8cp p = end;
         while (p > head && *(p - 1) != '/') p--;
-        size_t len = u8bIdleHead(it.path) - p;
+        size_t len = end - p;
         if (len < 32) {
             memcpy(names[count], p, len);
         }

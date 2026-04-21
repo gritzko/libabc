@@ -213,6 +213,11 @@ typedef enum {
     FILE_SCAN_ALL = 14,
 } FILE_SCAN;
 ok64 FILEScan(path8bp path, FILE_SCAN mode, path8f f, void0p arg);
+// Sorted variant: visits entries in sorted order. `buf` is scratch for
+// sorted entries (acts as a stack across recursion); `z` is the comparator
+// (e.g. FILEentryZ).
+ok64 FILEScanSorted(path8bp path, FILE_SCAN mode, u8bp buf, u8csz z,
+                    path8f f, void0p arg);
 
 // File tree iterator (into/next/outo pattern)
 // Usage:
@@ -247,10 +252,10 @@ typedef struct fileit {
 typedef fileit *fileitp;
 typedef fileit const *fileitcp;
 
-// Entry comparator for sorted iteration (compares [type][len][name] slices)
-// Default: alphabetical by name
+// Entry comparator for sorted iteration (compares [type][len][name] slices).
+// Dir names are stored with a trailing '/' (appended by FILELoadSorted), so
+// directories sort as if they were "name/" — e.g. foo.txt < foo/ < foo0.
 fun b8 FILEentryZ(u8cscp a, u8cscp b) {
-    // Skip type and len bytes, compare names
     u8cs na = {(*a)[0] + 2, (*a)[1]};
     u8cs nb = {(*b)[0] + 2, (*b)[1]};
     return $cmp(na, nb) < 0;
