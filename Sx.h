@@ -137,7 +137,7 @@ fun void X(, sMv)(X(, s) a, X(, s) b) {
     a[0] = b[0];
     a[1] = b[1];
 }
-fun void X(, csMv)(X(, cs) a, X(, cs) b) {
+fun void X(, csMv)(X(, cs) a, X(, csc) b) {
     a[0] = b[0];
     a[1] = b[1];
 }

@@ -94,19 +94,19 @@ fun ok64 PATHu8bTerm(path8b p) {
 }
 
 // Append `data` verbatim (validated), NUL-terminate.
-ok64 PATHu8bFeed(path8b p, u8cs data);
+ok64 PATHu8bFeed(path8b p, u8csc data);
 
 // Append one validated segment (inserts '/' if needed), NUL-terminate.
-ok64 PATHu8bPush(path8b p, u8cs segment);
+ok64 PATHu8bPush(path8b p, u8csc segment);
 
 // Drop last segment (keeps leading '/' for absolute paths).
 ok64 PATHu8bPop(path8b p);
 
 // Reset `into` then copy `src`.
-ok64 PATHu8bDup(path8b into, u8cs src);
+ok64 PATHu8bDup(path8b into, u8csc src);
 
 // Append `rel` segment-by-segment.
-ok64 PATHu8bAdd(path8b into, u8cs rel);
+ok64 PATHu8bAdd(path8b into, u8csc rel);
 
 // Concatenate `a` and `b` into `out` (reset first), normalized.
 ok64 PATHu8bJoin(path8b out, u8cs a, u8cs b);

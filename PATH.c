@@ -108,9 +108,10 @@ ok64 PATHu8sDrainNE(u8cs cursor, u8csp seg) {
 
 // --- Buffer composition ---
 
-ok64 PATHu8bFeed(path8b p, u8cs data) {
+ok64 PATHu8bFeed(path8b p, u8csc data) {
     sane(u8bOK(p) && $ok(data));
-    call(PATHu8sVerify, data);
+    a_dup(u8c, d, data);
+    call(PATHu8sVerify, d);
     u8sp idle = u8bIdle(p);
     test($len(idle) > $len(data), PATHNOROOM);
     call(u8sFeed, idle, data);
@@ -118,9 +119,10 @@ ok64 PATHu8bFeed(path8b p, u8cs data) {
     done;
 }
 
-ok64 PATHu8bPush(path8b p, u8cs segment) {
+ok64 PATHu8bPush(path8b p, u8csc segment) {
     sane(u8bOK(p) && $ok(segment));
-    call(PATHu8sVerifySegment, segment);
+    a_dup(u8c, seg, segment);
+    call(PATHu8sVerifySegment, seg);
     u8sp idle = u8bIdle(p);
     // Insert separator if DATA non-empty and doesn't end with '/'.
     if (u8bDataLen(p) > 0) {
@@ -150,14 +152,14 @@ ok64 PATHu8bPop(path8b p) {
     done;
 }
 
-ok64 PATHu8bDup(path8b into, u8cs src) {
+ok64 PATHu8bDup(path8b into, u8csc src) {
     sane(u8bOK(into) && $ok(src));
     u8bReset(into);
     call(PATHu8bFeed, into, src);
     done;
 }
 
-ok64 PATHu8bAdd(path8b into, u8cs rel) {
+ok64 PATHu8bAdd(path8b into, u8csc rel) {
     sane(u8bOK(into) && $ok(rel));
     a_dup(u8c, rem, rel);
     u8cs seg = {};
