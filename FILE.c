@@ -183,7 +183,13 @@ ok64 FILESpawn(u8csc path, u8css argv,
             dup2(out_pipe[1], STDOUT_FILENO);
             close(out_pipe[1]);
         }
-        execv((char const *)*path, cargv);
+        //  Bare names (no `/`) fall back to PATH lookup via execvp
+        //  so callers can pass "keeper" / "ssh" without a full path.
+        b8 has_slash = NO;
+        for (u8cp p = path[0]; p < path[1]; p++)
+            if (*p == '/') { has_slash = YES; break; }
+        if (has_slash) execv((char const *)*path, cargv);
+        else           execvp(cargv[0], cargv);
         _exit(127);
     }
 

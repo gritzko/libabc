@@ -30,10 +30,18 @@ typedef uri const* uricp;
 // Backwards compatibility
 typedef uri URIstate;
 
-// Parse URI from string
+// Parse URI from `state->data`.  Like any abc/S.md drain, URILexer
+// CONSUMES its input slice — `state->data[0]` advances as bytes are
+// accepted, leaving the slice empty on success.  Parsed components
+// land in state->scheme / authority / host / port / user / path /
+// query / fragment.  If you need to keep the original bytes, `a_dup`
+// the slice into a local copy before lexing; otherwise rebuild via
+// URIutf8Feed from the components.
 ok64 URILexer(urip state);
 
-// Parse URI from string slice
+// Parse URI from a string slice.  Wrapper: stores `from` into
+// `u->data`, then calls URILexer (which consumes `u->data`).  Same
+// consume-on-drain convention as URILexer.
 ok64 URIutf8Drain(u8cs from, urip u);
 
 // Serialize URI to string

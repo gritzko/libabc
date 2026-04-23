@@ -3,7 +3,7 @@
 
 #include "BUF.h"
 
-con ok64 ANSIBAD = 0x1d524b28d;
+con ok64 ANSIBAD = 0xa5dc48b28d;
 
 // --- CSI parser (input side) ---
 //
