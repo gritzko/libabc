@@ -609,6 +609,16 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     size_t map_size = roundup(actual_size ? actual_size : 1, sp);
     test(map_size <= book_size, BADARG);
 
+    // Materialise the mmap'd tail-of-page on disk so writes into that
+    // range persist on disk-backed filesystems (tmpfs silently backs
+    // these; ext3/ext4 drop them on munmap unless the blocks are
+    // within the file length).  FILETrimBook at close restores the
+    // file to the real data length, and b[2] below records the real
+    // content end so callers see the right DATA/IDLE boundary.
+    if (actual_size > 0 && actual_size < map_size) {
+        call(FILEResize, fd, map_size);
+    }
+
     // Slot must be free
     u8bp slot = FILE_WANT_BUFS[*fd];
     test(slot[0] == NULL, BADARG);
@@ -629,10 +639,14 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     }
 
     // For empty files, leave b[3] at map: no DATA, no IDLE, callers
-    // must grow the file first. For non-empty files, b[3] is the
-    // page-aligned map end (the tail past EOF reads as zero, safe).
+    // must grow the file first.  For non-empty files, b[2] is the
+    // real content end (so u8bDataLen reports the unchanged data
+    // length and u8bFeed appends right after the last byte), while
+    // b[3] is the page-aligned map end — the zero-padded tail is
+    // idle space backed by real blocks thanks to the FILEResize above.
     uint8_t **b = (uint8_t **)slot;
-    b[0] = b[1] = b[2] = map;
+    b[0] = b[1] = map;
+    b[2] = map + actual_size;
     b[3] = map + (actual_size ? map_size : 0);
 
     // Track the mapping and booked end
@@ -675,6 +689,9 @@ ok64 FILEBookCreate(u8bp *buf, path8s path, size_t book_size,
     if (init_size == 0) init_size = sp;
     call(FILEResize, &fd, init_size);
     call(FILEBookFD, buf, &fd, book_size);
+    //  Fresh file: the init_size bytes are zero padding, not content.
+    //  Reset b[2] to b[0] so the whole map is IDLE.
+    ((u8 **)*buf)[2] = (*buf)[0];
     done;
 }
 
@@ -688,6 +705,8 @@ ok64 FILEBookCreateAt(u8bp *buf, int dir, path8s path, size_t book_size,
     if (init_size == 0) init_size = sp;
     call(FILEResize, &fd, init_size);
     call(FILEBookFD, buf, &fd, book_size);
+    //  Fresh file: the init_size bytes are zero padding, not content.
+    ((u8 **)*buf)[2] = (*buf)[0];
     done;
 }
 
