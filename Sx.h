@@ -141,6 +141,14 @@ fun void X(, csMv)(X(, cs) a, X(, csc) b) {
     a[0] = b[0];
     a[1] = b[1];
 }
+fun void X(, sMv0)(X(, s) a) {
+    a[0] = 0;
+    a[1] = 0;
+}
+fun void X(, csMv0)(X(, cs) a) {
+    a[0] = 0;
+    a[1] = 0;
+}
 fun void X(, cgMv)(X(, cg) a, X(, cg) b) {
     a[0] = b[0];
     a[1] = b[1];

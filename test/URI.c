@@ -68,6 +68,15 @@ ok64 URItest4() {
         $u8str("git+ssh://git@github.com/gritzko/librdx"),
         $u8str("ftp://1.2.3.4/some/path"),
         $u8str("http://myserver:123/path?query#fragment"),
+        //  Present-but-empty query: a bare `?` means "the trunk" in
+        //  dog/DOG's K/V convention.  Round-trip must keep the `?`.
+        $u8str("?#0123456789abcdef0123456789abcdef01234567"),
+        //  Present-but-empty fragment: a trailing `#` with nothing
+        //  after signals a deletion row (`?branch#`).  Round-trip
+        //  must keep the `#`.
+        $u8str("?feature/fix1#"),
+        //  Both present-but-empty on a remote observation row.
+        $u8str("//peer/repo?#cafebabecafebabecafebabecafebabecafebabe"),
     };
     for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
         URIstate state = {};
@@ -191,15 +200,17 @@ ok64 URITestTable() {
         {"http://example.com/path?q1", "http://example.com/path?q2", "?q2"},
         {"http://example.com/path", "http://example.com/path?newq", "?newq"},
 
-        // Same path, base has query, specific has none -> empty query marker
-        {"http://example.com/path?oldq", "http://example.com/path", ""},
+        // Same path, base has query, specific has none -> emit bare
+        // `?` to override base's query to empty (per RFC 3986).
+        {"http://example.com/path?oldq", "http://example.com/path", "?"},
 
         // Same query, different fragment -> fragment only
         {"http://example.com/path#f1", "http://example.com/path#f2", "#f2"},
         {"http://example.com/path", "http://example.com/path#frag", "#frag"},
 
-        // Same fragment in base, none in specific
-        {"http://example.com/path#old", "http://example.com/path", ""},
+        // Same fragment in base, none in specific -> emit bare `#`
+        // to override base's fragment to empty.
+        {"http://example.com/path#old", "http://example.com/path", "#"},
 
         // Complex cases with query and fragment
         {"http://example.com/path?q#f", "http://example.com/path?q#f2", "#f2"},

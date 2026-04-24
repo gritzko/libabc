@@ -85,17 +85,25 @@ ok64 URIutf8Feed(u8s into, uricp u) {
         ok64 o = u8sFeed(into, u->path);
         if (o != OK) return o;
     }
-    if (!$empty(u->query)) {
+    //  Presence test is `[0] != NULL` (not $empty): a slice `{p,p}`
+    //  with both endpoints non-NULL means "explicitly empty" —
+    //  `?#<sha>` (trunk move) and `?branch#` (deletion) depend on
+    //  the sigil being emitted for a present-but-empty component.
+    if (u->query[0] != NULL) {
         ok64 o = u8sFeed1(into, '?');
         if (o != OK) return o;
-        o = u8sFeed(into, u->query);
-        if (o != OK) return o;
+        if (!$empty(u->query)) {
+            o = u8sFeed(into, u->query);
+            if (o != OK) return o;
+        }
     }
-    if (!$empty(u->fragment)) {
+    if (u->fragment[0] != NULL) {
         ok64 o = u8sFeed1(into, '#');
         if (o != OK) return o;
-        o = u8sFeed(into, u->fragment);
-        if (o != OK) return o;
+        if (!$empty(u->fragment)) {
+            o = u8sFeed(into, u->fragment);
+            if (o != OK) return o;
+        }
     }
     return OK;
 }
@@ -246,10 +254,11 @@ ok64 URIRelative(urip rel, uricp base, uricp specific) {
             // Empty but non-NULL: marks "explicitly no query"
             rel->query[0] = rel->query[1] = *specific->data;
         }
-        // Copy fragment (or mark explicitly empty)
+        // Copy fragment (or mark explicitly empty only when base has
+        // one to override; otherwise leave NULL so the emit drops it).
         if (*specific->fragment) {
             u8csDup(rel->fragment, specific->fragment);
-        } else {
+        } else if (*base->fragment) {
             rel->fragment[0] = rel->fragment[1] = *specific->data;
         }
         done;
