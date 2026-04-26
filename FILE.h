@@ -575,6 +575,13 @@ fun ok64 FILEremap125(Bu8 buf) {
 // Book VA range and map existing file at start
 ok64 FILEBook(u8bp *buf, path8s path, size_t book_size);
 
+// Read-only counterpart of FILEBook: opens the file O_RDONLY and
+// maps PROT_READ without page-aligning the on-disk size.  No IDLE
+// region — appends fail.  Use for scan-only consumers (status /
+// list / dry-run) so they don't grow a file under a concurrent RW
+// owner.
+ok64 FILEBookRO(u8bp *buf, path8s path, size_t book_size);
+
 // Book VA range and map existing file at dir
 ok64 FILEBookAt(u8bp *buf, int dir, path8s path, size_t book_size);
 

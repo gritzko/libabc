@@ -593,8 +593,12 @@ ok64 FILEUnMap(u8bp buf) {
 
 // . . . . . . . . booked mmapped buffers . . . . . . . .
 
-// Internal: book VA range and map fd at start
-fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
+// Internal: book VA range and map fd at start.  `mode` is the open
+// mode the caller used (O_RDWR or O_RDONLY).  RO bookings skip the
+// page-align ftruncate and map PROT_READ only — so a read-only
+// consumer can open and close without growing the file behind a
+// concurrent writer's back, and ULOGClose has nothing to trim.
+fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
     sane(buf != NULL && FILEok(*fd));
     test(*fd >= 0 && *fd < FILE_MAX_OPEN, BADARG);
 
@@ -602,6 +606,8 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
 
     size_t actual_size;
     call(FILESize, &actual_size, fd);
+
+    b8 ro = (mode == O_RDONLY);
 
     // VA reservation and mmap require page-aligned sizes. For a
     // non-empty file the kernel zero-fills the tail of the last page,
@@ -615,13 +621,14 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     size_t map_size = roundup(actual_size ? actual_size : 1, sp);
     test(map_size <= book_size, BADARG);
 
-    // Materialise the mmap'd tail-of-page on disk so writes into that
-    // range persist on disk-backed filesystems (tmpfs silently backs
-    // these; ext3/ext4 drop them on munmap unless the blocks are
-    // within the file length).  FILETrimBook at close restores the
-    // file to the real data length, and b[2] below records the real
-    // content end so callers see the right DATA/IDLE boundary.
-    if (actual_size > 0 && actual_size < map_size) {
+    // Materialise the mmap'd tail-of-page on disk so RW writes into
+    // that range persist on disk-backed filesystems (tmpfs silently
+    // backs these; ext3/ext4 drop them on munmap unless the blocks
+    // are within the file length).  FILETrimBook at close restores
+    // the file to the real data length.  RO opens skip the extend —
+    // they neither write into the tail nor want to perturb the
+    // file's on-disk size.
+    if (!ro && actual_size > 0 && actual_size < map_size) {
         call(FILEResize, fd, map_size);
     }
 
@@ -637,8 +644,9 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     // Map the file at the start of the reserved range.  Note: 9p/NFS
     // shared mounts may reject MAP_SHARED|MAP_FIXED with EINVAL — the
     // caller sees that as FILEINVAL propagating up.
-    u8 *map = (u8 *)mmap(base, map_size, PROT_READ | PROT_WRITE,
-                         MAP_FILE | MAP_SHARED | MAP_FIXED, *fd, 0);
+    int prot = PROT_READ | (ro ? 0 : PROT_WRITE);
+    int mflags = MAP_FILE | MAP_FIXED | (ro ? MAP_PRIVATE : MAP_SHARED);
+    u8 *map = (u8 *)mmap(base, map_size, prot, mflags, *fd, 0);
     if (map == MAP_FAILED) {
         munmap(base, book_size);
         FILETestC(0);  // return errno
@@ -650,10 +658,13 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size) {
     // length and u8bFeed appends right after the last byte), while
     // b[3] is the page-aligned map end — the zero-padded tail is
     // idle space backed by real blocks thanks to the FILEResize above.
+    // RO opens shrink b[3] back to b[2]: no idle space, no growing
+    // appends; callers that try to write trip the slice-bounds check.
     uint8_t **b = (uint8_t **)slot;
     b[0] = b[1] = map;
     b[2] = map + actual_size;
-    b[3] = map + (actual_size ? map_size : 0);
+    b[3] = ro ? b[2]
+              : map + (actual_size ? map_size : 0);
 
     // Track the mapping and booked end
     call(FILEInit);
@@ -673,7 +684,21 @@ ok64 FILEBook(u8bp *buf, path8s path, size_t book_size) {
     sane(buf != NULL && $ok(path) && !$empty(path));
     int fd = FILE_CLOSED;
     call(FILEOpen, &fd, path, O_RDWR);
-    call(FILEBookFD, buf, &fd, book_size);
+    call(FILEBookFD, buf, &fd, book_size, O_RDWR);
+    done;
+}
+
+//  Read-only counterpart of FILEBook: opens the file O_RDONLY and
+//  maps it without page-aligning the on-disk size up.  Useful for
+//  consumers that scan an existing log without intending to append
+//  (status / list / dry-run).  The mapping is PROT_READ only and
+//  has no IDLE region; any attempt to grow it via FILEBookEnsure
+//  will fail.
+ok64 FILEBookRO(u8bp *buf, path8s path, size_t book_size) {
+    sane(buf != NULL && $ok(path) && !$empty(path));
+    int fd = FILE_CLOSED;
+    call(FILEOpen, &fd, path, O_RDONLY);
+    call(FILEBookFD, buf, &fd, book_size, O_RDONLY);
     done;
 }
 
@@ -681,7 +706,7 @@ ok64 FILEBookAt(u8bp *buf, int dir, path8s path, size_t book_size) {
     sane(buf != NULL && $ok(path) && !$empty(path));
     int fd = FILE_CLOSED;
     call(FILEOpenAt, &fd, dir, path, O_RDWR);
-    call(FILEBookFD, buf, &fd, book_size);
+    call(FILEBookFD, buf, &fd, book_size, O_RDWR);
     done;
 }
 
@@ -694,7 +719,7 @@ ok64 FILEBookCreate(u8bp *buf, path8s path, size_t book_size,
     init_size = roundup(init_size, sp);
     if (init_size == 0) init_size = sp;
     call(FILEResize, &fd, init_size);
-    call(FILEBookFD, buf, &fd, book_size);
+    call(FILEBookFD, buf, &fd, book_size, O_RDWR);
     //  Fresh file: the init_size bytes are zero padding, not content.
     //  Reset b[2] to b[0] so the whole map is IDLE.
     ((u8 **)*buf)[2] = (*buf)[0];
@@ -710,7 +735,7 @@ ok64 FILEBookCreateAt(u8bp *buf, int dir, path8s path, size_t book_size,
     init_size = roundup(init_size, sp);
     if (init_size == 0) init_size = sp;
     call(FILEResize, &fd, init_size);
-    call(FILEBookFD, buf, &fd, book_size);
+    call(FILEBookFD, buf, &fd, book_size, O_RDWR);
     //  Fresh file: the init_size bytes are zero padding, not content.
     ((u8 **)*buf)[2] = (*buf)[0];
     done;
