@@ -62,6 +62,23 @@ typedef u8s const *u8scp;
 
 fun int u8cscmp(u8cs const *a, u8cs const *b) { return $cmp(*a, *b); }
 
+//  Pull one '\n'-terminated line off the head of `in`, advancing past
+//  the newline.  On OK, `line_out` spans the line bytes (excluding
+//  the newline).  Trailing record without a final '\n' is tolerated:
+//  the whole tail becomes one line and `in` ends empty.  Returns NONE
+//  when `in` is already empty.
+fun ok64 u8csDrainLine(u8cs in, u8csp line_out) {
+    if (u8csEmpty(in)) return NONE;
+    u8c const *start = in[0];
+    a_dup(u8c, scan, in);
+    (void)u8csFind(scan, '\n');     // scan[0] = '\n' or term
+    line_out[0] = start;
+    line_out[1] = scan[0];
+    in[0] = scan[0];
+    if (!u8csEmpty(in)) u8csUsed1(in);  // step past the '\n'
+    return OK;
+}
+
 typedef u8cs const *$u8ccp;
 typedef u8cs const *u8cscp;
 
