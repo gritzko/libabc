@@ -511,6 +511,125 @@ ok64 HIT18() {
     done;
 }
 
+// HIT19: IsCompact predicate.
+ok64 HIT19() {
+    sane(1);
+    // oldest-first: 100, 10, 1 — each < 1/8 of preceding → compact.
+    u64 a[100], b[10], c[1];
+    for (int i = 0; i < 100; i++) a[i] = (u64)i;
+    for (int i = 0; i < 10; i++) b[i] = (u64)(100 + i);
+    c[0] = 200;
+    u64cs runs[3] = {{a, a + 100}, {b, b + 10}, {c, c + 1}};
+    u64css stack = {runs, runs + 3};
+    want(HITu64IsCompact(stack) == YES);
+
+    // 8, 8 — second not < 1/8 of first → not compact.
+    u64 d[8], e[8];
+    for (int i = 0; i < 8; i++) d[i] = (u64)i;
+    for (int i = 0; i < 8; i++) e[i] = (u64)(8 + i);
+    u64cs runs2[2] = {{d, d + 8}, {e, e + 8}};
+    u64css stack2 = {runs2, runs2 + 2};
+    want(HITu64IsCompact(stack2) == NO);
+
+    // Single run is trivially compact.
+    u64cs runs3[1] = {{a, a + 100}};
+    u64css stack3 = {runs3, runs3 + 1};
+    want(HITu64IsCompact(stack3) == YES);
+    done;
+}
+
+// HIT20: Compact merges youngest violators, restoring 1/8 invariant.
+//        big(1000), med(5), sml(8): 8*8=64 > 5 → merge sml+med → 13;
+//        13*8=104 < 1000 → stop.
+ok64 HIT20() {
+    sane(1);
+    u64 big[1000];
+    for (int i = 0; i < 1000; i++) big[i] = (u64)(i * 3);
+    u64 med[] = {1, 4, 7, 10, 13};
+    u64 sml[] = {0, 2, 5, 8, 11, 14, 17, 20};
+    u64cs runs[3] = {{big, big + 1000}, {med, med + 5}, {sml, sml + 8}};
+    u64css stack = {runs, runs + 3};
+    want(HITu64IsCompact(stack) == NO);
+
+    u64 buf[13];
+    u64s into = {buf, buf + 13};
+    call(HITu64Compact, stack, into);
+    testeq($len(stack), (size_t)2);
+    testeq($len(stack[0][0]), (size_t)1000);
+    testeq($len(stack[0][1]), (size_t)13);
+    want(HITu64IsCompact(stack) == YES);
+    for (int i = 0; i + 1 < 13; i++) want(buf[i] <= buf[i + 1]);
+    done;
+}
+
+// HIT21: cascading — 10,10,10 all equal → all three merge into one 30-run.
+ok64 HIT21() {
+    sane(1);
+    u64 a[10], b[10], c[10];
+    for (int i = 0; i < 10; i++) a[i] = (u64)(i * 3);
+    for (int i = 0; i < 10; i++) b[i] = (u64)(i * 3 + 1);
+    for (int i = 0; i < 10; i++) c[i] = (u64)(i * 3 + 2);
+    u64cs runs[3] = {{a, a + 10}, {b, b + 10}, {c, c + 10}};
+    u64css stack = {runs, runs + 3};
+    u64 buf[30];
+    u64s into = {buf, buf + 30};
+    call(HITu64Compact, stack, into);
+    testeq($len(stack), (size_t)1);
+    testeq($len(stack[0][0]), (size_t)30);
+    want(HITu64IsCompact(stack) == YES);
+    for (int i = 0; i + 1 < 30; i++) want(buf[i] <= buf[i + 1]);
+    done;
+}
+
+// HIT22: dedup across runs — duplicates in different runs collapse.
+ok64 HIT22() {
+    sane(1);
+    u64 a[] = {1, 2, 3, 4, 5};   // 5
+    u64 b[] = {2, 4, 6};          // 3
+    u64 c[] = {3, 5, 7};          // 3
+    u64cs runs[3] = {{a, a + 5}, {b, b + 3}, {c, c + 3}};
+    u64css stack = {runs, runs + 3};
+    u64 buf[11];
+    u64s into = {buf, buf + 11};
+    call(HITu64Compact, stack, into);
+    // Single sorted, deduped run: {1,2,3,4,5,6,7} — 7 distinct.
+    testeq($len(stack), (size_t)1);
+    testeq($len(stack[0][0]), (size_t)7);
+    for (u64 i = 0; i < 7; i++) testeq(buf[i], i + 1);
+    done;
+}
+
+// HIT23: cross-validate Compact's output against MSETCompact on the same input.
+ok64 HIT23() {
+    sane(1);
+    u64 a[] = {1, 4, 7, 10, 13, 16, 19, 22};
+    u64 b[] = {2, 5, 8};
+    u64 c[] = {3, 6, 9, 12};
+
+    u64cs h_runs[3] = {{a, a + 8}, {b, b + 3}, {c, c + 4}};
+    u64css h_stack = {h_runs, h_runs + 3};
+    u64 h_buf[15];
+    u64s h_into = {h_buf, h_buf + 15};
+    call(HITu64Compact, h_stack, h_into);
+
+    u64cs m_runs[3] = {{a, a + 8}, {b, b + 3}, {c, c + 4}};
+    u64css m_stack = {m_runs, m_runs + 3};
+    u64 m_buf[15];
+    u64s m_into = {m_buf, m_buf + 15};
+    call(MSETu64Compact, m_stack, m_into);
+
+    // Both compactors produce the same shape and same merged contents.
+    testeq($len(h_stack), $len(m_stack));
+    for (size_t i = 0; i < $len(h_stack); i++) {
+        testeq($len(h_stack[0][i]), $len(m_stack[0][i]));
+    }
+    size_t merged = $len(h_stack[0][$len(h_stack) - 1]);
+    u64 const *h_run = h_stack[0][$len(h_stack) - 1][0];
+    u64 const *m_run = m_stack[0][$len(m_stack) - 1][0];
+    for (size_t i = 0; i < merged; i++) testeq(h_run[i], m_run[i]);
+    done;
+}
+
 ok64 HITtest() {
     sane(1);
     call(HIT0);
@@ -532,6 +651,11 @@ ok64 HITtest() {
     call(HIT16);
     call(HIT17);
     call(HIT18);
+    call(HIT19);
+    call(HIT20);
+    call(HIT21);
+    call(HIT22);
+    call(HIT23);
     done;
 }
 

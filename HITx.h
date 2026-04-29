@@ -309,6 +309,54 @@ fun void X(HIT, sIntersectMerge)(X(, csss) oheap, X(, p) *out) {
     }
 }
 
+// --- LSM-stack compaction (1/8 size-tiered ladder) ---
+//
+// `stack` is an oldest-first sequence of sorted runs (each run is
+// itself sorted; the stack as a whole is *not* — we maintain the
+// 1/8 invariant: each newer (higher-index) run is strictly less
+// than 1/8 of its predecessor).  IsCompact is the predicate; Compact
+// merges the youngest runs that violate it into a single sorted+
+// dedup'd run, cascading until the invariant holds again.  The merge
+// uses HIT's stream-merge-with-dedup (HITStart + HITMerge), so
+// identical full-element rows across runs collapse to one.
+
+fun b8 X(HIT, IsCompact)(X(, css) stack) {
+    size_t n = $len(stack);
+    for (size_t i = 0; i + 1 < n; i++) {
+        if ($len(stack[0][i + 1]) * 8 > $len(stack[0][i]))
+            return NO;
+    }
+    return YES;
+}
+
+// Merge youngest runs to restore the 1/8 invariant.  Stack is
+// oldest-first; youngest at the tail.  Cascades: if merging tail m
+// runs still violates the invariant against the run before them,
+// includes that run too, and so on.  `into` is a slice of free
+// space; its head advances past the merged elements.  The merged
+// run is spliced back into the stack at position n-m, and the
+// stack's idle pointer is moved up so $len(stack) drops by m-1.
+fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
+    size_t n = $len(stack);
+    if (n < 2) return OK;
+    size_t m = 1;
+    size_t total = $len(stack[0][n - 1]);
+    while (m < n && total * 8 > $len(stack[0][n - 1 - m])) {
+        total += $len(stack[0][n - 1 - m]);
+        m++;
+    }
+    if (m < 2) return OK;
+    if ($len(into) < total) return OKNOROOM;
+    HIT_T *base = *into;
+    X(, css) sub = {stack[0] + (n - m), stack[0] + n};
+    X(HIT, Start)(sub);
+    X(HIT, Merge)(sub, into);
+    stack[0][n - m][0] = base;
+    stack[0][n - m][1] = *into;
+    stack[1] = stack[0] + (n - m + 1);
+    return OK;
+}
+
 #undef HIT_H
 #undef HIT_E
 #undef HIT_T
