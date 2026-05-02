@@ -28,6 +28,8 @@ typedef enum {
 } RON64;
 
 #define ok64sub(o, u) ((o<<6)|(u&63))
+#define ok64stem(s) (s>>6)
+#define ok64ext(s) (s&63)
 
 // Extract 6-bit value from ok64 at given index
 fun u8 ok64Lit(ok64 o, u8 ndx) { return (o >> (ndx * 6)) & 63; }
