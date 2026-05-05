@@ -118,6 +118,26 @@ ok64 FILEUnLink(path8s path) {
     done;
 }
 
+ok64 FILEReadLink(u8bp out, path8s linkpath) {
+    sane(out && $ok(linkpath) && !$empty(linkpath));
+    u8bReset(out);
+    size_t cap = u8bIdleLen(out);
+    if (cap == 0) return NOROOM;
+    ssize_t n = readlink((char const *)*linkpath,
+                         (char *)u8bIdleHead(out), cap);
+    if (n < 0) fail(FILEFAIL);
+    if ((size_t)n >= cap) return NOROOM;   // truncated
+    u8bFed(out, (size_t)n);
+    done;
+}
+
+ok64 FILEChmod(path8s path, u32 mode) {
+    sane($ok(path) && !$empty(path));
+    int rc = chmod((char const *)*path, (mode_t)mode);
+    FILETestC(rc == 0);
+    done;
+}
+
 ok64 FILEGetCwd(path8b out) {
     sane(out != NULL);
     char *got = getcwd((char *)u8bIdleHead(out), u8bIdleLen(out));
@@ -282,6 +302,13 @@ ok64 FILEOpenAt(int *fd, int const dirfd, path8s path, int flags) {
 ok64 FILEStat(struct stat *ret, path8s path) {
     sane(ret != NULL && $ok(path) && !$empty(path));
     int rc = stat((char const *)*path, ret);
+    FILETestC(rc == 0);
+    done;
+}
+
+ok64 FILELStat(struct stat *ret, path8s path) {
+    sane(ret != NULL && $ok(path) && !$empty(path));
+    int rc = lstat((char const *)*path, ret);
     FILETestC(rc == 0);
     done;
 }
@@ -609,6 +636,22 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
 
     b8 ro = (mode == O_RDONLY);
 
+    //  RO probe: an aborted RW open can leave a sparse, zero-padded
+    //  file (FILEBookCreate ftruncate's to a page before any row gets
+    //  written).  Reading byte 0 of such a sparse hole via MAP_PRIVATE
+    //  PROT_READ SIGBUSes on some kernels.  pread reads through the
+    //  page cache and never SIGBUSes; ULOG rows always start with a
+    //  digit, so a NUL first byte unambiguously means "no real
+    //  content" — treat as empty so callers see no rows instead of
+    //  crashing on the first scan.  Concurrent RW writers' in-flight
+    //  pages remain visible because pread shares the page cache.
+    b8 ro_empty = NO;
+    if (ro && actual_size > 0) {
+        u8 probe = 0;
+        ssize_t pr = pread(*fd, &probe, 1, 0);
+        if (pr != 1 || probe == 0) ro_empty = YES;
+    }
+
     // VA reservation and mmap require page-aligned sizes. For a
     // non-empty file the kernel zero-fills the tail of the last page,
     // so b[3] = map + rounded is safe (and must stay page-aligned so
@@ -660,9 +703,13 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
     // idle space backed by real blocks thanks to the FILEResize above.
     // RO opens shrink b[3] back to b[2]: no idle space, no growing
     // appends; callers that try to write trip the slice-bounds check.
+    //  ro_empty: file is uninitialised (all-NUL leading byte, sparse
+    //  ftruncate leftover from an aborted writer) — expose an empty
+    //  buffer so the scan loop terminates immediately without ever
+    //  dereferencing a possibly-unbacked sparse page.
     uint8_t **b = (uint8_t **)slot;
     b[0] = b[1] = map;
-    b[2] = map + actual_size;
+    b[2] = ro_empty ? map : map + actual_size;
     b[3] = ro ? b[2]
               : map + (actual_size ? map_size : 0);
 

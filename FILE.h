@@ -334,6 +334,11 @@ fun ok64 FILEUnlock(int const *fd) {
 
 ok64 FILEStat(struct stat *ret, path8s path);
 
+//  Like FILEStat but does not follow symbolic links.  Returns
+//  FILENONE on ENOENT (vanished/never-existed), FILEACCES on
+//  permission denial, etc. — same errno mapping as FILEStat.
+ok64 FILELStat(struct stat *ret, path8s path);
+
 ok64 FILESize(size_t *size, int const *fd);
 
 ok64 FILEisdir(path8s path);
@@ -489,6 +494,15 @@ fun ok64 FILESymLink(path8s target, path8s linkpath) {
 ok64 FILErmrf(path8s name);
 
 ok64 FILEUnLink(path8s name);
+
+// Read the target of a symbolic link into `out`.  Resets `out`,
+// feeds the link target bytes (no NUL appended).  Returns FILEFAIL on
+// readlink() failure; NOROOM if the buffer's idle space can't hold
+// the full target (and the buffer is left empty).
+ok64 FILEReadLink(u8bp out, path8s linkpath);
+
+// Set file permission bits.
+ok64 FILEChmod(path8s path, u32 mode);
 
 // Read getcwd into a path buffer. NUL-terminates and feeds DATA.
 ok64 FILEGetCwd(path8b out);
