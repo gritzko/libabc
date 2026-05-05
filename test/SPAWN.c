@@ -1,10 +1,10 @@
-#include "abc/FILE.h"
+#include "FILE.h"
 
 #include <string.h>
 #include <unistd.h>
 
-#include "abc/PRO.h"
-#include "abc/TEST.h"
+#include "PRO.h"
+#include "TEST.h"
 
 // /bin/true exits 0, /bin/false exits 1.  /bin/sh runs scripts.
 // Tests assume a POSIX system.

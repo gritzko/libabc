@@ -1,7 +1,7 @@
 
 /* #line 1 "URI.c.rl" */
-#include "abc/INT.h"
-#include "abc/PRO.h"
+#include "INT.h"
+#include "PRO.h"
 #include "URI.h"
 
 // action indices for the parser

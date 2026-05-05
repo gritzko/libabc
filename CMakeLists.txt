@@ -5,6 +5,24 @@ set(CMAKE_C_STANDARD 23)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 
+option(WITH_ASAN "build with ASAN" OFF)
+if (WITH_ASAN)
+    set(ASAN_FLAGS "-g -O1 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ASAN_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ASAN_FLAGS}")
+endif ()
+
+option(WITH_FUZZ "build with libFuzzer" OFF)
+if (WITH_FUZZ)
+    set(FUZZ_FLAGS "-fsanitize=fuzzer")
+    set(FUZZ_CXX_FLAGS "${FUZZ_FLAGS}")
+    set(FUZZ_C_FLAGS "${FUZZ_FLAGS}")
+    set(FUZZ_LDD_FLAGS "${FUZZ_FLAGS}")
+    add_compile_options(-fsanitize=fuzzer-no-link)
+endif ()
+
+set(DOG_BIN_DIR ${CMAKE_BINARY_DIR}/bin)
 
 include_directories(.. . ryu)
 

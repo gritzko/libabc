@@ -1,9 +1,9 @@
-#include "abc/ANSI.h"
+#include "ANSI.h"
 
 #include <string.h>
 
-#include "abc/PRO.h"
-#include "abc/TEST.h"
+#include "PRO.h"
+#include "TEST.h"
 
 typedef struct {
     const char *input;     // raw escape sequence
