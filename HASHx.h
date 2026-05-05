@@ -1,6 +1,11 @@
 //
 // (c) Victor Grishchenko, 2020-2024
 //
+//  IMPORTANT: the hash-table length passed in via the data slice MUST
+//  be a power of 2 (see HASH.md).  We map hash → slot via a bitmask
+//  rather than `%`, so a non-power-of-2 length silently corrupts the
+//  table and may infinite-loop the probe.
+//
 #include "01.h"
 #include "HASH.h"
 #include "S.h"
@@ -16,6 +21,7 @@
 #endif
 
 #define MASK (ABC_HASH_LINE - 1)
+#define LMASK (X(, sLen)(data) - 1)
 
 fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
     sane($ok(data) && ndx != NULL && 0 == ($len(data) & MASK));
@@ -32,7 +38,7 @@ fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
 // OK, HASHNONE, HASHNOROOM
 fun ok64 X(HASH, find)(size_t *ndx, X($, ) data, T const *rec) {
     u64 hash = X(, hash)(rec);
-    *ndx = hash % $len(data);
+    *ndx = hash & LMASK;
     if (X(, cmp)(rec, $atp(data, *ndx)) == 0) return OK;
     if (X($, is0)(data, *ndx)) return HASHNONE;
     return X(HASH, scan)(ndx, data, rec);
@@ -54,7 +60,7 @@ fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx) {
 
 fun ok64 X(HASH, Get)(T *rec, X($, ) data) {
     u64 hash = X(, hash)(rec);
-    size_t ndx = hash % $len(data);
+    size_t ndx = hash & LMASK;
     if (X($, is0)(data, ndx)) return HASHNONE;
     if (X(, cmp)(rec, $atp(data, ndx)) == 0) {
         *rec = $at(data, ndx);  // TODO mv
@@ -66,7 +72,7 @@ fun ok64 X(HASH, Get)(T *rec, X($, ) data) {
 fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
     T r;
     X(, mv)(&r, rec);
-    size_t fit = hash % $len(data);
+    size_t fit = hash & LMASK;
     size_t off = fit & MASK;
     size_t base = fit & ~MASK;
     for (size_t i = 0; i < ABC_HASH_LINE; ++i) {
@@ -83,7 +89,7 @@ fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
 
 fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
     u64 hash = X(, hash)(rec);
-    size_t ndx = hash % $len(data);
+    size_t ndx = hash & LMASK;
     if (X($, is0)(data, ndx) || X(, cmp)(rec, $atp(data, ndx)) == 0) {
         X(, mv)($atp(data, ndx), rec);
         return OK;
@@ -100,7 +106,7 @@ fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
         if (X($, is0)(data, x)) {
             break;
         }
-        size_t nom = X(, hash)(*data + x) % $len(data);
+        size_t nom = X(, hash)(*data + x) & LMASK;
         if ((x > ndx && (nom <= ndx || nom > x)) ||
             (x < ndx && (nom <= ndx && nom > x))) {
             Bat(data, ndx) = Bat(data, x);
@@ -119,5 +125,6 @@ fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
 }
 
 #undef MASK
+#undef LMASK
 #undef ABC_HASH_LINE
 #undef T
