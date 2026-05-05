@@ -38,6 +38,8 @@ add_executable(MSETfuzz MSET.c ../RON.c)
 
 add_executable(HITfuzz HIT.c ../RON.c)
 
+add_executable(BOXfuzz BOX.c ../RON.c)
+
 add_executable(QSORTfuzz QSORT.c)
 target_link_libraries(QSORTfuzz abc)
 

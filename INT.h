@@ -34,6 +34,8 @@ fun int u64cmp(const u64 *a, const u64 *b) {
     return *a < *b ? -1 : 1;
 }
 
+fun u64 u64hash(u64 const *v) { return mix64(*v); }
+
 fun int i8cmp(const i8 *a, const i8 *b) { return (int)*a - (int)*b; }
 fun int i16cmp(const i16 *a, const i16 *b) { return (int)*a - (int)*b; }
 fun int i32cmp(const i32 *a, const i32 *b) {

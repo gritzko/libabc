@@ -133,6 +133,9 @@ fun ok64 X(, cgFedP)(X(, cg) g, X(, cp) * p) {
     *p = g[1]++;
     return OK;
 }
+fun void X(, Mv)(X(, p) a, X(, cp) b) {
+    *a = *b;
+}
 fun void X(, sMv)(X(, s) a, X(, s) b) {
     a[0] = b[0];
     a[1] = b[1];

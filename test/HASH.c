@@ -35,7 +35,7 @@ ok64 HASH0() {
 
 ok64 HASH1() {
     sane(1);
-    a_pad(u32, pad, 1024 + 128);
+    a_pad(u32, pad, 1024 * 2);
     zerob(pad);
     for (u32 i = 1; i < 1000; i += 2) {
         call(HASHu32Put, pad_idle, &i);
