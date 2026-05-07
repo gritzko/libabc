@@ -61,7 +61,13 @@ ok64 URIu8sEsc(u8s into, u8cs raw);
 // Percent-decode: %XX → raw bytes
 ok64 URIu8sUnesc(u8s into, u8cs esc);
 
-// URI component presence flags (bitmask)
+// URI component presence flags (bitmask).  A bit is set iff the
+// corresponding slot is **present** in the source URI — i.e. the
+// sigil (`?`, `#`, `/`, …) appeared, regardless of whether the body
+// after it is empty.  Use u8csEmpty() on the slot itself to
+// distinguish present-empty from present-with-content (e.g. the
+// `?br#` rebase-one marker keeps URI_FRAGMENT set but the fragment
+// slice u8csEmpty()).
 #define URI_SCHEME    0x01
 #define URI_AUTHORITY 0x02
 #define URI_USER      0x04
@@ -71,7 +77,7 @@ ok64 URIu8sUnesc(u8s into, u8cs esc);
 #define URI_QUERY     0x40
 #define URI_FRAGMENT  0x80
 
-// Return bitmask of which URI components are defined (non-empty)
+// Return bitmask of which URI components are present.
 u8 URIPattern(uricp u);
 
 // Build URI string from component slices (pass 0 to omit a component)

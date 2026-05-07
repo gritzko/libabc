@@ -508,16 +508,20 @@ ok64 URIMake(u8s into, u8cs scheme, u8cs auth, u8cs path, u8cs query, u8cs fragm
     done;
 }
 
-// Return bitmask of which URI components are defined (non-empty)
+// Return bitmask of which URI components are present (sigil seen
+// in the source).  Per the URI lexer convention, a slot is present
+// iff its data pointer is non-NULL — including bare `?` / `#` with
+// an empty body.  Emptiness is a separate question; check the slot
+// itself with u8csEmpty().
 u8 URIPattern(uricp u) {
     u8 p = 0;
-    if (!$empty(u->scheme)) p |= URI_SCHEME;
-    if (!$empty(u->authority)) p |= URI_AUTHORITY;
-    if (!$empty(u->user)) p |= URI_USER;
-    if (!$empty(u->host)) p |= URI_HOST;
-    if (!$empty(u->port)) p |= URI_PORT;
-    if (!$empty(u->path)) p |= URI_PATH;
-    if (!$empty(u->query)) p |= URI_QUERY;
-    if (!$empty(u->fragment)) p |= URI_FRAGMENT;
+    if (u->scheme[0]    != NULL) p |= URI_SCHEME;
+    if (u->authority[0] != NULL) p |= URI_AUTHORITY;
+    if (u->user[0]      != NULL) p |= URI_USER;
+    if (u->host[0]      != NULL) p |= URI_HOST;
+    if (u->port[0]      != NULL) p |= URI_PORT;
+    if (u->path[0]      != NULL) p |= URI_PATH;
+    if (u->query[0]     != NULL) p |= URI_QUERY;
+    if (u->fragment[0]  != NULL) p |= URI_FRAGMENT;
     return p;
 }
