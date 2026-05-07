@@ -36,7 +36,7 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
         T const *p = (T const *)Data;                              \
         $##T##c data = {p, p + (Size / sizeof(T))};                \
         ok64 o = n(data);                                          \
-        assert(o == OK);                                           \
+        if (o!=OK) __builtin_trap();                                           \
         return 0;                                                  \
     }                                                              \
     ok64 n($##T##c input)
