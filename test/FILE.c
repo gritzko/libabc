@@ -148,9 +148,9 @@ ok64 FILEtest6() {
     call(FILEMakeDir, $path(dirpath));
 
     // Verify it exists
-    struct stat s = {};
+    filestat s = {};
     test(OK == FILEStat(&s, $path(dirpath)), FILEFAIL);
-    test((s.st_mode & S_IFMT) == S_IFDIR, FILEFAIL);
+    test(s.kind == FILE_KIND_DIR, FILEFAIL);
 
     // Remove directory (non-recursive)
     call(FILERmDir, $path(dirpath), false);
@@ -187,7 +187,7 @@ ok64 FILEtest7() {
     call(FILERmDir, $path(dirpath), true);
 
     // Verify it's gone
-    struct stat s = {};
+    filestat s = {};
     test(OK != FILEStat(&s, $path(dirpath)), FILEFAIL);
 
     done;
@@ -233,7 +233,7 @@ ok64 FILEtest8() {
     call(FILEClose, &fd);
 
     // Verify deepest file exists
-    struct stat s = {};
+    filestat s = {};
     test(OK == FILEStat(&s, $path(path)), FILEFAIL);
 
     // Back to base and delete recursively
@@ -285,7 +285,7 @@ ok64 FILEtest8b() {
     call(FILERmDir, $path(repath), true);
 
     // Verify it's gone
-    struct stat s = {};
+    filestat s = {};
     test(OK != FILEStat(&s, $path(repath)), FILEFAIL);
 
     done;
@@ -300,7 +300,7 @@ ok64 FILEtest9() {
     a_path(nofile, $cstr("/tmp"));
     a_cstr(tmpl, "FILEtest9_XXXXXX");
     call(PATHu8bAddTmp, nofile, tmpl);
-    struct stat s = {};
+    filestat s = {};
     ok64 res = FILEStat(&s, $path(nofile));
     test(res == FILENOENT, FILEFAIL);
 

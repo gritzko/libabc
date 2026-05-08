@@ -5,6 +5,7 @@
 #include "BUF.h"
 #include "OK.h"
 #include "PATH.h"
+#include "RON.h"
 
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 500
@@ -332,12 +333,46 @@ fun ok64 FILEUnlock(int const *fd) {
 
 // ok64 FILEExists(path8 path);
 
-ok64 FILEStat(struct stat *ret, path8s path);
+//  Filesystem entry classification.  REG/DIR/LNK cover the cases the
+//  rest of the code branches on; everything else (sockets, fifos,
+//  block/char devices) collapses to OTHER, which callers normally
+//  skip.  NONE is the zero-value default for an un-statted record.
+typedef enum {
+    FILE_KIND_NONE = 0,
+    FILE_KIND_REG,
+    FILE_KIND_DIR,
+    FILE_KIND_LNK,
+    FILE_KIND_OTHER,
+} file_kind;
+
+//  ABC stat record.  Insulates callers from the platform-specific
+//  `struct stat` (Linux's `st_mtim` vs Apple's `st_mtimespec`, mode
+//  bit layout, etc.) and from `<sys/stat.h>` itself.  Timestamps are
+//  ron60-encoded (localtime-aligned ms, same encoding as RONNow) so
+//  they drop straight into ULOG rows / RON-keyed indexes.  `mode`
+//  carries POSIX rwx bits in their canonical positions: 0700 user,
+//  0070 group, 0007 other; e.g. `(fs.mode & 0100) != 0` for owner-
+//  executable.
+typedef struct {
+    ron60     mtime;
+    ron60     atime;
+    u64       size;
+    u16       mode;
+    file_kind kind;
+} filestat;
+
+ok64 FILEStat(filestat *out, path8s path);
 
 //  Like FILEStat but does not follow symbolic links.  Returns
 //  FILENONE on ENOENT (vanished/never-existed), FILEACCES on
 //  permission denial, etc. — same errno mapping as FILEStat.
-ok64 FILELStat(struct stat *ret, path8s path);
+ok64 FILELStat(filestat *out, path8s path);
+
+//  Bump a path's atime AND mtime forward by `delta_sec` whole
+//  seconds (negative shifts backward).  Used by tests to observe
+//  distinct mtimes without a real sleep.  Wraps utimes() so callers
+//  never see <sys/time.h> directly.
+ok64 FILEBumpTimes(path8s path, i64 delta_sec);
 
 ok64 FILESize(size_t *size, int const *fd);
 

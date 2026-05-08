@@ -2,6 +2,7 @@
 
 #include <dirent.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
 
@@ -250,9 +251,9 @@ ok64 FILEHardLink(path8s dst, path8s src) {
 
 ok64 FILEisdir(path8s path) {
     sane($ok(path) && !$empty(path));
-    struct stat sb = {};
-    call(FILEStat, &sb, path);
-    test(sb.st_mode & S_IFDIR, FILEWRONG);
+    filestat fs = {};
+    call(FILEStat, &fs, path);
+    test(fs.kind == FILE_KIND_DIR, FILEWRONG);
     done;
 }
 
@@ -299,17 +300,71 @@ ok64 FILEOpenAt(int *fd, int const dirfd, path8s path, int flags) {
     done;
 }
 
-ok64 FILEStat(struct stat *ret, path8s path) {
-    sane(ret != NULL && $ok(path) && !$empty(path));
-    int rc = stat((char const *)*path, ret);
+//  Portable timespec accessor: POSIX.1-2008 names `st_mtim`/`st_atim`
+//  but Apple's libc exposes `st_mtimespec`/`st_atimespec` by default.
+#ifdef __APPLE__
+#define FILE_STAT_MTIM(sb) ((sb).st_mtimespec)
+#define FILE_STAT_ATIM(sb) ((sb).st_atimespec)
+#else
+#define FILE_STAT_MTIM(sb) ((sb).st_mtim)
+#define FILE_STAT_ATIM(sb) ((sb).st_atim)
+#endif
+
+//  localtime-aligned ms-resolution conversion, matching RONNow.
+static ron60 ron60_of_timespec(struct timespec tsp) {
+    struct tm tm = {};
+    time_t sec = tsp.tv_sec;
+    localtime_r(&sec, &tm);
+    u32 ms = (u32)(tsp.tv_nsec / 1000000);
+    if (ms > 999) ms = 999;
+    ron60 r = 0;
+    if (RONOfTime(&r, &tm, ms) != OK) r = 0;
+    return r;
+}
+
+static void filestat_from_stat(filestat *out, struct stat const *sb) {
+    out->mtime = ron60_of_timespec(FILE_STAT_MTIM(*sb));
+    out->atime = ron60_of_timespec(FILE_STAT_ATIM(*sb));
+    out->size  = (u64)sb->st_size;
+    //  POSIX rwx bits live in the low 9 of st_mode in canonical
+    //  positions (0700/0070/0007); copy them verbatim and mask off
+    //  the type / setuid / setgid / sticky bits.
+    out->mode  = (u16)(sb->st_mode & 0777);
+    if      (S_ISREG (sb->st_mode)) out->kind = FILE_KIND_REG;
+    else if (S_ISDIR (sb->st_mode)) out->kind = FILE_KIND_DIR;
+    else if (S_ISLNK (sb->st_mode)) out->kind = FILE_KIND_LNK;
+    else                            out->kind = FILE_KIND_OTHER;
+}
+
+ok64 FILEStat(filestat *out, path8s path) {
+    sane(out != NULL && $ok(path) && !$empty(path));
+    struct stat sb = {};
+    int rc = stat((char const *)*path, &sb);
     FILETestC(rc == 0);
+    filestat_from_stat(out, &sb);
     done;
 }
 
-ok64 FILELStat(struct stat *ret, path8s path) {
-    sane(ret != NULL && $ok(path) && !$empty(path));
-    int rc = lstat((char const *)*path, ret);
+ok64 FILELStat(filestat *out, path8s path) {
+    sane(out != NULL && $ok(path) && !$empty(path));
+    struct stat sb = {};
+    int rc = lstat((char const *)*path, &sb);
     FILETestC(rc == 0);
+    filestat_from_stat(out, &sb);
+    done;
+}
+
+ok64 FILEBumpTimes(path8s path, i64 delta_sec) {
+    sane($ok(path) && !$empty(path));
+    struct stat sb = {};
+    int sc = stat((char const *)*path, &sb);
+    FILETestC(sc == 0);
+    struct timeval tv[2] = {
+        { .tv_sec = FILE_STAT_ATIM(sb).tv_sec + delta_sec, .tv_usec = 0 },
+        { .tv_sec = FILE_STAT_MTIM(sb).tv_sec + delta_sec, .tv_usec = 0 },
+    };
+    int uc = utimes((char const *)*path, tv);
+    FILETestC(uc == 0);
     done;
 }
 
