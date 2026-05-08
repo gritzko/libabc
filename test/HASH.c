@@ -81,14 +81,14 @@ ok64 HASH3() {
     kv32 b2 = {.key = 22};
     call(HASHkv32Get, &a2, dict);
     call(HASHkv32Get, &b2, dict);
-    testeq(a2.val, 2);
-    testeq(b2.val, 3);
+    testeqv((long long)(a2.val), (long long)(2), "%lld");
+    testeqv((long long)(b2.val), (long long)(3), "%lld");
 
     call(HASHkv32Del, dict, &b);
 
     a.val = 0;
     call(HASHkv32Get, &a, dict);
-    testeq(a.val, 2);
+    testeqv((long long)(a.val), (long long)(2), "%lld");
     mute(HASHkv32Get(&b, dict), HASHNONE);
 
     kv32bFree(dictbuf);

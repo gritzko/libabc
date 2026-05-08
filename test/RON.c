@@ -18,13 +18,13 @@ ok64 RONTestFromTm() {
     struct tm t2 = {};
     u32 ms2 = 0;
     call(RONToTime, r, &t2, &ms2);
-    testeq(t.tm_year, t2.tm_year);
-    testeq(t.tm_mon, t2.tm_mon);
-    testeq(t.tm_mday, t2.tm_mday);
-    testeq(t.tm_hour, t2.tm_hour);
-    testeq(t.tm_min, t2.tm_min);
-    testeq(t.tm_sec, t2.tm_sec);
-    testeq(456, (u32)ms2);
+    testeqv((long long)(t.tm_year), (long long)(t2.tm_year), "%lld");
+    testeqv((long long)(t.tm_mon), (long long)(t2.tm_mon), "%lld");
+    testeqv((long long)(t.tm_mday), (long long)(t2.tm_mday), "%lld");
+    testeqv((long long)(t.tm_hour), (long long)(t2.tm_hour), "%lld");
+    testeqv((long long)(t.tm_min), (long long)(t2.tm_min), "%lld");
+    testeqv((long long)(t.tm_sec), (long long)(t2.tm_sec), "%lld");
+    testeqv((long long)(456), (long long)((u32)ms2), "%lld");
     done;
 }
 
@@ -75,7 +75,7 @@ ok64 RONTestRoundTrip() {
         u8c* from[2] = {buf, into[0]};
         ok64 back = 0;
         call(RONutf8sDrain, &back, from);
-        testeq(i, back);
+        testeqv((long long)(i), (long long)(back), "%lld");
     }
     done;
 }
@@ -108,7 +108,7 @@ ok64 RONTestNormInc() {
     u8 count = sizeof(cases) / sizeof(cases[0]);
     for (u8 i = 0; i < count; i++) {
         ron60 got = ron60NormInc(_r60(cases[i][0]));
-        testeq(got, _r60(cases[i][1]));
+        testeqv((long long)(got), (long long)(_r60(cases[i][1])), "%lld");
     }
     done;
 }
@@ -132,7 +132,7 @@ ok64 RONTestInc() {
     u8 count = sizeof(cases) / sizeof(cases[0]);
     for (u8 i = 0; i < count; i++) {
         ron60 got = ron60Inc(_r60(cases[i][0]));
-        testeq(got, _r60(cases[i][1]));
+        testeqv((long long)(got), (long long)(_r60(cases[i][1])), "%lld");
     }
     done;
 }
@@ -157,7 +157,7 @@ ok64 RONTestNormInk() {
     u8 count = sizeof(cases) / sizeof(cases[0]);
     for (u8 i = 0; i < count; i++) {
         ron60 got = ron60NormInk(_r60(cases[i][0]));
-        testeq(got, _r60(cases[i][1]));
+        testeqv((long long)(got), (long long)(_r60(cases[i][1])), "%lld");
     }
     done;
 }
@@ -181,7 +181,7 @@ ok64 RONTestInk() {
     u8 count = sizeof(cases) / sizeof(cases[0]);
     for (u8 i = 0; i < count; i++) {
         ron60 got = ron60Ink(_r60(cases[i][0]));
-        testeq(got, _r60(cases[i][1]));
+        testeqv((long long)(got), (long long)(_r60(cases[i][1])), "%lld");
     }
     done;
 }

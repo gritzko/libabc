@@ -20,7 +20,7 @@ ok64 SHAtest1() {
     SHASum(&hash1, value1);
     aBpad(u8, hex1b, 64);
     call(HEXsha256Put, u8bIdle(hex1b), &hash1);
-    testeq(YES, $eq(hex1, u8bData(hex1b)));
+    testeqv((long long)(YES), (long long)($eq(hex1, u8bData(hex1b))), "%lld");
 
     sha256 hash2;
     aBpad(u8, hex2b, 64);
@@ -30,7 +30,7 @@ ok64 SHAtest1() {
     SHAClose(&state, &hash2);
     a$(u8c, hs2, hash2.data);
     HEXPut(u8bIdle(hex2b), hs2);
-    testeq(YES, $eq(u8bData(hex2b), hex2));
+    testeqv((long long)(YES), (long long)($eq(u8bData(hex2b), hex2)), "%lld");
 
     done;
 }

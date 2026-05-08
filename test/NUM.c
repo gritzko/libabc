@@ -9,18 +9,18 @@ ok64 NUMTest1() {
     // Zero
     call(NUMu8sFeed, buf_idle, 0);
     a_cstr(zero, "zero");
-    testeq(u8bDataLen(buf), u8csLen(zero));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(zero)), "%lld");
     u8bReset(buf);
 
     // Single digits
     call(NUMu8sFeed, buf_idle, 1);
     a_cstr(one, "one");
-    testeq(u8bDataLen(buf), u8csLen(one));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(one)), "%lld");
     u8bReset(buf);
 
     call(NUMu8sFeed, buf_idle, 9);
     a_cstr(nine, "nine");
-    testeq(u8bDataLen(buf), u8csLen(nine));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(nine)), "%lld");
 
     done;
 }
@@ -32,23 +32,23 @@ ok64 NUMTest2() {
     // Teens
     call(NUMu8sFeed, buf_idle, 13);
     a_cstr(thirteen, "thirteen");
-    testeq(u8bDataLen(buf), u8csLen(thirteen));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(thirteen)), "%lld");
     u8bReset(buf);
 
     call(NUMu8sFeed, buf_idle, 19);
     a_cstr(nineteen, "nineteen");
-    testeq(u8bDataLen(buf), u8csLen(nineteen));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(nineteen)), "%lld");
     u8bReset(buf);
 
     // Tens
     call(NUMu8sFeed, buf_idle, 42);
     a_cstr(fortytwo, "forty two");
-    testeq(u8bDataLen(buf), u8csLen(fortytwo));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(fortytwo)), "%lld");
     u8bReset(buf);
 
     call(NUMu8sFeed, buf_idle, 99);
     a_cstr(ninetynine, "ninety nine");
-    testeq(u8bDataLen(buf), u8csLen(ninetynine));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(ninetynine)), "%lld");
 
     done;
 }
@@ -60,23 +60,23 @@ ok64 NUMTest3() {
     // Hundreds
     call(NUMu8sFeed, buf_idle, 100);
     a_cstr(hundred, "one hundred");
-    testeq(u8bDataLen(buf), u8csLen(hundred));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(hundred)), "%lld");
     u8bReset(buf);
 
     call(NUMu8sFeed, buf_idle, 123);
     a_cstr(oneTwoThree, "one hundred twenty three");
-    testeq(u8bDataLen(buf), u8csLen(oneTwoThree));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(oneTwoThree)), "%lld");
     u8bReset(buf);
 
     // Thousands
     call(NUMu8sFeed, buf_idle, 1000);
     a_cstr(thousand, "one thousand");
-    testeq(u8bDataLen(buf), u8csLen(thousand));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(thousand)), "%lld");
     u8bReset(buf);
 
     call(NUMu8sFeed, buf_idle, 12345);
     a_cstr(n12345, "twelve thousand three hundred forty five");
-    testeq(u8bDataLen(buf), u8csLen(n12345));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(n12345)), "%lld");
 
     done;
 }
@@ -88,19 +88,19 @@ ok64 NUMTest4() {
     // Million
     call(NUMu8sFeed, buf_idle, 1000000);
     a_cstr(million, "one million");
-    testeq(u8bDataLen(buf), u8csLen(million));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(million)), "%lld");
     u8bReset(buf);
 
     // Billion
     call(NUMu8sFeed, buf_idle, 1000000000ULL);
     a_cstr(billion, "one billion");
-    testeq(u8bDataLen(buf), u8csLen(billion));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(billion)), "%lld");
     u8bReset(buf);
 
     // Trillion
     call(NUMu8sFeed, buf_idle, 1000000000000ULL);
     a_cstr(trillion, "one trillion");
-    testeq(u8bDataLen(buf), u8csLen(trillion));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(trillion)), "%lld");
     u8bReset(buf);
 
     // Complex large number
@@ -117,12 +117,12 @@ ok64 NUMTest5() {
     // Very large numbers (quadrillion, quintillion)
     call(NUMu8sFeed, buf_idle, 1000000000000000ULL);
     a_cstr(quadrillion, "one quadrillion");
-    testeq(u8bDataLen(buf), u8csLen(quadrillion));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(quadrillion)), "%lld");
     u8bReset(buf);
 
     call(NUMu8sFeed, buf_idle, 1000000000000000000ULL);
     a_cstr(quintillion, "one quintillion");
-    testeq(u8bDataLen(buf), u8csLen(quintillion));
+    testeqv((long long)(u8bDataLen(buf)), (long long)(u8csLen(quintillion)), "%lld");
     u8bReset(buf);
 
     // Near UINT64_MAX

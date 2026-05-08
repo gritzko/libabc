@@ -48,7 +48,7 @@ ok64 DIJKtest_grid() {
     u64 cost = 0;
     call(DIJKgridRun, &cost, NODE(0, 0), NODE(3, 3),
          heap, dist_idle, NULL);
-    testeq(cost, 6);  // Manhattan distance 3+3
+    testeqv((long long)(cost), (long long)(6), "%lld");  // Manhattan distance 3+3
     done;
 }
 
@@ -59,7 +59,7 @@ ok64 DIJKtest_unreachable() {
 
     u64 cost = 0;
     ok64 o = DIJKgridRun(&cost, NODE(0, 0), 99, heap, dist_idle, NULL);
-    testeq(o, DIJKNOPATH);
+    testeqv((long long)(o), (long long)(DIJKNOPATH), "%lld");
     done;
 }
 
@@ -100,7 +100,7 @@ ok64 DIJKtest_weighted() {
 
     u64 cost = 0;
     call(DIJKdiamondRun, &cost, 1, 4, heap, dist_idle, NULL);
-    testeq(cost, 2);
+    testeqv((long long)(cost), (long long)(2), "%lld");
     done;
 }
 

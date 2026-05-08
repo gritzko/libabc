@@ -96,7 +96,7 @@ ok64 ZINTTest4() {
     u64bFeed(words2, words_datac);
     $testeq(words_data, words2_data);
     call(ZINTu64sDelta, words_data, 1);
-    testeq(**words_data, 0);
+    testeqv((long long)(**words_data), (long long)(0), "%lld");
     call(ZINTu64sUndelta, words_data, 1);
     $testeq(words_data, words2_data);
     done;
@@ -118,9 +118,9 @@ ok64 ZINTTestDelta() {
         u64 one[] = {100};
         a$(u64, s, one);
         call(ZINTu64sDelta, s, 0);
-        testeq(one[0], 100);  // delta from 0 is 100
+        testeqv((long long)(one[0]), (long long)(100), "%lld");  // delta from 0 is 100
         call(ZINTu64sUndelta, s, 0);
-        testeq(one[0], 100);
+        testeqv((long long)(one[0]), (long long)(100), "%lld");
     }
 
     // Start=0, ascending from zero
@@ -130,14 +130,14 @@ ok64 ZINTTestDelta() {
         a$(u64, s, vals);
         call(ZINTu64sDelta, s, 0);
         // deltas: 0-0=0, 1-0=1, 2-1=1, 3-2=1, 10-3=7, 100-10=90
-        testeq(vals[0], 0);
-        testeq(vals[1], 1);
-        testeq(vals[2], 1);
-        testeq(vals[3], 1);
-        testeq(vals[4], 7);
-        testeq(vals[5], 90);
+        testeqv((long long)(vals[0]), (long long)(0), "%lld");
+        testeqv((long long)(vals[1]), (long long)(1), "%lld");
+        testeqv((long long)(vals[2]), (long long)(1), "%lld");
+        testeqv((long long)(vals[3]), (long long)(1), "%lld");
+        testeqv((long long)(vals[4]), (long long)(7), "%lld");
+        testeqv((long long)(vals[5]), (long long)(90), "%lld");
         call(ZINTu64sUndelta, s, 0);
-        for (int i = 0; i < 6; i++) testeq(vals[i], orig[i]);
+        for (int i = 0; i < 6; i++) testeqv((long long)(vals[i]), (long long)(orig[i]), "%lld");
     }
 
     // Duplicates - delta=0 is valid
@@ -146,13 +146,13 @@ ok64 ZINTTestDelta() {
         u64 orig[] = {5, 5, 5, 10, 10};
         a$(u64, s, vals);
         call(ZINTu64sDelta, s, 0);
-        testeq(vals[0], 5);   // 5-0
-        testeq(vals[1], 0);   // 5-5
-        testeq(vals[2], 0);   // 5-5
-        testeq(vals[3], 5);   // 10-5
-        testeq(vals[4], 0);   // 10-10
+        testeqv((long long)(vals[0]), (long long)(5), "%lld");   // 5-0
+        testeqv((long long)(vals[1]), (long long)(0), "%lld");   // 5-5
+        testeqv((long long)(vals[2]), (long long)(0), "%lld");   // 5-5
+        testeqv((long long)(vals[3]), (long long)(5), "%lld");   // 10-5
+        testeqv((long long)(vals[4]), (long long)(0), "%lld");   // 10-10
         call(ZINTu64sUndelta, s, 0);
-        for (int i = 0; i < 5; i++) testeq(vals[i], orig[i]);
+        for (int i = 0; i < 5; i++) testeqv((long long)(vals[i]), (long long)(orig[i]), "%lld");
     }
 
     // Non-zero start
@@ -160,13 +160,13 @@ ok64 ZINTTestDelta() {
         u64 vals[] = {100, 200, 300};
         a$(u64, s, vals);
         call(ZINTu64sDelta, s, 50);
-        testeq(vals[0], 50);   // 100-50
-        testeq(vals[1], 100);  // 200-100
-        testeq(vals[2], 100);  // 300-200
+        testeqv((long long)(vals[0]), (long long)(50), "%lld");   // 100-50
+        testeqv((long long)(vals[1]), (long long)(100), "%lld");  // 200-100
+        testeqv((long long)(vals[2]), (long long)(100), "%lld");  // 300-200
         call(ZINTu64sUndelta, s, 50);
-        testeq(vals[0], 100);
-        testeq(vals[1], 200);
-        testeq(vals[2], 300);
+        testeqv((long long)(vals[0]), (long long)(100), "%lld");
+        testeqv((long long)(vals[1]), (long long)(200), "%lld");
+        testeqv((long long)(vals[2]), (long long)(300), "%lld");
     }
 
     // Error: descending values
@@ -174,7 +174,7 @@ ok64 ZINTTestDelta() {
         u64 vals[] = {100, 50, 200};
         a$(u64, s, vals);
         ok64 o = ZINTu64sDelta(s, 0);
-        testeq(o, ZINTBAD);
+        testeqv((long long)(o), (long long)(ZINTBAD), "%lld");
     }
 
     // Error: first value less than start
@@ -182,7 +182,7 @@ ok64 ZINTTestDelta() {
         u64 vals[] = {10, 20, 30};
         a$(u64, s, vals);
         ok64 o = ZINTu64sDelta(s, 100);
-        testeq(o, ZINTBAD);
+        testeqv((long long)(o), (long long)(ZINTBAD), "%lld");
     }
 
     // Large values near u64 max
@@ -192,7 +192,7 @@ ok64 ZINTTestDelta() {
         a$(u64, s, vals);
         call(ZINTu64sDelta, s, 0);
         call(ZINTu64sUndelta, s, 0);
-        for (int i = 0; i < 3; i++) testeq(vals[i], orig[i]);
+        for (int i = 0; i < 3; i++) testeqv((long long)(vals[i]), (long long)(orig[i]), "%lld");
     }
 
     // Roundtrip with blocked encoding

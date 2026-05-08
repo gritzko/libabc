@@ -24,7 +24,7 @@ ok64 MSET1() {
     u64 out[8];
     u64s into = {out, out + 8};
     call(MSETu64Merge, into, iter);
-    for (int i = 0; i < 8; i++) testeq(out[i], (u64)(i + 1));
+    for (int i = 0; i < 8; i++) testeqv((long long)(out[i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -55,7 +55,7 @@ ok64 MSET2() {
     u64 out[BULK_N];
     u64s into = {out, out + BULK_N};
     call(MSETu64Merge, into, iter);
-    for (int i = 0; i < BULK_N; i++) testeq(out[i], ref[i]);
+    for (int i = 0; i < BULK_N; i++) testeqv((long long)(out[i]), (long long)(ref[i]), "%lld");
     done;
 }
 
@@ -67,7 +67,7 @@ ok64 MSET3() {
     u64 out0[1];
     u64s into0 = {out0, out0 + 1};
     call(MSETu64Merge, into0, iter0);
-    testeq(into0[0], (u64 *)out0);
+    testeqv((long long)(into0[0]), (long long)((u64 *)out0), "%lld");
 
     // single-element runs
     u64 a[] = {3}, b[] = {1}, c[] = {2};
@@ -76,9 +76,9 @@ ok64 MSET3() {
     u64 out1[3];
     u64s into1 = {out1, out1 + 3};
     call(MSETu64Merge, into1, iter1);
-    testeq(out1[0], (u64)1);
-    testeq(out1[1], (u64)2);
-    testeq(out1[2], (u64)3);
+    testeqv((long long)(out1[0]), (long long)((u64)1), "%lld");
+    testeqv((long long)(out1[1]), (long long)((u64)2), "%lld");
+    testeqv((long long)(out1[2]), (long long)((u64)3), "%lld");
 
     // duplicates: {1,1,3} + {1,2,3} => {1,2,3}
     u64 d[] = {1, 1, 3}, e[] = {1, 2, 3};
@@ -87,10 +87,10 @@ ok64 MSET3() {
     u64 out2[6];
     u64s into2 = {out2, out2 + 6};
     call(MSETu64Merge, into2, iter2);
-    testeq((size_t)(into2[0] - out2), (size_t)3);
-    testeq(out2[0], (u64)1);
-    testeq(out2[1], (u64)2);
-    testeq(out2[2], (u64)3);
+    testeqv((long long)((size_t)(into2[0] - out2)), (long long)((size_t)3), "%lld");
+    testeqv((long long)(out2[0]), (long long)((u64)1), "%lld");
+    testeqv((long long)(out2[1]), (long long)((u64)2), "%lld");
+    testeqv((long long)(out2[2]), (long long)((u64)3), "%lld");
     done;
 }
 
@@ -101,13 +101,13 @@ ok64 MSET4() {
     u64cs runs[2] = {{a, a + 5}, {b, b + 5}};
     u64css iter = {runs, runs + 2};
     MSETu64Start(iter);
-    testeq(****iter, (u64)1);
+    testeqv((long long)(****iter), (long long)((u64)1), "%lld");
     call(MSETu64Seek, iter, (u64)5);
-    testeq(****iter, (u64)5);
+    testeqv((long long)(****iter), (long long)((u64)5), "%lld");
     call(MSETu64Seek, iter, (u64)7);
-    testeq(****iter, (u64)7);
+    testeqv((long long)(****iter), (long long)((u64)7), "%lld");
     ok64 o = MSETu64Seek(iter, 100);
-    testeq(o, MSETNODATA);
+    testeqv((long long)(o), (long long)(MSETNODATA), "%lld");
     done;
 }
 
@@ -118,17 +118,17 @@ ok64 MSET5() {
     u64cs runs[2] = {{a, a + 2}, {b, b + 2}};
     u64css iter = {runs, runs + 2};
     MSETu64Start(iter);
-    testeq(****iter, (u64)1);
+    testeqv((long long)(****iter), (long long)((u64)1), "%lld");
     call(MSETu64Next, iter);
-    testeq(****iter, (u64)2);
+    testeqv((long long)(****iter), (long long)((u64)2), "%lld");
     call(MSETu64Next, iter);
-    testeq(****iter, (u64)3);
+    testeqv((long long)(****iter), (long long)((u64)3), "%lld");
     call(MSETu64Next, iter);
-    testeq(****iter, (u64)4);
+    testeqv((long long)(****iter), (long long)((u64)4), "%lld");
     call(MSETu64Next, iter);
     want($empty(iter));
     ok64 o = MSETu64Next(iter);
-    testeq(o, MSETNODATA);
+    testeqv((long long)(o), (long long)(MSETNODATA), "%lld");
     done;
 }
 
@@ -179,9 +179,9 @@ ok64 MSET7() {
     u64s into = {buf, buf + 13};
     call(MSETu64Compact, stack, into);
     // should now have 2 runs: big[1000] and merged[13]
-    testeq($len(stack), (size_t)2);
-    testeq($len(stack[0][0]), (size_t)1000);
-    testeq($len(stack[0][1]), (size_t)13);
+    testeqv((long long)($len(stack)), (long long)((size_t)2), "%lld");
+    testeqv((long long)($len(stack[0][0])), (long long)((size_t)1000), "%lld");
+    testeqv((long long)($len(stack[0][1])), (long long)((size_t)13), "%lld");
     want(MSETu64IsCompact(stack) == YES);
     // merged run must be sorted
     for (int i = 0; i + 1 < 13; i++) want(buf[i] <= buf[i + 1]);
@@ -201,8 +201,8 @@ ok64 MSET8() {
     u64s into = {buf, buf + 30};
     call(MSETu64Compact, stack, into);
     // all three merged into one
-    testeq($len(stack), (size_t)1);
-    testeq($len(stack[0][0]), (size_t)30);
+    testeqv((long long)($len(stack)), (long long)((size_t)1), "%lld");
+    testeqv((long long)($len(stack[0][0])), (long long)((size_t)30), "%lld");
     want(MSETu64IsCompact(stack) == YES);
     for (int i = 0; i + 1 < 30; i++) want(buf[i] <= buf[i + 1]);
     done;
@@ -216,13 +216,13 @@ ok64 MSET9() {
     u64css stack = {runs, runs + 2};
     // find every element
     for (u64 v = 1; v <= 10; v++)
-        testeq(MSETu64Get(stack, v), OK);
+        testeqv((long long)(MSETu64Get(stack, v)), (long long)(OK), "%lld");
     // missing elements
-    testeq(MSETu64Get(stack, (u64)0), MSETNONE);
-    testeq(MSETu64Get(stack, (u64)11), MSETNONE);
+    testeqv((long long)(MSETu64Get(stack, (u64)0)), (long long)(MSETNONE), "%lld");
+    testeqv((long long)(MSETu64Get(stack, (u64)11)), (long long)(MSETNONE), "%lld");
     // empty stack
     u64css empty = {runs, runs};
-    testeq(MSETu64Get(empty, (u64)1), MSETNONE);
+    testeqv((long long)(MSETu64Get(empty, (u64)1)), (long long)(MSETNONE), "%lld");
     done;
 }
 
@@ -235,10 +235,10 @@ ok64 MSETd() {
     u64css iter = {runs, runs + 2};
     MSETu64Start(iter);
     call(MSETu64Seek, iter, (u64)3);
-    testeq(****iter, (u64)3);
+    testeqv((long long)(****iter), (long long)((u64)3), "%lld");
     // Next must skip all four 3s across both runs
     call(MSETu64Next, iter);
-    testeq(****iter, (u64)5);
+    testeqv((long long)(****iter), (long long)((u64)5), "%lld");
     // Seek to absent key lands on next-by-comparison
     u64 c[] = {10, 20, 30};
     u64 d[] = {15, 25, 35};
@@ -247,12 +247,12 @@ ok64 MSETd() {
     MSETu64Start(iter2);
     // 12 absent; must land on 15
     call(MSETu64Seek, iter2, (u64)12);
-    testeq(****iter2, (u64)15);
+    testeqv((long long)(****iter2), (long long)((u64)15), "%lld");
     // 22 absent; must land on 25
     call(MSETu64Seek, iter2, (u64)22);
-    testeq(****iter2, (u64)25);
+    testeqv((long long)(****iter2), (long long)((u64)25), "%lld");
     // 100 absent and past all data
-    testeq(MSETu64Seek(iter2, (u64)100), MSETNODATA);
+    testeqv((long long)(MSETu64Seek(iter2, (u64)100)), (long long)(MSETNODATA), "%lld");
     done;
 }
 
@@ -264,11 +264,11 @@ ok64 MSETa() {
     u64cs runs[2] = {{a, a + 3}, {b, b + 3}};
     u64css iter = {runs, runs + 2};
     MSETu64Start(iter);
-    testeq(****iter, (u64)1);
+    testeqv((long long)(****iter), (long long)((u64)1), "%lld");
     call(MSETu64Next, iter);
-    testeq(****iter, (u64)2);
+    testeqv((long long)(****iter), (long long)((u64)2), "%lld");
     call(MSETu64Next, iter);
-    testeq(****iter, (u64)3);
+    testeqv((long long)(****iter), (long long)((u64)3), "%lld");
     call(MSETu64Next, iter);
     want($empty(iter));
     done;
@@ -284,8 +284,8 @@ ok64 MSETb() {
     u64 out[6];
     u64s into = {out, out + 6};
     call(MSETu64Merge, into, iter);
-    testeq((size_t)(into[0] - out), (size_t)1);
-    testeq(out[0], (u64)1);
+    testeqv((long long)((size_t)(into[0] - out)), (long long)((size_t)1), "%lld");
+    testeqv((long long)(out[0]), (long long)((u64)1), "%lld");
     done;
 }
 
@@ -306,9 +306,9 @@ ok64 MSETc() {
     u64 buf[10];
     u64s into = {buf, buf + 10};
     call(MSETu64Compact, stack, into);
-    testeq($len(stack), (size_t)2);
+    testeqv((long long)($len(stack)), (long long)((size_t)2), "%lld");
     // 5 unique values after dedup
-    testeq($len(stack[0][1]), (size_t)5);
+    testeqv((long long)($len(stack[0][1])), (long long)((size_t)5), "%lld");
     for (int i = 0; i + 1 < 5; i++) want(buf[i] < buf[i + 1]);
     done;
 }
@@ -323,14 +323,14 @@ ok64 MSETe() {
     u64cs runs[3] = {{a, a + 3}, {b, b + 3}, {c, c + 3}};
     u64css heap = {runs, runs + 3};
     MSETu64Start(heap);
-    testeq(****heap, (u64)1);
+    testeqv((long long)(****heap), (long long)((u64)1), "%lld");
     u64css eqs;
     call(MSETu64TopZ, heap, eqs, u64Z);
     // two runs have minimum 1
-    testeq($len(eqs), (size_t)2);
+    testeqv((long long)($len(eqs)), (long long)((size_t)2), "%lld");
     // both top entries point at 1
-    testeq(*eqs[0][0][0], (u64)1);
-    testeq(*eqs[0][1][0], (u64)1);
+    testeqv((long long)(*eqs[0][0][0]), (long long)((u64)1), "%lld");
+    testeqv((long long)(*eqs[0][1][0]), (long long)((u64)1), "%lld");
     done;
 }
 
@@ -345,17 +345,17 @@ ok64 MSETf() {
     MSETu64Start(heap);
     u64css eqs;
     call(MSETu64TopZ, heap, eqs, u64Z);
-    testeq($len(eqs), (size_t)2);
+    testeqv((long long)($len(eqs)), (long long)((size_t)2), "%lld");
     // advance the 2 runs that had min=1
     call(MSETu64AdvZ, heap, $len(eqs), u64Z);
     // next minimum should be 2
-    testeq(****heap, (u64)2);
+    testeqv((long long)(****heap), (long long)((u64)2), "%lld");
     // advance single top
     call(MSETu64TopZ, heap, eqs, u64Z);
-    testeq($len(eqs), (size_t)1);
+    testeqv((long long)($len(eqs)), (long long)((size_t)1), "%lld");
     call(MSETu64AdvZ, heap, $len(eqs), u64Z);
     // next minimum should be 3
-    testeq(****heap, (u64)3);
+    testeqv((long long)(****heap), (long long)((u64)3), "%lld");
     done;
 }
 
@@ -379,9 +379,9 @@ ok64 MSETg() {
         MSETu64AdvZ(heap, $len(eqs), u64Z);
     }
     // intersection of {1,2,3,5,7} {2,3,4,5,8} {1,3,5,6,9} = {3,5}
-    testeq(rlen, (size_t)2);
-    testeq(result[0], (u64)3);
-    testeq(result[1], (u64)5);
+    testeqv((long long)(rlen), (long long)((size_t)2), "%lld");
+    testeqv((long long)(result[0]), (long long)((u64)3), "%lld");
+    testeqv((long long)(result[1]), (long long)((u64)5), "%lld");
     done;
 }
 
@@ -402,12 +402,12 @@ ok64 MSETh() {
         MSETu64AdvZ(heap, $len(eqs), u64Z);
     }
     // union {1,3,5} + {2,3,6} = {1,2,3,5,6}
-    testeq(rlen, (size_t)5);
-    testeq(result[0], (u64)1);
-    testeq(result[1], (u64)2);
-    testeq(result[2], (u64)3);
-    testeq(result[3], (u64)5);
-    testeq(result[4], (u64)6);
+    testeqv((long long)(rlen), (long long)((size_t)5), "%lld");
+    testeqv((long long)(result[0]), (long long)((u64)1), "%lld");
+    testeqv((long long)(result[1]), (long long)((u64)2), "%lld");
+    testeqv((long long)(result[2]), (long long)((u64)3), "%lld");
+    testeqv((long long)(result[3]), (long long)((u64)5), "%lld");
+    testeqv((long long)(result[4]), (long long)((u64)6), "%lld");
     done;
 }
 
@@ -420,10 +420,10 @@ ok64 MSETi() {
     u64cs runs[3] = {{a, a + 2}, {b, b + 2}, {c, c + 2}};
     u64css heap = {runs, runs + 3};
     MSETu64Start(heap);
-    testeq($len(heap), (size_t)3);
+    testeqv((long long)($len(heap)), (long long)((size_t)3), "%lld");
     // eject position 0 (the minimum)
     call(MSETu64EjectAtZ, heap, (size_t)0, u64Z);
-    testeq($len(heap), (size_t)2);
+    testeqv((long long)($len(heap)), (long long)((size_t)2), "%lld");
     // heap property should still hold: min of remaining
     u64 top = ****heap;
     want(top == 2 || top == 3);
@@ -440,7 +440,7 @@ ok64 MSETj() {
     u64cs runs[3] = {{a, a + 2}, {b, b + 2}, {c, c + 2}};
     u64css heap = {runs, runs + 3};
     MSETu64HeapZ(heap, u64Z);
-    testeq(****heap, (u64)1);
+    testeqv((long long)(****heap), (long long)((u64)1), "%lld");
     done;
 }
 
@@ -460,7 +460,7 @@ ok64 MSETk() {
         if ($len(eqs) == nruns) rlen++;
         MSETu64AdvZ(heap, $len(eqs), u64Z);
     }
-    testeq(rlen, (size_t)0);
+    testeqv((long long)(rlen), (long long)((size_t)0), "%lld");
     done;
 }
 
@@ -476,14 +476,14 @@ ok64 MSETl() {
     while (!$empty(heap)) {
         u64css eqs;
         call(MSETu64TopZ, heap, eqs, u64Z);
-        testeq($len(eqs), (size_t)1);
+        testeqv((long long)($len(eqs)), (long long)((size_t)1), "%lld");
         result[rlen++] = ****heap;
         MSETu64AdvZ(heap, $len(eqs), u64Z);
     }
-    testeq(rlen, (size_t)3);
-    testeq(result[0], (u64)10);
-    testeq(result[1], (u64)20);
-    testeq(result[2], (u64)30);
+    testeqv((long long)(rlen), (long long)((size_t)3), "%lld");
+    testeqv((long long)(result[0]), (long long)((u64)10), "%lld");
+    testeqv((long long)(result[1]), (long long)((u64)20), "%lld");
+    testeqv((long long)(result[2]), (long long)((u64)30), "%lld");
     done;
 }
 

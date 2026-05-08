@@ -47,10 +47,10 @@ ok64 DNSTestHdrRoundtrip() {
     u8cs hdr_from = {};
     u8csMv(hdr_from, buf_datac);
     call(DNSHdrDrain, hdr_from, &h2);
-    testeq(h.id, h2.id);
-    testeq(h.flags, h2.flags);
-    testeq(h.qdcount, h2.qdcount);
-    testeq(h.ancount, h2.ancount);
+    testeqv((long long)(h.id), (long long)(h2.id), "%lld");
+    testeqv((long long)(h.flags), (long long)(h2.flags), "%lld");
+    testeqv((long long)(h.qdcount), (long long)(h2.qdcount), "%lld");
+    testeqv((long long)(h.ancount), (long long)(h2.ancount), "%lld");
     done;
 }
 
@@ -65,15 +65,15 @@ ok64 DNSTestQueryBuild() {
     u8csMv(from, pkt_datac);
     DNShdr h = {};
     call(DNSHdrDrain, from, &h);
-    testeq(h.id, 0xBEEF);
-    testeq(h.flags, DNS_RD);
-    testeq(h.qdcount, 1);
+    testeqv((long long)(h.id), (long long)(0xBEEF), "%lld");
+    testeqv((long long)(h.flags), (long long)(DNS_RD), "%lld");
+    testeqv((long long)(h.qdcount), (long long)(1), "%lld");
 
     a_pad(u8, nb, 256);
     DNSquest q = {};
     call(DNSQuestDrain, from, pkt_datac, &q, nb_idle);
-    testeq(q.type, DNS_TYPE_A);
-    testeq(q.class, DNS_CLASS_IN);
+    testeqv((long long)(q.type), (long long)(DNS_TYPE_A), "%lld");
+    testeqv((long long)(q.class), (long long)(DNS_CLASS_IN), "%lld");
 
     a_pad(u8, txt, 256);
     call(DNSNameText, txt_idle, q.name);
@@ -126,9 +126,9 @@ ok64 DNSTestCompression() {
     DNSrr rr = {};
     call(DNSRRDrain, from, pkt_datac, &rr, nb2_idle);
 
-    testeq(rr.type, DNS_TYPE_A);
-    testeq(rr.ttl, 300);
-    testeq($len(rr.rdata), 4);
+    testeqv((long long)(rr.type), (long long)(DNS_TYPE_A), "%lld");
+    testeqv((long long)(rr.ttl), (long long)(300), "%lld");
+    testeqv((long long)($len(rr.rdata)), (long long)(4), "%lld");
     want(*rr.rdata[0] == 1);
 
     // decompressed name should be "example.com"
@@ -168,7 +168,7 @@ ok64 DNSResolve(u8cs server, u8csc name, u16 type,
     u8cs from = {};
     u8csMv(from, rpkt_datac);
     call(DNSHdrDrain, from, rh);
-    testeq(rh->id, 0xABCD);
+    testeqv((long long)(rh->id), (long long)(0xABCD), "%lld");
     want(rh->flags & DNS_QR);
 
     // skip questions
@@ -202,7 +202,7 @@ ok64 DNSTestResolveGoogle() {
     // may get CNAME first, but eventually an A
     want(rr.type == DNS_TYPE_A || rr.type == DNS_TYPE_CNAME);
     if (rr.type == DNS_TYPE_A) {
-        testeq($len(rr.rdata), 4);
+        testeqv((long long)($len(rr.rdata)), (long long)(4), "%lld");
     }
 
     fprintf(stderr, "  google.com via 1.1.1.1: type=%u rcode=%u answers=%u\n",
@@ -227,7 +227,7 @@ ok64 DNSTestResolveCloudflare() {
 
     want(rr.type == DNS_TYPE_A || rr.type == DNS_TYPE_CNAME);
     if (rr.type == DNS_TYPE_A) {
-        testeq($len(rr.rdata), 4);
+        testeqv((long long)($len(rr.rdata)), (long long)(4), "%lld");
     }
 
     fprintf(stderr, "  cloudflare.com via 8.8.8.8: type=%u rcode=%u answers=%u\n",

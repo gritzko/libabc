@@ -47,17 +47,17 @@ ok64 BOX0() {
     call(BOXu64Open, box, range);
 
     // PAST has 1 (dirty), DATA has at least 1 sorted level.
-    testeq((size_t)(box[1] - box[0]), (size_t)1);
+    testeqv((long long)((size_t)(box[1] - box[0])), (long long)((size_t)1), "%lld");
     test((size_t)(box[2] - box[1]) >= 1, FAILSANITY);
 
     // Dirty empty: start == end at range start.
-    testeq((u64 *)box[0][0][0], mem);
-    testeq((u64 *)box[0][0][1], mem);
+    testeqv((long long)((u64 *)box[0][0][0]), (long long)(mem), "%lld");
+    testeqv((long long)((u64 *)box[0][0][1]), (long long)(mem), "%lld");
 
     // IDLE head is the fence: start == end, both at range_end.
     u64 *fence_pos = (u64 *)mem + BOX_RANGE_N;
-    testeq((u64 *)box[2][0][0], fence_pos);
-    testeq((u64 *)box[2][0][1], fence_pos);
+    testeqv((long long)((u64 *)box[2][0][0]), (long long)(fence_pos), "%lld");
+    testeqv((long long)((u64 *)box[2][0][1]), (long long)(fence_pos), "%lld");
     done;
 }
 
@@ -77,10 +77,10 @@ ok64 BOX1() {
     v = 42;  call(BOXu64Feed1, box, &v);
 
     // Dirty should hold three entries in arrival order.
-    testeq((size_t)(box[0][0][1] - box[0][0][0]), (size_t)3);
-    testeq(box[0][0][0][0], (u64)100);
-    testeq(box[0][0][0][1], (u64)7);
-    testeq(box[0][0][0][2], (u64)42);
+    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)3), "%lld");
+    testeqv((long long)(box[0][0][0][0]), (long long)((u64)100), "%lld");
+    testeqv((long long)(box[0][0][0][1]), (long long)((u64)7), "%lld");
+    testeqv((long long)(box[0][0][0][2]), (long long)((u64)42), "%lld");
 
     // Flush and verify sorted-deduped output: 7, 42, 100.
     u64 outbuf[16] = {0};
@@ -88,13 +88,13 @@ ok64 BOX1() {
     u64 *save_start = save[0];
     call(BOXu64Flush, box, save);
     size_t produced = (size_t)(save[0] - save_start);
-    testeq(produced, (size_t)3);
-    testeq(outbuf[0], (u64)7);
-    testeq(outbuf[1], (u64)42);
-    testeq(outbuf[2], (u64)100);
+    testeqv((long long)(produced), (long long)((size_t)3), "%lld");
+    testeqv((long long)(outbuf[0]), (long long)((u64)7), "%lld");
+    testeqv((long long)(outbuf[1]), (long long)((u64)42), "%lld");
+    testeqv((long long)(outbuf[2]), (long long)((u64)100), "%lld");
 
     // Dirty should be empty after flush.
-    testeq((size_t)(box[0][0][1] - box[0][0][0]), (size_t)0);
+    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)0), "%lld");
     done;
 }
 
@@ -112,7 +112,7 @@ ok64 BOX2() {
     u64s save = {outbuf, outbuf + 4};
     u64 *save_start = save[0];
     call(BOXu64Flush, box, save);
-    testeq((size_t)(save[0] - save_start), (size_t)0);
+    testeqv((long long)((size_t)(save[0] - save_start)), (long long)((size_t)0), "%lld");
     done;
 }
 
@@ -136,9 +136,9 @@ ok64 BOX3() {
     u64 *save_start = save[0];
     call(BOXu64Flush, box, save);
     size_t produced = (size_t)(save[0] - save_start);
-    testeq(produced, (size_t)200);
+    testeqv((long long)(produced), (long long)((size_t)200), "%lld");
     for (size_t i = 0; i < produced; i++)
-        testeq(outbuf[i], (u64)(i + 1));
+        testeqv((long long)(outbuf[i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -165,9 +165,9 @@ ok64 BOX4() {
     u64 *save_start = save[0];
     call(BOXu64Flush, box, save);
     size_t produced = (size_t)(save[0] - save_start);
-    testeq(produced, (size_t)50);
+    testeqv((long long)(produced), (long long)((size_t)50), "%lld");
     for (size_t i = 0; i < produced; i++)
-        testeq(outbuf[i], (u64)(i + 1));
+        testeqv((long long)(outbuf[i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -188,17 +188,17 @@ ok64 BOX5() {
     call(BOXu64Close, box, save);
 
     // After Close: DATA empty, IDLE absorbed everything.
-    testeq((size_t)(box[2] - box[1]), (size_t)0);
+    testeqv((long long)((size_t)(box[2] - box[1])), (long long)((size_t)0), "%lld");
 
     // Re-Open and verify we can feed again.
     call(BOXu64Open, box, range);
     test((size_t)(box[2] - box[1]) >= 1, FAILSANITY);
-    testeq((size_t)(box[0][0][1] - box[0][0][0]), (size_t)0);
+    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)0), "%lld");
 
     u64 v = 99;
     call(BOXu64Feed1, box, &v);
-    testeq((size_t)(box[0][0][1] - box[0][0][0]), (size_t)1);
-    testeq(box[0][0][0][0], (u64)99);
+    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)1), "%lld");
+    testeqv((long long)(box[0][0][0][0]), (long long)((u64)99), "%lld");
     done;
 }
 

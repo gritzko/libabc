@@ -32,11 +32,11 @@ ok64 LISTtest1() {
     call(LISTentry128insert, list, codes + 2, 0);
     call(LISTentry128insert, list, codes + 1, 0);
     u32 i = 0;
-    testeq(LISTentry128atp(list, i)->value, codes[0].value);
+    testeqv((long long)(LISTentry128atp(list, i)->value), (long long)(codes[0].value), "%lld");
     i = LISTentry128next(list, i);
-    testeq(LISTentry128atp(list, i)->value, codes[1].value);
+    testeqv((long long)(LISTentry128atp(list, i)->value), (long long)(codes[1].value), "%lld");
     i = LISTentry128next(list, i);
-    testeq(LISTentry128atp(list, i)->value, codes[2].value);
+    testeqv((long long)(LISTentry128atp(list, i)->value), (long long)(codes[2].value), "%lld");
     done;
 }
 

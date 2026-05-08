@@ -9,7 +9,7 @@ ok64 QSORT0() {
     u64s data = {arr, arr + 10};
     u64sSort(data);
     for (int i = 0; i < 9; i++) want(arr[i] <= arr[i + 1]);
-    for (int i = 0; i < 10; i++) testeq(arr[i], (u64)i);
+    for (int i = 0; i < 10; i++) testeqv((long long)(arr[i]), (long long)((u64)i), "%lld");
     done;
 }
 
@@ -19,7 +19,7 @@ ok64 QSORT1() {
     u64 arr[] = {1, 2, 3, 4, 5};
     u64s data = {arr, arr + 5};
     u64sSort(data);
-    for (int i = 0; i < 5; i++) testeq(arr[i], (u64)(i + 1));
+    for (int i = 0; i < 5; i++) testeqv((long long)(arr[i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -29,7 +29,7 @@ ok64 QSORT2() {
     u64 arr[] = {5, 4, 3, 2, 1};
     u64s data = {arr, arr + 5};
     u64sSort(data);
-    for (int i = 0; i < 5; i++) testeq(arr[i], (u64)(i + 1));
+    for (int i = 0; i < 5; i++) testeqv((long long)(arr[i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -39,7 +39,7 @@ ok64 QSORT3() {
     u64 arr[] = {7, 7, 7, 7, 7};
     u64s data = {arr, arr + 5};
     u64sSort(data);
-    for (int i = 0; i < 5; i++) testeq(arr[i], (u64)7);
+    for (int i = 0; i < 5; i++) testeqv((long long)(arr[i]), (long long)((u64)7), "%lld");
     done;
 }
 
@@ -49,7 +49,7 @@ ok64 QSORT4() {
     u64 arr[] = {42};
     u64s data = {arr, arr + 1};
     u64sSort(data);
-    testeq(arr[0], (u64)42);
+    testeqv((long long)(arr[0]), (long long)((u64)42), "%lld");
     done;
 }
 
@@ -76,7 +76,7 @@ ok64 QSORT6() {
     u64s bs = {b, b + QSORT_N};
     u64sSort(as);
     $sort(bs, u64cmp);
-    for (int i = 0; i < QSORT_N; i++) testeq(a[i], b[i]);
+    for (int i = 0; i < QSORT_N; i++) testeqv((long long)(a[i]), (long long)(b[i]), "%lld");
     done;
 }
 
@@ -86,8 +86,8 @@ ok64 QSORT7() {
     u64 arr[] = {1, 1, 2, 3, 3, 3, 4, 5, 5};
     u64s data = {arr, arr + 9};
     u64sDedup(data);
-    testeq($len(data), (size_t)5);
-    for (int i = 0; i < 5; i++) testeq(data[0][i], (u64)(i + 1));
+    testeqv((long long)($len(data)), (long long)((size_t)5), "%lld");
+    for (int i = 0; i < 5; i++) testeqv((long long)(data[0][i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -97,8 +97,8 @@ ok64 QSORT8() {
     u64 arr[] = {7, 7, 7, 7};
     u64s data = {arr, arr + 4};
     u64sDedup(data);
-    testeq($len(data), (size_t)1);
-    testeq(data[0][0], (u64)7);
+    testeqv((long long)($len(data)), (long long)((size_t)1), "%lld");
+    testeqv((long long)(data[0][0]), (long long)((u64)7), "%lld");
     done;
 }
 
@@ -108,7 +108,7 @@ ok64 QSORT9() {
     u64 arr[] = {1, 2, 3, 4, 5};
     u64s data = {arr, arr + 5};
     u64sDedup(data);
-    testeq($len(data), (size_t)5);
+    testeqv((long long)($len(data)), (long long)((size_t)5), "%lld");
     done;
 }
 
@@ -118,7 +118,7 @@ ok64 QSORT10() {
     u64 arr[1] = {};
     u64s data = {arr, arr};
     u64sDedup(data);
-    testeq($len(data), (size_t)0);
+    testeqv((long long)($len(data)), (long long)((size_t)0), "%lld");
     done;
 }
 
@@ -129,8 +129,8 @@ ok64 QSORT11() {
     u64s data = {arr, arr + 9};
     u64sSort(data);
     u64sDedup(data);
-    testeq($len(data), (size_t)5);
-    for (int i = 0; i < 5; i++) testeq(data[0][i], (u64)(i + 1));
+    testeqv((long long)($len(data)), (long long)((size_t)5), "%lld");
+    for (int i = 0; i < 5; i++) testeqv((long long)(data[0][i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -154,14 +154,14 @@ ok64 QSORT13() {
     u64bFeed1(buf, 1);
     u64bFeed1(buf, 3);
     u64bFeed1(buf, 1);
-    testeq(u64bDataLen(buf), (size_t)5);
+    testeqv((long long)(u64bDataLen(buf)), (long long)((size_t)5), "%lld");
     u64bSort(buf);
     u64bDedup(buf);
-    testeq(u64bDataLen(buf), (size_t)3);
+    testeqv((long long)(u64bDataLen(buf)), (long long)((size_t)3), "%lld");
     u64 *d = u64bDataHead(buf);
-    testeq(d[0], (u64)1);
-    testeq(d[1], (u64)3);
-    testeq(d[2], (u64)5);
+    testeqv((long long)(d[0]), (long long)((u64)1), "%lld");
+    testeqv((long long)(d[1]), (long long)((u64)3), "%lld");
+    testeqv((long long)(d[2]), (long long)((u64)5), "%lld");
     u64bFree(buf);
     done;
 }
@@ -180,7 +180,7 @@ ok64 QSORT14() {
     u64s bs = {b, b + QSORT_D};
     u64sSort(as);
     $sort(bs, u64cmp);
-    for (int i = 0; i < QSORT_D; i++) testeq(a[i], b[i]);
+    for (int i = 0; i < QSORT_D; i++) testeqv((long long)(a[i]), (long long)(b[i]), "%lld");
 
     u64sDedup(as);
     want($len(as) <= 1000);

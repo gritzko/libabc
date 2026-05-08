@@ -28,7 +28,7 @@ ok64 BSDroundtrip(u8csc old, u8csc neu) {
 
     // Verify header
     u64 nsz = BSDPatchNewSize(cpatch);
-    testeq(nsz, (u64)neulen);
+    testeqv((long long)(nsz), (long long)((u64)neulen), "%lld");
 
     // Apply patch
     u8 result[neulen > 0 ? neulen : 1];

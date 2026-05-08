@@ -153,19 +153,17 @@ ok64 FILEGetCwd(path8b out) {
 #define FILE_SPAWN_MAX_ARGS    64
 #define FILE_SPAWN_SCRATCH_LEN (16 * 1024)
 
-ok64 FILESpawn(u8csc path, u8css argv,
+ok64 FILESpawn(path8sc path, u8css argv,
                int *stdin_w, int *stdout_r, pid_t *pid_out) {
     sane($ok(path) && pid_out != NULL);
 
     // Build NUL-terminated C-string path + argv for execv.  Path and
     // each argv slice are fed into a single scratch buffer; the
     // intra-buffer offsets become the char* entries in cargv.
+    //  Scratch only needs argv NUL-terminated copies — `path` is
+    //  already NUL-terminated by the path8sc contract.
     a_pad(u8, scratch, FILE_SPAWN_SCRATCH_LEN);
     char *cargv[FILE_SPAWN_MAX_ARGS + 1];
-
-    char *cpath = (char *)u8bIdleHead(scratch);
-    call(u8bFeed, scratch, path);
-    call(u8bFeed1, scratch, 0);
 
     int nargs = 0;
     $for(u8cs, a, argv) {
@@ -204,13 +202,15 @@ ok64 FILESpawn(u8csc path, u8css argv,
             dup2(out_pipe[1], STDOUT_FILENO);
             close(out_pipe[1]);
         }
-        //  Bare names (no `/`) fall back to PATH lookup via execvp
-        //  so callers can pass "keeper" / "ssh" without a full path.
-        b8 has_slash = NO;
-        for (u8cp p = path[0]; p < path[1]; p++)
-            if (*p == '/') { has_slash = YES; break; }
-        if (has_slash) execv((char const *)*path, cargv);
-        else           execvp(cargv[0], cargv);
+        //  `path8sc` carries the NUL convention; `path[0]` is a
+        //  valid C string.  POSIX execvp accepts both absolute paths
+        //  (used as-is, no PATH lookup when `/` is present) and
+        //  bare names (PATH lookup), so a single execvp covers both.
+        execvp((char const *)*path, cargv);
+        //  exec returned: print the failure context so CI logs can
+        //  tell `_exit(127)` paths apart by errno.
+        fprintf(stderr, "FILESpawn: exec '%s' failed: errno=%d (%s)\n",
+                (char const *)*path, errno, strerror(errno));
         _exit(127);
     }
 

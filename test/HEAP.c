@@ -21,9 +21,9 @@ ok64 HEAPtest1() {
     call(HEAPu32Pop, &one, pad);
     call(HEAPu32Pop, &two, pad);
     call(HEAPu32Pop, &three, pad);
-    testeq(one, 1);
-    testeq(two, 2);
-    testeq(three, 3);
+    testeqv((long long)(one), (long long)(1), "%lld");
+    testeqv((long long)(two), (long long)(2), "%lld");
+    testeqv((long long)(three), (long long)(3), "%lld");
     done;
 }
 ok64 HEAPtest() {

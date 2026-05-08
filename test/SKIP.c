@@ -21,20 +21,20 @@
 ok64 SKIP0() {
     sane(1);
     SKIPu8tab skips = {};
-    testeq(0, SKIPu8pos(&skips, 0));
-    testeq(0, SKIPu8pos(&skips, 1));
-    testeq(0, SKIPu8pos(&skips, 2));
+    testeqv((long long)(0), (long long)(SKIPu8pos(&skips, 0)), "%lld");
+    testeqv((long long)(0), (long long)(SKIPu8pos(&skips, 1)), "%lld");
+    testeqv((long long)(0), (long long)(SKIPu8pos(&skips, 2)), "%lld");
     SKIPu8tab skips2 = {.pos = 1025};
-    testeq(1024 - 256, SKIPu8pos(&skips2, 0));
-    testeq(512, SKIPu8pos(&skips2, 1));
+    testeqv((long long)(1024 - 256), (long long)(SKIPu8pos(&skips2, 0)), "%lld");
+    testeqv((long long)(512), (long long)(SKIPu8pos(&skips2, 1)), "%lld");
     SKIPu8tab skips4 = {.pos = 2049, .off = {23}};
-    testeq(2048 - 256 + 23, SKIPu8pos(&skips4, 0));
-    testeq(1024, SKIPu8pos(&skips4, 2));
-    testeq(0, SKIPu8pos(&skips4, 3));
+    testeqv((long long)(2048 - 256 + 23), (long long)(SKIPu8pos(&skips4, 0)), "%lld");
+    testeqv((long long)(1024), (long long)(SKIPu8pos(&skips4, 2)), "%lld");
+    testeqv((long long)(0), (long long)(SKIPu8pos(&skips4, 3)), "%lld");
     SKIPu8tab skips5 = {.pos = 2048 + 1, .off = {9, 10, 11}};
-    testeq(2048 - 256 + 9, SKIPu8pos(&skips5, 0));
-    testeq(2048 - 512 + 10, SKIPu8pos(&skips5, 1));
-    testeq(1024 + 11, SKIPu8pos(&skips5, 2));
+    testeqv((long long)(2048 - 256 + 9), (long long)(SKIPu8pos(&skips5, 0)), "%lld");
+    testeqv((long long)(2048 - 512 + 10), (long long)(SKIPu8pos(&skips5, 1)), "%lld");
+    testeqv((long long)(1024 + 11), (long long)(SKIPu8pos(&skips5, 2)), "%lld");
     testeqv(3, SKIPu8top(1025), "%i");
     done;
 }
@@ -98,9 +98,9 @@ ok64 SKIP2() {
         COMBsave(pad);
         call(FILEReMap, pad, SCALE * (i + 2));
         COMBload(pad);
-        testeq(ds, Bdatalen(pad));
-        testeq(bs, Busysize(pad));
-        testeq(SCALE * (i + 2), Bsize(pad));
+        testeqv((long long)(ds), (long long)(Bdatalen(pad)), "%lld");
+        testeqv((long long)(bs), (long long)(Busysize(pad)), "%lld");
+        testeqv((long long)(SCALE * (i + 2)), (long long)(Bsize(pad)), "%lld");
         zero(k);
         zerob(check);
         call(SKIPcheck, pad, check, &k);

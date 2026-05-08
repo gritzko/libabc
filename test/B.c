@@ -19,7 +19,7 @@ ok64 Bmap_test() {
     Bu8 buf = {};
     call(u8bMap, buf, 1024);
     Bat(buf, 100) = 100;
-    testeq(Bat(buf, 100), 100);
+    testeqv((long long)(Bat(buf, 100)), (long long)(100), "%lld");
     call(u8bUnMap, buf);
     done;
 }
@@ -74,7 +74,7 @@ ok64 B$test() {
 ok64 BBtest() {
     sane(1);
     aBpad(u8b, buff, 4);
-    testeq(sizeof(Bat(buff, 0)), sizeof(Bvoid));
+    testeqv((long long)(sizeof(Bat(buff, 0))), (long long)(sizeof(Bvoid)), "%lld");
     done;
 }
 
@@ -95,23 +95,23 @@ ok64 u8sPrintf_test() {
     // empty format
     u8p before = buf[2];
     call(u8sPrintf, buf_idle, "");
-    testeq(buf[2], before);
+    testeqv((long long)(buf[2]), (long long)(before), "%lld");
 
     // SNOROOM on overflow
     a_pad(u8, tiny, 4);
     ok64 o = u8sPrintf(tiny_idle, "toolong");
-    testeq(o, SNOROOM);
+    testeqv((long long)(o), (long long)(SNOROOM), "%lld");
 
     // "abc" = 3 chars fits in 4 bytes (3 + null)
     a_pad(u8, fit, 4);
     o = u8sPrintf(fit_idle, "abc");
-    testeq(o, OK);
-    testeq(u8bDataLen(fit), 3u);
+    testeqv((long long)(o), (long long)(OK), "%lld");
+    testeqv((long long)(u8bDataLen(fit)), (long long)(3u), "%lld");
 
     // "abcd" = 4 chars does NOT fit in 4 bytes (needs 5)
     a_pad(u8, fit2, 4);
     o = u8sPrintf(fit2_idle, "abcd");
-    testeq(o, SNOROOM);
+    testeqv((long long)(o), (long long)(SNOROOM), "%lld");
 
     // u8gPrintf: write into a gauge
     a_pad(u8, gbuf, 64);

@@ -82,22 +82,22 @@ ok64 SLOG0() {
     sane(1);
 
     // Offset 0 is block 0, max rank (64)
-    testeq(64, SLOGRank(0));
+    testeqv((long long)(64), (long long)(SLOGRank(0)), "%lld");
 
     // Offsets 1-128 are block 1, rank = ctz(1) = 0
-    testeq(0, SLOGRank(1));
-    testeq(0, SLOGRank(0x7f));
-    testeq(0, SLOGRank(0x80));
+    testeqv((long long)(0), (long long)(SLOGRank(1)), "%lld");
+    testeqv((long long)(0), (long long)(SLOGRank(0x7f)), "%lld");
+    testeqv((long long)(0), (long long)(SLOGRank(0x80)), "%lld");
 
     // Offsets 129-256 are block 2, rank = ctz(2) = 1
-    testeq(1, SLOGRank(0x81));
-    testeq(1, SLOGRank(0x100));
+    testeqv((long long)(1), (long long)(SLOGRank(0x81)), "%lld");
+    testeqv((long long)(1), (long long)(SLOGRank(0x100)), "%lld");
 
     // Block 4 has rank 2 (offsets 385-512)
-    testeq(2, SLOGRank(0x182));
+    testeqv((long long)(2), (long long)(SLOGRank(0x182)), "%lld");
 
     // Block 8 has rank 3 (offsets 897-1024)
-    testeq(3, SLOGRank(0x382));
+    testeqv((long long)(3), (long long)(SLOGRank(0x382)), "%lld");
 
     done;
 }
@@ -133,7 +133,7 @@ ok64 SLOG1() {
     // Stack should have entries (lower on top = lowest offset at stack top)
     want(stkdi[0] < stkdi[1]);
     u64 top = *(stkdi[1] - 1);
-    testeq(0, top);  // Top should be offset 0
+    testeqv((long long)(0), (long long)(top), "%lld");  // Top should be offset 0
 
     done;
 }
@@ -194,7 +194,7 @@ ok64 SLOG2() {
 
         u64 foundval = *(u64 *)val[0];
         // Found value should equal target
-        testeq(foundval, target);
+        testeqv((long long)(foundval), (long long)(target), "%lld");
     }
 
     done;

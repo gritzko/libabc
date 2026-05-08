@@ -16,7 +16,7 @@ ok64 NACLtest() {
     call(NACLed25519sign, &sign, &hash, &secretKey);
     call(NACLed25519verify, &sign, &hash, &publicKey);
     ok64 o = NACLed25519verify(&sign, &hash, &publicKey2);
-    testeq(o, NACLBAD);
+    testeqv((long long)(o), (long long)(NACLBAD), "%lld");
     done;
 }
 

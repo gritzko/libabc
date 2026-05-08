@@ -59,7 +59,7 @@ ok64 Utest2() {
     a$str(dec, "-123");
     i64 i;
     call(i64decdrain, &i, dec);
-    testeq(i, -123);
+    testeqv((long long)(i), (long long)(-123), "%lld");
     done;
 }
 
@@ -69,7 +69,7 @@ ok64 OKdec() {
     call(utf8sFeed10, u8bIdle(into), 12345UL);
     $print(u8bDataC(into));
     a$str(str, "12345");
-    testeq(YES, $eq(u8bData(into), str));
+    testeqv((long long)(YES), (long long)($eq(u8bData(into), str)), "%lld");
     done;
 }
 

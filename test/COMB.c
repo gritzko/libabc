@@ -15,7 +15,7 @@ ok64 COMBtest1() {
     COMBsave(padbuf);
     Breset(padbuf);
     COMBload(padbuf);
-    testeq($len(paddata), 1);
+    testeqv((long long)($len(paddata)), (long long)(1), "%lld");
     a$str(str1, "A");
     want($eq(paddata, str1));
     done;

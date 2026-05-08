@@ -554,7 +554,7 @@ ok64 FILEGetCwd(path8b out);
 //
 // Returns OK on successful fork+exec setup.  exec failures inside the
 // child show up at FILEReap time as a non-zero exit_code (127).
-ok64 FILESpawn(u8csc path, u8css argv,
+ok64 FILESpawn(path8sc path, u8css argv,
                int *stdin_w, int *stdout_r, pid_t *pid_out);
 
 // Wait for `pid` to terminate.  *exit_code (NULL ok) gets the WEXITSTATUS.

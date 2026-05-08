@@ -23,11 +23,11 @@ ok64 TLVtest1() {
     u8 t1, t2, t3;
     u8cs str1b, str2b, str3b;
     call(TLVu8sDrain, from, &t1, str1b);
-    testeq(0, $cmp(str1, str1b));
+    testeqv((long long)(0), (long long)($cmp(str1, str1b)), "%lld");
     call(TLVu8sDrain, from, &t2, str2b);
-    testeq(0, $cmp(str2, str2b));
+    testeqv((long long)(0), (long long)($cmp(str2, str2b)), "%lld");
     call(TLVu8sDrain, from, &t3, str3b);
-    testeq(0, $cmp(str3, str3b));
+    testeqv((long long)(0), (long long)($cmp(str3, str3b)), "%lld");
     done;
 }
 
@@ -41,7 +41,7 @@ ok64 TLVtest2() {
         ++*init;
     }
     u8c **block = u8bDataC(pad);
-    testeq($len(block), 256);
+    testeqv((long long)($len(block)), (long long)(256), "%lld");
     u8 **into = u8bIdle(tlv);
     for (int j = 0; j < 2; j++) {
         call(TLVu8sFeed, into, 'B', block);
@@ -94,13 +94,13 @@ ok64 TLVtest3() {
     call(TLVu8sDrain, rest, &bt, inb);
     call(TLVu8sDrain, inb, &ct, inc);
 
-    testeq(at, 'A');
-    testeq(bt, 'B');
-    testeq(ct, 'C');
+    testeqv((long long)(at), (long long)('A'), "%lld");
+    testeqv((long long)(bt), (long long)('B'), "%lld");
+    testeqv((long long)(ct), (long long)('C'), "%lld");
 
-    testeq(0, $cmp(ccc, inc));
-    testeq(0, $cmp(bbb, inb));
-    testeq(0, $cmp(aaa, head));
+    testeqv((long long)(0), (long long)($cmp(ccc, inc)), "%lld");
+    testeqv((long long)(0), (long long)($cmp(bbb, inb)), "%lld");
+    testeqv((long long)(0), (long long)($cmp(aaa, head)), "%lld");
 
     done;
 }

@@ -33,13 +33,13 @@ ok64 FILEtest2() {
     call(FILEResize, &fd, 4096);
     u8bp mapbuf = NULL;
     call(FILEMapFD, &mapbuf, &fd, PROT_READ | PROT_WRITE);
-    testeq(Bsize(mapbuf), 4096);
+    testeqv((long long)(Bsize(mapbuf)), (long long)(4096), "%lld");
     Bat(mapbuf, 42) = 1;
     call(FILEUnMap, mapbuf);
     call(FILEMapRO, &mapbuf, $path(path));
-    testeq(Blen(mapbuf), 4096);
-    testeq(Bat(mapbuf, 41), 0);
-    testeq(Bat(mapbuf, 42), 1);
+    testeqv((long long)(Blen(mapbuf)), (long long)(4096), "%lld");
+    testeqv((long long)(Bat(mapbuf, 41)), (long long)(0), "%lld");
+    testeqv((long long)(Bat(mapbuf, 42)), (long long)(1), "%lld");
     call(FILEUnMap, mapbuf);
     done;
 }
@@ -77,7 +77,7 @@ ok64 FILEtest4() {
     call(FILEFeedv, fd, queuedata);
     want($empty(queuedata));
     aBpad2(u8, back, 64);
-    testeq(0, lseek(fd, 0, SEEK_SET));
+    testeqv((long long)(0), (long long)(lseek(fd, 0, SEEK_SET)), "%lld");
     call(FILEdrainall, backidle, fd);
     a$str(correct, "Hello beautiful world!");
     $testeq(correct, backdata);
@@ -130,7 +130,7 @@ ok64 FILEtest5() {
 
     // Flush should trigger (above threshold)
     call(FILEFlushThreshold, wfd2, outbufbuf, 10);
-    testeq(u8bPastLen(outbufbuf), u8csLen(testdata));  // Data moved to past
+    testeqv((long long)(u8bPastLen(outbufbuf)), (long long)(u8csLen(testdata)), "%lld");  // Data moved to past
 
     call(FILEClose, &wfd2);
     call(FILEUnLink, $path(path));
@@ -374,8 +374,8 @@ ok64 FILEIterTest() {
     call(FILEIterClose, &it);
 
 
-    testeq(file_count, 3);  // file1.txt, file2.txt, nested.txt
-    testeq(dir_count, 1);   // subdir
+    testeqv((long long)(file_count), (long long)(3), "%lld");  // file1.txt, file2.txt, nested.txt
+    testeqv((long long)(dir_count), (long long)(1), "%lld");   // subdir
 
     // Cleanup
     call(FILERmDir, $path(base), true);
@@ -467,11 +467,11 @@ ok64 FILEIterSortedTest() {
 
 
     // Verify sorted order: alpha.txt, beta_dir, middle.txt, zebra.txt
-    testeq(count, 4);
-    testeq(strcmp((char *)names[0], "alpha.txt"), 0);
-    testeq(strcmp((char *)names[1], "beta_dir"), 0);
-    testeq(strcmp((char *)names[2], "middle.txt"), 0);
-    testeq(strcmp((char *)names[3], "zebra.txt"), 0);
+    testeqv((long long)(count), (long long)(4), "%lld");
+    testeqv((long long)(strcmp((char *)names[0], "alpha.txt")), (long long)(0), "%lld");
+    testeqv((long long)(strcmp((char *)names[1], "beta_dir")), (long long)(0), "%lld");
+    testeqv((long long)(strcmp((char *)names[2], "middle.txt")), (long long)(0), "%lld");
+    testeqv((long long)(strcmp((char *)names[3], "zebra.txt")), (long long)(0), "%lld");
 
     // Cleanup
     call(u8bFree, sortbufbuf);
@@ -495,7 +495,7 @@ ok64 FILEBookTest() {
 
     // Verify initial size
     size_t sp = sysconf(_SC_PAGESIZE);
-    testeq(Bsize(buf), roundup(4 * KB, sp));
+    testeqv((long long)(Bsize(buf)), (long long)(roundup(4 * KB, sp)), "%lld");
 
     // Save base address
     u8p base = buf[0];
@@ -509,11 +509,11 @@ ok64 FILEBookTest() {
     call(FILEBookExtend, buf, 64 * KB);
 
     // Verify base address unchanged (the whole point!)
-    testeq(buf[0], base);
-    testeq(Bsize(buf), roundup(64 * KB, sp));
+    testeqv((long long)(buf[0]), (long long)(base), "%lld");
+    testeqv((long long)(Bsize(buf)), (long long)(roundup(64 * KB, sp)), "%lld");
 
     // Verify data survived
-    testeq(memcmp(buf[1], "Hello booked world!", 19), 0);
+    testeqv((long long)(memcmp(buf[1], "Hello booked world!", 19)), (long long)(0), "%lld");
 
     // Write more data at higher offset
     u8p far = buf[0] + 60 * KB;
@@ -526,13 +526,13 @@ ok64 FILEBookTest() {
     // Extend again
     call(FILEBookExtend, buf, 128 * KB);
 
-    testeq(buf[0], base);  // still same address
+    testeqv((long long)(buf[0]), (long long)(base), "%lld");  // still same address
 
     // Verify far data survived
-    testeq(memcmp(buf[0] + 60 * KB, "Far away data", 13), 0);
+    testeqv((long long)(memcmp(buf[0] + 60 * KB, "Far away data", 13)), (long long)(0), "%lld");
 
     // Verify FILEIsBooked
-    testeq(FILEIsBooked(buf), YES);
+    testeqv((long long)(FILEIsBooked(buf)), (long long)(YES), "%lld");
 
     // Cleanup
     call(FILEUnBook, buf);
@@ -566,7 +566,7 @@ ok64 FILEBookExistingTest() {
 
 
     // Verify existing content is there
-    testeq(memcmp(buf[0], "Initial content here", 20), 0);
+    testeqv((long long)(memcmp(buf[0], "Initial content here", 20)), (long long)(0), "%lld");
 
     // Extend and write more
     call(FILEBookExtend, buf, 64 * KB);
@@ -632,7 +632,7 @@ ok64 FILEBookEnsureTest() {
 
 
     // Verify ~4MB written, file grew automatically
-    testeq(u8bDataLen(book), (size_t)(1000 * 4096));
+    testeqv((long long)(u8bDataLen(book)), (long long)((size_t)(1000 * 4096)), "%lld");
 
     // Trim and verify
     call(FILETrimBook, book);

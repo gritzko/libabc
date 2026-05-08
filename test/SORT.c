@@ -20,9 +20,9 @@ ok64 SORT1() {
     }
     $sort(ints3data, u64cmp);
     call(SORTu64, ints2idle, intsdata);
-    testeq(LEN1, $len(ints2data));
+    testeqv((long long)(LEN1), (long long)($len(ints2data)), "%lld");
     for (u64 i = 0; i < LEN1; ++i) {
-        testeq(u64sAt(ints3data, i), u64sAt(ints2data, i));
+        testeqv((long long)(u64sAt(ints3data, i)), (long long)(u64sAt(ints2data, i)), "%lld");
     }
     done;
 }

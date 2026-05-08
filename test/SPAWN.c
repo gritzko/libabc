@@ -6,8 +6,9 @@
 #include "PRO.h"
 #include "TEST.h"
 
-// /bin/true exits 0, /bin/false exits 1.  /bin/sh runs scripts.
-// Tests assume a POSIX system.
+// `true` exits 0, `false` exits 1, `sh` runs scripts, `cat` round-
+// trips stdin.  Bare names rely on PATH; macOS GHA runners ship
+// these under /usr/bin (no /bin/true), Linux usually has both.
 
 // Build a u8css argv from a list of u8slit() initializers.
 #define ARGV(name, ...)                                                    \
@@ -17,37 +18,37 @@
 
 ok64 SPAWNTestExit0() {
     sane(1);
-    a_cstr(path, "/bin/true");
+    a_cstr(path, "true");
     ARGV(args, u8slit("true"));
     pid_t pid = 0;
     call(FILESpawn, path, args, NULL, NULL, &pid);
     int rc = -1;
     call(FILEReap, pid, &rc);
-    testeq(0, rc);
+    testeqv(0, rc, "%d");
     done;
 }
 
 ok64 SPAWNTestExitNonZero() {
     sane(1);
-    a_cstr(path, "/bin/false");
+    a_cstr(path, "false");
     ARGV(args, u8slit("false"));
     pid_t pid = 0;
     call(FILESpawn, path, args, NULL, NULL, &pid);
     int rc = -1;
     call(FILEReap, pid, &rc);
-    testeq(1, rc);
+    testeqv(1, rc, "%d");
     done;
 }
 
 ok64 SPAWNTestExitCustom() {
     sane(1);
-    a_cstr(path, "/bin/sh");
+    a_cstr(path, "sh");
     ARGV(args, u8slit("sh"), u8slit("-c"), u8slit("exit 42"));
     pid_t pid = 0;
     call(FILESpawn, path, args, NULL, NULL, &pid);
     int rc = -1;
     call(FILEReap, pid, &rc);
-    testeq(42, rc);
+    testeqv(42, rc, "%d");
     done;
 }
 
@@ -59,13 +60,13 @@ ok64 SPAWNTestExecMissing() {
     call(FILESpawn, path, args, NULL, NULL, &pid);
     int rc = -1;
     call(FILEReap, pid, &rc);
-    testeq(127, rc);  // _exit(127) on exec failure
+    testeqv(127, rc, "%d");  // _exit(127) on exec failure
     done;
 }
 
 ok64 SPAWNTestStdoutPipe() {
     sane(1);
-    a_cstr(path, "/bin/sh");
+    a_cstr(path, "sh");
     ARGV(args, u8slit("sh"), u8slit("-c"), u8slit("echo hello"));
     pid_t pid = 0;
     int rfd = -1;
@@ -82,7 +83,7 @@ ok64 SPAWNTestStdoutPipe() {
 
     int rc = -1;
     call(FILEReap, pid, &rc);
-    testeq(0, rc);
+    testeqv(0, rc, "%d");
     test(n == 6, FAIL);  // "hello\n"
     test(memcmp(buf, "hello\n", 6) == 0, FAIL);
     done;
@@ -90,7 +91,7 @@ ok64 SPAWNTestStdoutPipe() {
 
 ok64 SPAWNTestStdinPipe() {
     sane(1);
-    a_cstr(path, "/bin/cat");
+    a_cstr(path, "cat");
     ARGV(args, u8slit("cat"));
     pid_t pid = 0;
     int wfd = -1, rfd = -1;
@@ -112,7 +113,7 @@ ok64 SPAWNTestStdinPipe() {
 
     int rc = -1;
     call(FILEReap, pid, &rc);
-    testeq(0, rc);
+    testeqv(0, rc, "%d");
     test(n == (ssize_t)strlen(msg), FAIL);
     test(memcmp(buf, msg, strlen(msg)) == 0, FAIL);
     done;
@@ -120,26 +121,31 @@ ok64 SPAWNTestStdinPipe() {
 
 ok64 SPAWNTestSignalDeath() {
     sane(1);
-    a_cstr(path, "/bin/sh");
+    a_cstr(path, "sh");
     ARGV(args, u8slit("sh"), u8slit("-c"), u8slit("kill -TERM $$"));
     pid_t pid = 0;
     call(FILESpawn, path, args, NULL, NULL, &pid);
     int sig = -1;
     ok64 o = FILEReap(pid, &sig);
     test(o == FILESIGNAL, FAIL);
-    testeq(15, sig);  // SIGTERM
+    testeqv(15, sig, "%d");  // SIGTERM
     done;
 }
 
+//  Print the sub-test name before running so the last line in
+//  stderr names the failing case when a testeqv triggers FAILEQ
+//  (the harness only reports `main:<line>` of TEST() itself).
+#define RUN(f) do { fprintf(stderr, "  - " #f "\n"); call(f); } while (0)
+
 ok64 SPAWNtest() {
     sane(1);
-    call(SPAWNTestExit0);
-    call(SPAWNTestExitNonZero);
-    call(SPAWNTestExitCustom);
-    call(SPAWNTestExecMissing);
-    call(SPAWNTestStdoutPipe);
-    call(SPAWNTestStdinPipe);
-    call(SPAWNTestSignalDeath);
+    RUN(SPAWNTestExit0);
+    RUN(SPAWNTestExitNonZero);
+    RUN(SPAWNTestExitCustom);
+    RUN(SPAWNTestExecMissing);
+    RUN(SPAWNTestStdoutPipe);
+    RUN(SPAWNTestStdinPipe);
+    RUN(SPAWNTestSignalDeath);
     done;
 }
 
