@@ -21,6 +21,7 @@
 
 // Slice view into a path (const, NUL-terminated just past term).
 typedef u8cs  path8s;
+typedef u8csc path8sc;
 typedef u8csp path8sp;
 
 // Owned buffer for path composition.

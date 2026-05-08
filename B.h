@@ -67,11 +67,11 @@ typedef void **voidbp;
 #define Bhasroom(b) (b[2] < b[3])
 
 #define aBpad(T, n, l) \
-    T _##n[(l)];       \
+    T _##n[(l)] = {0}; \
     B##T n = {_##n, _##n, _##n, _##n + (l)};
 
 #define aBpad2(T, n, l)                           \
-    T _##n[(l)];                                  \
+    T _##n[(l)] = {0};                            \
     B##T n##buf = {_##n, _##n, _##n, _##n + (l)}; \
     T##$ n##idle = T##bIdle(n##buf);              \
     T##$ n##data = T##bData(n##buf);

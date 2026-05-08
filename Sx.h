@@ -173,12 +173,12 @@ fun void X(, cgOf)(X(, cg) g, X(, csc) s) {
     g[2] = s[1];
 }
 
-fun b8 X(, csEq)(X(, cs) a, X(, cs) b) {
+fun b8 X(, csEq)(X(, csc) a, X(, csc) b) {
     if ($len(a) != $len(b)) return NO;
     return 0 == memcmp(*a, *b, $size(a));
 }
-fun b8 X(, sEq)(X(, s) a, X(, s) b) {
-    return X(, csEq)((T const **)a, (T const **)b);
+fun b8 X(, sEq)(X(, sc) a, X(, sc) b) {
+    return X(, csEq)((T const *const *)a, (T const *const *)b);
 }
 #endif
 

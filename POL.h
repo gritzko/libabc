@@ -1,6 +1,6 @@
 #ifndef ABC_POLL2_H
 #define ABC_POLL2_H
-#include <sys/poll.h>
+#include <poll.h>
 #include <time.h>
 
 #include "OK.h"
