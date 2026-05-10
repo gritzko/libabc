@@ -97,4 +97,66 @@ fun ok64 escfeedBG256($u8 data, u8 color) {
     return OK;
 }
 
+// --- SGR state (output side) ---
+//
+// Packed display-state for one screen cell.  Renderers feed
+// ANSIu8sFeedDelta(out, want, prev) at every cell whose state differs
+// from the previously-emitted one — runs of identical-style cells
+// share a single open SGR; one final ANSIu8sFeedReset closes the row.
+//
+//   bits  0..23 (24): fg color value (palette idx or 0xRRGGBB)
+//   bits 24..27 ( 4): fg mode
+//   bits 28..51 (24): bg color value
+//   bits 52..55 ( 4): bg mode
+//   bits 56..63 ( 8): attr flags (ANSI_BOLD | ANSI_REVERSE | ...)
+//
+// Mode 0 means "default" (terminal's own fg/bg) — color value is then
+// ignored.  Mode 1 stores a basic 30..37 / 90..97 SGR code directly
+// (so the emitter just writes the number).  Modes 2 and 3 are reserved
+// for 256-color and RGB; the layout has the 24 bits to hold them so
+// callers can move to truecolor without changing the type.
+typedef u64 ansi64;
+
+#define ANSI_MODE_DEFAULT  0u
+#define ANSI_MODE_BASIC    1u
+#define ANSI_MODE_256      2u
+#define ANSI_MODE_RGB      3u
+
+#define ANSI_BOLD       0x01u
+#define ANSI_FAINT      0x02u
+#define ANSI_ITALIC     0x04u
+#define ANSI_UNDERLINE  0x08u
+#define ANSI_BLINK      0x10u
+#define ANSI_REVERSE    0x20u
+#define ANSI_STRIKE     0x40u
+
+#define ANSI_DEFAULT  ((ansi64)0)
+
+fun ansi64 ansi64Pack(u32 fg, u8 fg_mode, u32 bg, u8 bg_mode, u8 flags) {
+    return ((u64)(fg & 0xFFFFFFu))
+         | ((u64)(fg_mode & 0xFu) << 24)
+         | ((u64)(bg & 0xFFFFFFu) << 28)
+         | ((u64)(bg_mode & 0xFu) << 52)
+         | ((u64)flags << 56);
+}
+fun u32 ansi64Fg     (ansi64 s) { return (u32)(s & 0xFFFFFFu); }
+fun u8  ansi64FgMode (ansi64 s) { return (u8)((s >> 24) & 0xFu); }
+fun u32 ansi64Bg     (ansi64 s) { return (u32)((s >> 28) & 0xFFFFFFu); }
+fun u8  ansi64BgMode (ansi64 s) { return (u8)((s >> 52) & 0xFu); }
+fun u8  ansi64Flags  (ansi64 s) { return (u8)(s >> 56); }
+
+// Emit a delta SGR carrying only the attributes that transitioned
+// from `prev` to `want`.  No-op when they match.  The caller maintains
+// the current state (one ansi64 per output stream); this function
+// neither reads nor writes that state — it just spells the delta.
+// Returns BADARG when the slice is malformed or has < 64 bytes idle
+// (worst case is ~40 bytes for RGB fg + RGB bg + 7 flag transitions).
+ok64 ANSIu8sFeedDelta(u8s out, ansi64 want, ansi64 prev);
+
+// Close any open attrs with `\033[0m`.  No-op when state is default.
+fun ok64 ANSIu8sFeedReset(u8s out, ansi64 cur) {
+    if (cur == ANSI_DEFAULT) return OK;
+    return escfeed(out, 0);
+}
+
 #endif

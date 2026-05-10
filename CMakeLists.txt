@@ -88,6 +88,7 @@ BSD.h
 )
 
 list(APPEND ABC_SOURCES
+ANSI.c
 ANSI.rl.c
 NEST.c
 FILE.c
