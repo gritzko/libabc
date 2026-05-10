@@ -180,6 +180,9 @@ fun b8 X(, csEq)(X(, csc) a, X(, csc) b) {
 fun b8 X(, sEq)(X(, sc) a, X(, sc) b) {
     return X(, csEq)((T const *const *)a, (T const *const *)b);
 }
+fun b8 X(, Eq)(T const *a, T const *b) {
+    return 0 == memcmp(a, b, sizeof(T));
+}
 #endif
 
 fun T const *X($, lastc)(X($c, c) data) {
@@ -262,6 +265,16 @@ fun ok64 X(, sUsed)(X(, s) s, size_t len) {
     return OK;
 }
 fun ok64 X(, csUsed)(X(, cs) s, size_t len) { return X(, sUsed)((T **)s, len); }
+
+//  Bounds-checked sub-slice [from, till) of `whole` into `sub`.
+//  Sets `sub` to a window over `whole`'s data — no copy.
+fun ok64 X(, csSub)(X(, csc) whole, X(, cs) sub, u32 from, u32 till) {
+    if (unlikely(from > till)) return BADRANGE;
+    if (unlikely((size_t)till > X(, csLen)(whole))) return BADRANGE;
+    sub[0] = whole[0] + from;
+    sub[1] = whole[0] + till;
+    return OK;
+}
 
 fun ok64 X(, sUsed1)(X(, s) s) { return X(, sUsed)(s, 1); }
 fun ok64 X(, csUsed1)(X(, cs) s) { return X(, sUsed)((T **)s, 1); }
@@ -377,6 +390,9 @@ fun ok64 X(, scSup)(X(, cs) full, X(, cs) consumed) {
 }
 
 fun void X(, sZero)(X(, s) s) { memset((void *)*s, 0, $size(s)); }
+#ifndef ABC_X_$
+fun void X(, Zero)(X(, p) p) { memset((void *)p, 0, sizeof(T)); }
+#endif
 /*
 fun ok64 X($, last)(X($, c) into, X($c, c) from, size_t len) {
     if ($len(from) < len) return SMISS;
@@ -441,7 +457,7 @@ fun u64 X(, cs_len)(X(, cs) s) {
 
 fun u64 X(, s_len)(X(, s) s) { return X(, cs_len)((X(, csp))s); }
 
-fun ok64 X(, s_feed)(X(, s) into, X(, cs) from) {
+fun ok64 X(, sDrain)(X(, s) into, X(, cs) from) {
     if (unlikely(X(, cs_len)(from) > X(, s_len)(into))) return SNOROOM;
     memcpy((void *)*into, (void *)*from, $size(from));
     *into += $len(from);

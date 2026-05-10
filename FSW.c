@@ -3,6 +3,8 @@
 //
 
 #include "FSW.h"
+#include "FILE.h"
+#include "PATH.h"
 #include "PRO.h"
 
 #include <errno.h>
@@ -28,13 +30,10 @@ ok64 FSWInit(int *wfd) {
 ok64 FSWDir(int wfd, u8csc path) {
     sane(wfd >= 0 && $ok(path));
     // inotify needs null-terminated path
-    char buf[4096];
-    u64 len = $len(path);
-    if (len >= sizeof(buf)) return FSWNOROOM;
-    memcpy(buf, path[0], len);
-    buf[len] = 0;
+    a_path(p);
+    call(PATHu8bFeed, p, path);
 
-    int wd = inotify_add_watch(wfd, buf,
+    int wd = inotify_add_watch(wfd, (char *)u8bDataHead(p),
                                 IN_CREATE | IN_DELETE | IN_MODIFY |
                                     IN_MOVED_FROM | IN_MOVED_TO |
                                     IN_CLOSE_WRITE);
@@ -103,13 +102,10 @@ ok64 FSWInit(int *wfd) {
 
 ok64 FSWDir(int wfd, u8csc path) {
     sane(wfd >= 0 && $ok(path));
-    char buf[4096];
-    u64 len = $len(path);
-    if (len >= sizeof(buf)) return FSWNOROOM;
-    memcpy(buf, path[0], len);
-    buf[len] = 0;
+    a_path(p);
+    call(PATHu8bFeed, p, path);
 
-    int fd = open(buf, O_RDONLY | O_DIRECTORY);
+    int fd = open((char *)u8bDataHead(p), O_RDONLY | O_DIRECTORY);
     if (fd < 0) return FSWFAIL;
 
     struct kevent ev;

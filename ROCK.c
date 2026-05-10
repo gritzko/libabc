@@ -35,22 +35,13 @@ ok64 ROCKInit(ROCKdbp db, b8 create) {
     done;
 }
 
-// Internal: null-terminate a path gauge on stack
-static ok64 ROCKPath(char *buf, size_t bufsz, path8s path) {
-    size_t len = path[1] - path[0];
-    if (len + 1 > bufsz) return ROCKBAD;
-    memcpy(buf, path[0], len);
-    buf[len] = 0;
-    return OK;
-}
-
 // Open DB with current options
 ok64 ROCKOpenDB(ROCKdbp db, path8s path) {
     sane(db != NULL && db->opt != NULL && path != NULL && path[0] != NULL);
-    char pbuf[4096];
-    call(ROCKPath, pbuf, sizeof(pbuf), path);
+    a_path(p);
+    call(PATHu8bFeed, p, path);
     char *err = NULL;
-    db->db = rocksdb_open(db->opt, pbuf, &err);
+    db->db = rocksdb_open(db->opt, (char *)u8bDataHead(p), &err);
     ok64 o = ROCKerr(err);
     if (o != OK || db->db == NULL) {
         ROCKClose(db);
@@ -69,10 +60,10 @@ ok64 ROCKOpen(ROCKdbp db, path8s path) {
 ok64 ROCKOpenRO(ROCKdbp db, path8s path) {
     sane(db != NULL && path != NULL && path[0] != NULL);
     call(ROCKInit, db, NO);
-    char pbuf[4096];
-    call(ROCKPath, pbuf, sizeof(pbuf), path);
+    a_path(p);
+    call(PATHu8bFeed, p, path);
     char *err = NULL;
-    db->db = rocksdb_open_for_read_only(db->opt, pbuf, 0, &err);
+    db->db = rocksdb_open_for_read_only(db->opt, (char *)u8bDataHead(p), 0, &err);
     ok64 o = ROCKerr(err);
     if (o != OK || db->db == NULL) {
         ROCKClose(db);
@@ -426,14 +417,14 @@ ok64 ROCKIterClose(ROCKiterp it) {
 
 ok64 ROCKCheckpoint(ROCKdbp db, path8s dest) {
     sane(db != NULL && db->db != NULL);
-    char pbuf[4096];
-    call(ROCKPath, pbuf, sizeof(pbuf), dest);
+    a_path(p);
+    call(PATHu8bFeed, p, dest);
     char *err = NULL;
     rocksdb_checkpoint_t *cp =
         rocksdb_checkpoint_object_create(db->db, &err);
     ok64 o = ROCKerr(err);
     if (o != OK) return o;
-    rocksdb_checkpoint_create(cp, pbuf, 0, &err);
+    rocksdb_checkpoint_create(cp, (char *)u8bDataHead(p), 0, &err);
     o = ROCKerr(err);
     rocksdb_checkpoint_object_destroy(cp);
     return o;
