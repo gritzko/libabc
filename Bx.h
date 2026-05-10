@@ -270,6 +270,20 @@ fun void X(, bReset)(X(, b) buf) {
     b[2] = b[0];
 }
 
+//  Move buffer ownership: copy the four descriptor pointers from
+//  `src` into `dst` and zero `src` so it no longer references the
+//  backing memory.  Use this in place of a raw `memcpy(dst, src,
+//  sizeof(*dst))` whenever a buffer changes hands — copying the
+//  descriptor without zeroing the source creates two owners of the
+//  same allocation, which is exactly the trap CLAUDE.md's "buffer
+//  ownership rule" warns about.
+fun void X(, bHandOver)(X(, b) dst, X(, b) src) {
+    T **d = (T **)dst;
+    T **s = (T **)src;
+    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+    s[0] = NULL; s[1] = NULL; s[2] = NULL; s[3] = NULL;
+}
+
 fun ok64 X(B, rewind)(X(B, ) buf, range64 range) {
     size_t len = Blen(buf);
     if (range.till < range.from || range.till > len) return SMISS;
