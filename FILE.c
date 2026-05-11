@@ -376,6 +376,14 @@ ok64 FILESize(size_t *size, int const *fd) {
     done;
 }
 
+ok64 FILEFStat(filestat *out, int const *fd) {
+    sane(out != NULL && FILEok(*fd));
+    struct stat sb = {};
+    testc(0 == fstat(*fd, &sb), FILENOSTAT);
+    filestat_from_stat(out, &sb);
+    done;
+}
+
 ok64 FILEResize(int const *fd, size_t new_size) {
     sane(FILEok(*fd));
     testc(0 == ftruncate(*fd, new_size), FILENORESZ);

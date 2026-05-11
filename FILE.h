@@ -376,6 +376,9 @@ ok64 FILEBumpTimes(path8s path, i64 delta_sec);
 
 ok64 FILESize(size_t *size, int const *fd);
 
+//  fstat counterpart of FILEStat — fills `out` from an open fd.
+ok64 FILEFStat(filestat *out, int const *fd);
+
 ok64 FILEisdir(path8s path);
 
 ok64 FILEResize(int const *fd, size_t new_size);
@@ -651,6 +654,14 @@ ok64 FILEBookGrow(u8bp buf, size_t need);
 fun ok64 FILEBookEnsure(u8bp buf, size_t need) {
     if (u8bIdleLen(buf) >= need) return OK;
     return FILEBookGrow(buf, need);
+}
+
+// Grow if needed, then append `src` to a booked buffer's DATA.  One-shot
+// replacement for the common `FILEBookEnsure + u8bFeed` pair.
+fun ok64 FILEBookFeed(u8bp buf, u8csc src) {
+    ok64 o = FILEBookEnsure(buf, $len(src));
+    if (o != OK) return o;
+    return u8bFeed(buf, src);
 }
 
 // Sync mapped region to disk
