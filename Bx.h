@@ -44,6 +44,20 @@ fun T **X(, bIdle)(X(, b) buf) { return (T **)buf + 2; }
 fun X(, gp) X(, bPastData)(X(, bp) buf) { return (X(, gp))buf; }
 fun X(, gp) X(, bDataIdle)(X(, bp) buf) { return (X(, gp))(buf + 1); }
 
+// PastDataS: joined [buf[0], buf[2]) — span over PAST + DATA together,
+// excluding IDLE.  Intended use is "all-known-records" reads when a
+// buffer uses the PAST/DATA boundary to separate inherited entries
+// (parents / read-only views) from owned-leaf entries (writes).
+// See keeper/KEEP.h "Branch-aware object store" — `packs` lays trunk
+// → … → parent dirs into PAST and the active leaf branch into DATA.
+fun void X(, PastDataS)(X(, b) buf, X(, sp) into) {
+    into[0] = (T *)buf[0];
+    into[1] = (T *)buf[2];
+}
+fun size_t X(, bPastDataLen)(X(, b) buf) {
+    return (size_t)((T *)buf[2] - (T *)buf[0]);
+}
+
 fun size_t X(, bLen)(X(, b) buf) { return ((T *)buf[3]) - ((T *)buf[0]); }
 fun size_t X(, bBusyLen)(X(, b) buf) { return ((T *)buf[2]) - ((T *)buf[0]); }
 fun size_t X(, bPastLen)(X(, b) buf) { return $len((T **)buf + 0); }
