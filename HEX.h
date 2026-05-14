@@ -26,6 +26,25 @@ fun ok64 HEXPut(u8s hex, u8csc bin) {
     return HEXu8sFeedSome(hex, copy);
 }
 
+//  Returns YES iff every byte of `hex` is a lower- or upper-case
+//  hex digit (0-9 / a-f / A-F).  Empty slice is YES (vacuously
+//  valid).  Use this BEFORE attempting `HEXu8sDrainSome` to sort a
+//  user-typed token into branch-name / hex-sha / commit-substring
+//  categories without committing to the hex parse — callers like
+//  `?ref` resolution want a fast "is this token even hex?" gate
+//  before falling back to branch-path lookup.
+fun b8 HEXu8sValid(u8cs hex) {
+    if ($empty(hex)) return YES;
+    $for(u8c, p, hex) {
+        u8 c = *p;
+        b8 d = (c >= '0' && c <= '9');
+        b8 lo = (c >= 'a' && c <= 'f');
+        b8 up = (c >= 'A' && c <= 'F');
+        if (!d && !lo && !up) return NO;
+    }
+    return YES;
+}
+
 static const u8 BASE16rev[256] = {
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
