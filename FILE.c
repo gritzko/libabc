@@ -1143,6 +1143,11 @@ ok64 FILENext(fileitp it) {
         b8 has_slash = ($len(name) > 0 && name[1][-1] == '/');
         u8cs seg = {name[0], has_slash ? name[1] - 1 : name[1]};
         o = PATHu8bPush(it->path, seg);
+        //  Skip entries whose name fails PATHu8sVerifySegment
+        //  (non-UTF8, control chars).  Junk files like these can happen.
+        //  Aborting the whole scan on one rogue dirent would make
+        //  every scan hostage to a single bad filename.
+        if (o == PATHBAD) return FILENext(it);
         if (o != OK) return o;
         if (it->type == DT_DIR) {
             call(u8sFeed1, u8bIdle(it->path), '/');
@@ -1164,7 +1169,9 @@ ok64 FILENext(fileitp it) {
         it->type = FILEresolveDType((DIR *)it->dir, e->d_name, e->d_type);
         a_cstr(name, e->d_name);
         ok64 o = PATHu8bPush(it->path, name);
-        if (o == BNOROOM) continue;
+        //  Skip entries whose name fails PATHu8sVerifySegment
+        //  (PATHBAD: non-UTF8 / control chars)
+        if (o == PATHBAD) continue;
         if (o != OK) return o;
         if (it->type == DT_DIR) {
             call(u8sFeed1, u8bIdle(it->path), '/');
