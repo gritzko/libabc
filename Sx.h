@@ -343,6 +343,22 @@ fun ok64 X(, sFind)(X(, s) haystack, T needle) {
     return X(, csFind)((T const **)haystack, needle);
 }
 
+// csRevFind: scan haystack right-to-left for a single element.  On
+// success, retreat term so the matched element is the last of the
+// slice (i.e. haystack[1] - 1 is the match).  On miss, term retreats
+// to head (slice becomes empty).  Mirror of csFind.
+fun ok64 X(, csRevFind)(X(, cs) haystack, T needle) {
+    while (!$empty(haystack)) {
+        if (memcmp(haystack[1] - 1, &needle, sizeof(T)) == 0) return OK;
+        --haystack[1];
+    }
+    return NONE;
+}
+
+fun ok64 X(, sRevFind)(X(, s) haystack, T needle) {
+    return X(, csRevFind)((T const **)haystack, needle);
+}
+
 #ifndef ABC_X_$
 fun ok64 X(, csFindS)(X(, cs) haystack, X(, csc) needle) {
     size_t nlen = X(, csLen)(needle);
@@ -361,6 +377,30 @@ fun ok64 X(, csFindS)(X(, cs) haystack, X(, csc) needle) {
 
 fun ok64 X(, sFindS)(X(, s) haystack, X(, csc) needle) {
     return X(, csFindS)((T const **)haystack, needle);
+}
+
+// csRevFindS: scan haystack right-to-left for a sub-slice.  On
+// success, retreat term so the matched sub-slice sits at the end (the
+// last nlen elements of the slice are needle).  On miss, term retreats
+// to head.  Mirror of csFindS.
+fun ok64 X(, csRevFindS)(X(, cs) haystack, X(, csc) needle) {
+    size_t nlen = X(, csLen)(needle);
+    if (nlen == 0 || $len(haystack) < nlen) {
+        haystack[1] = haystack[0];
+        return NONE;
+    }
+    for (T const *p = haystack[1] - nlen; p >= haystack[0]; p--) {
+        if (memcmp(p, *needle, nlen * sizeof(T)) == 0) {
+            haystack[1] = p + nlen;
+            return OK;
+        }
+    }
+    haystack[1] = haystack[0];
+    return NONE;
+}
+
+fun ok64 X(, sRevFindS)(X(, s) haystack, X(, csc) needle) {
+    return X(, csRevFindS)((T const **)haystack, needle);
 }
 #endif
 
