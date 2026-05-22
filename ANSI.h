@@ -132,6 +132,27 @@ typedef u64 ansi64;
 
 #define ANSI_DEFAULT  ((ansi64)0)
 
+//  Constexpr-form ansi64 packer for static initialisers (`fun` packs
+//  inline but isn't usable in a file-scope constant).  Matches the
+//  bit layout of ansi64Pack exactly; pick one or the other by context.
+#define ANSI64_PACK(fg, fg_mode, bg, bg_mode, flags) \
+    ( ((ansi64)((u64)(fg) & 0xFFFFFFu))             \
+    | ((ansi64)((u64)(fg_mode) & 0xFu) << 24)       \
+    | ((ansi64)((u64)(bg) & 0xFFFFFFu) << 28)       \
+    | ((ansi64)((u64)(bg_mode) & 0xFu) << 52)       \
+    | ((ansi64)(u64)(flags) << 56) )
+
+//  Single-slot constructors.  `n` is the SGR code for BASIC (30..37,
+//  40..47, 90..97, 100..107), the palette slot for 256, or one byte
+//  in a u32 0xRRGGBB for RGB.
+#define ANSI64_FG_BASIC(n) ANSI64_PACK((n), ANSI_MODE_BASIC,   0, ANSI_MODE_DEFAULT, 0)
+#define ANSI64_FG_256(n)   ANSI64_PACK((n), ANSI_MODE_256,     0, ANSI_MODE_DEFAULT, 0)
+#define ANSI64_FG_RGB(n)   ANSI64_PACK((n), ANSI_MODE_RGB,     0, ANSI_MODE_DEFAULT, 0)
+#define ANSI64_BG_BASIC(n) ANSI64_PACK(0,   ANSI_MODE_DEFAULT, (n), ANSI_MODE_BASIC, 0)
+#define ANSI64_BG_256(n)   ANSI64_PACK(0,   ANSI_MODE_DEFAULT, (n), ANSI_MODE_256,   0)
+#define ANSI64_BG_RGB(n)   ANSI64_PACK(0,   ANSI_MODE_DEFAULT, (n), ANSI_MODE_RGB,   0)
+#define ANSI64_FLAG(f)     ANSI64_PACK(0,   ANSI_MODE_DEFAULT, 0,   ANSI_MODE_DEFAULT, (f))
+
 fun ansi64 ansi64Pack(u32 fg, u8 fg_mode, u32 bg, u8 bg_mode, u8 flags) {
     return ((u64)(fg & 0xFFFFFFu))
          | ((u64)(fg_mode & 0xFu) << 24)
@@ -165,5 +186,20 @@ fun ok64 ANSIu8sFeedReset(u8s out, ansi64 cur) {
 // ANSISetTTY(YES|NO) before any reporter runs.
 b8   ANSIIsTTY(void);
 void ANSISetTTY(b8 v);
+
+con ok64 ANSINOTTY   = 0xa5dc49761d762;       // /dev/tty unavailable
+con ok64 ANSINOREPLY = 0xa5dc49761b399562;    // OSC 11 query timed out or unparseable
+
+// Query the terminal's current background color via OSC 11.  On
+// success fills *bg with an ansi64 carrying mode=RGB and the
+// terminal's actual bg color in the bg field (fg = default, flags
+// = 0).  Cached process-wide after the first probe — subsequent
+// calls return the cached ansi64 (and the cached error code) without
+// touching the terminal.  Opens /dev/tty for both ends, briefly
+// switches it to raw mode, writes `\033]11;?\007`, polls for ≤100 ms,
+// and parses `\033]11;rgb:RRRR/GGGG/BBBB` (BEL or ST terminator).
+// Returns ANSINOTTY if /dev/tty can't be opened, ANSINOREPLY if the
+// terminal stayed silent or returned garbage.
+ok64 ANSIBgColor(ansi64 *bg);
 
 #endif

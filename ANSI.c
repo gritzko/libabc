@@ -5,6 +5,9 @@
 //  ansi64 type.
 #include "ANSI.h"
 
+#include <fcntl.h>
+#include <poll.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "OK.h"
@@ -117,5 +120,126 @@ ok64 ANSIu8sFeedDelta(u8s out, ansi64 want, ansi64 prev) {
     }
     if (first) u8sFeed1(out, '0');  //  shouldn't happen given want != prev
     u8sFeed1(out, 'm');
+    done;
+}
+
+//  OSC 11 bg-color probe with process-wide cache.  States:
+//    0 = unprobed; 1 = probed, no reply / parse failure (cached_err
+//        holds the code to return); 2 = probed OK (cached_bg holds it).
+static u8     ansi_bg_state    = 0;
+static ansi64 ansi_bg_cached   = 0;
+static ok64   ansi_bg_cached_err = OK;
+
+//  Parse one '/'-separated 16-bit hex channel; returns 0..255 (high
+//  byte) or -1 on bad input.  Accepts 1..4 hex digits per channel
+//  (xterm spec; most terminals emit 4).
+static int ansi_parse_hex16(u8c **pp, u8c *end) {
+    u8c *p = *pp;
+    u32 v = 0;
+    int n = 0;
+    while (p < end && n < 4) {
+        u8 c = *p;
+        u32 d;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+        else break;
+        v = (v << 4) | d;
+        p++; n++;
+    }
+    if (n == 0) return -1;
+    *pp = p;
+    //  Scale to high byte: 1-digit → v<<4, 2-digit → v, 3-digit →
+    //  v>>4, 4-digit → v>>8.  All converge on an 8-bit channel.
+    if (n == 1) return (int)((v << 4) & 0xFF);
+    if (n == 2) return (int)(v & 0xFF);
+    if (n == 3) return (int)((v >> 4) & 0xFF);
+    return (int)((v >> 8) & 0xFF);
+}
+
+ok64 ANSIBgColor(ansi64 *bg) {
+    sane(bg != NULL);
+    if (ansi_bg_state != 0) {
+        *bg = ansi_bg_cached;
+        return ansi_bg_cached_err;
+    }
+    ansi_bg_state = 1;            //  default to "probe-and-failed"
+    ansi_bg_cached = ANSI_DEFAULT;
+    ansi_bg_cached_err = ANSINOREPLY;
+
+    int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+    if (fd < 0) {
+        ansi_bg_cached_err = ANSINOTTY;
+        *bg = ANSI_DEFAULT;
+        fail(ANSINOTTY);
+    }
+
+    struct termios old_tio, raw_tio;
+    if (tcgetattr(fd, &old_tio) != 0) {
+        close(fd);
+        ansi_bg_cached_err = ANSINOTTY;
+        *bg = ANSI_DEFAULT;
+        fail(ANSINOTTY);
+    }
+    raw_tio = old_tio;
+    raw_tio.c_lflag &= ~(ICANON | ECHO);
+    raw_tio.c_cc[VMIN]  = 0;
+    raw_tio.c_cc[VTIME] = 0;
+    (void)tcsetattr(fd, TCSANOW, &raw_tio);
+
+    static u8c const QUERY[] = "\033]11;?\007";
+    ssize_t wn = write(fd, QUERY, sizeof(QUERY) - 1);
+    (void)wn;
+
+    //  Drain up to 64 bytes within 100 ms total (one tight loop in
+    //  case the terminal dribbles the reply across reads).
+    u8 buf[64];
+    int n = 0;
+    int budget_ms = 100;
+    while (n < (int)sizeof(buf)) {
+        struct pollfd pfd = { .fd = fd, .events = POLLIN };
+        int pr = poll(&pfd, 1, budget_ms);
+        if (pr <= 0) break;
+        ssize_t r = read(fd, buf + n, sizeof(buf) - (size_t)n);
+        if (r <= 0) break;
+        n += (int)r;
+        //  Stop once we've seen BEL or ST terminator.
+        if (buf[n - 1] == 0x07) break;
+        if (n >= 2 && buf[n - 2] == 0x1B && buf[n - 1] == '\\') break;
+        budget_ms = 30;             //  shorter wait for trailing bytes
+    }
+
+    (void)tcsetattr(fd, TCSANOW, &old_tio);
+    close(fd);
+
+    //  Expect: ESC ] 11 ; rgb : RRRR / GGGG / BBBB  (ST | BEL)
+    if (n < 14) { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    u8c *p = buf, *end = buf + n;
+    if (p[0] != 0x1B || p[1] != ']') { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    p += 2;
+    while (p < end && *p != ';') p++;
+    if (p >= end) { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    p++;
+    //  "rgb:" prefix
+    if (end - p < 4 ||
+        p[0] != 'r' || p[1] != 'g' || p[2] != 'b' || p[3] != ':') {
+        *bg = ANSI_DEFAULT; fail(ANSINOREPLY);
+    }
+    p += 4;
+    int r = ansi_parse_hex16(&p, end);
+    if (r < 0 || p >= end || *p != '/') { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    p++;
+    int g = ansi_parse_hex16(&p, end);
+    if (g < 0 || p >= end || *p != '/') { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    p++;
+    int b = ansi_parse_hex16(&p, end);
+    if (b < 0) { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+
+    u32 rgb = ((u32)(r & 0xFF) << 16) | ((u32)(g & 0xFF) << 8) | (u32)(b & 0xFF);
+    ansi64 packed = ANSI64_PACK(0, ANSI_MODE_DEFAULT, rgb, ANSI_MODE_RGB, 0);
+    ansi_bg_cached = packed;
+    ansi_bg_cached_err = OK;
+    ansi_bg_state = 2;
+    *bg = packed;
     done;
 }
