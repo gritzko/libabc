@@ -29,7 +29,7 @@ add_executable(DIFFfuzz DIFF.c ../RON.c)
 
 add_executable(URIfuzz URI.c ../URI.c ../URI.rl.c)
 
-add_executable(SLOGfuzz SLOG.c ../SLOG.c)
+add_executable(SLOGfuzz SLOG.c)
 target_link_libraries(SLOGfuzz abc)
 
 add_executable(NFAfuzz NFA.c ../RON.c)
