@@ -159,4 +159,11 @@ fun ok64 ANSIu8sFeedReset(u8s out, ansi64 cur) {
     return escfeed(out, 0);
 }
 
+// Cached `isatty(STDOUT_FILENO)`.  First call probes the fd; later
+// calls return the cached YES/NO.  Tests / harnesses that need to
+// override the result (e.g. force-color, force-plain) call
+// ANSISetTTY(YES|NO) before any reporter runs.
+b8   ANSIIsTTY(void);
+void ANSISetTTY(b8 v);
+
 #endif

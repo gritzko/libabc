@@ -5,8 +5,22 @@
 //  ansi64 type.
 #include "ANSI.h"
 
+#include <unistd.h>
+
 #include "OK.h"
 #include "PRO.h"
+
+//  Cached isatty(STDOUT_FILENO).  0 = unprobed; 1 = NO; 2 = YES.
+//  Process-global; one probe at first use, overridable via ANSISetTTY.
+static u8 ansi_tty_cache = 0;
+
+b8 ANSIIsTTY(void) {
+    if (ansi_tty_cache == 0)
+        ansi_tty_cache = isatty(STDOUT_FILENO) ? 2 : 1;
+    return ansi_tty_cache == 2 ? YES : NO;
+}
+
+void ANSISetTTY(b8 v) { ansi_tty_cache = v ? 2 : 1; }
 
 //  Append the colour-mode portion of an SGR sequence.  `kind` is '3'
 //  for fg or '4' for bg; it picks 38;5;N / 48;5;N / 38;2;R;G;B etc.
