@@ -439,4 +439,26 @@ fun void X(, aClose)(u8 *const *buf, X(, csp) s) {
     ((u8 **)buf)[1] = buf[2];       // DATA -> PAST
 }
 
+// Carve a fixed-cap child T-buffer out of the parent u8 buffer's IDLE.
+// After the carve: child has `cap`-sized capacity, empty PAST/DATA;
+// parent's PAST/DATA boundary advances past the carve (aligned up to T)
+// so subsequent carves get fresh space.  Returns BNOROOM if IDLE
+// lacks `cap*sizeof(T)` bytes after alignment.
+//
+// The child borrows the parent's memory: do NOT u8bFree / u8bReMap /
+// u8bUnMap a carved child, and ensure it does not outlive the parent.
+// One u8bFree on the parent reclaims every carve.
+fun ok64 X(, aCarve)(u8 *const *parent, X(, b) child, size_t cap) {
+    uintptr_t al = ((uintptr_t)parent[2] + sizeof(T) - 1) & ~(sizeof(T) - 1);
+    u8 *base = (u8 *)al;
+    size_t sz = cap * sizeof(T);
+    if (base + sz > parent[3]) return BNOROOM;
+    T **c = (T **)child;
+    c[0] = c[1] = c[2] = (T *)base;
+    c[3] = (T *)(base + sz);
+    ((u8 **)parent)[1] = base + sz;
+    ((u8 **)parent)[2] = base + sz;
+    return OK;
+}
+
 #undef T
