@@ -6,6 +6,9 @@
 con ok64 URIFAIL = 0x1e6d23ca495;
 con ok64 URIBAD	= 0x79b48b28d;
 
+// URIs longer than this are likely a bug somewhere upstream.
+#define MAX_URI_LEN 1024
+
 
 #define URIenum 0
 

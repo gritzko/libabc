@@ -152,6 +152,44 @@ fun void X(, csMv0)(X(, cs) a) {
     a[0] = 0;
     a[1] = 0;
 }
+
+// sHeadS / sTailS / sRestS — typed slice views over `src`, written
+// into `dst`.  Mirror the `a_head` / `a_tail` / `a_rest` macros (see
+// S.h) but as functions, so the source may be any expression (e.g.
+// `u8bData(buf)`) rather than a slice variable.  The `S` suffix says
+// "produces a slice"; cf. `sLen` / `sLast` which return scalars.
+//
+// Asserts the requested range fits within `src`.
+fun void X(, sHeadS)(X(, sc) src, X(, s) dst, size_t len) {
+    assert(len <= X(, sLen)(src));
+    dst[0] = src[0];
+    dst[1] = src[0] + len;
+}
+fun void X(, sTailS)(X(, sc) src, X(, s) dst, size_t len) {
+    assert(len <= X(, sLen)(src));
+    dst[0] = src[1] - len;
+    dst[1] = src[1];
+}
+fun void X(, sRestS)(X(, sc) src, X(, s) dst, size_t off) {
+    assert(off <= X(, sLen)(src));
+    dst[0] = src[0] + off;
+    dst[1] = src[1];
+}
+fun void X(, csHeadS)(X(, csc) src, X(, cs) dst, size_t len) {
+    assert(len <= X(, csLen)(src));
+    dst[0] = src[0];
+    dst[1] = src[0] + len;
+}
+fun void X(, csTailS)(X(, csc) src, X(, cs) dst, size_t len) {
+    assert(len <= X(, csLen)(src));
+    dst[0] = src[1] - len;
+    dst[1] = src[1];
+}
+fun void X(, csRestS)(X(, csc) src, X(, cs) dst, size_t off) {
+    assert(off <= X(, csLen)(src));
+    dst[0] = src[0] + off;
+    dst[1] = src[1];
+}
 fun void X(, cgMv)(X(, cg) a, X(, cg) b) {
     a[0] = b[0];
     a[1] = b[1];
