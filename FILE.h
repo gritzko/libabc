@@ -560,6 +560,14 @@ ok64 FILEGetCwd(path8b out);
 ok64 FILESpawn(path8sc path, u8css argv,
                int *stdin_w, int *stdout_r, pid_t *pid_out);
 
+// Variant taking pre-made fds for child stdin/stdout instead of
+// creating pipes.  Pass `-1` to inherit the parent's fd unchanged.
+// The child dups the supplied fds; the caller still owns them and
+// closes them in the parent.  Used by pipeline setups (producer |
+// pager) where one `pipe(2)` plays both roles.
+ok64 FILESpawnFds(path8sc path, u8css argv,
+                  int stdin_fd, int stdout_fd, pid_t *pid_out);
+
 // Wait for `pid` to terminate.  *exit_code (NULL ok) gets the WEXITSTATUS.
 // Returns OK on clean exit (any status, including non-zero — caller checks
 // *exit_code).  Returns FILESIGNAL if the process died from a signal;

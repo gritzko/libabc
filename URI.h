@@ -29,9 +29,22 @@ typedef struct {
 
 typedef uri* urip;
 typedef uri const* uricp;
+typedef uri const uric;
 
 // Backwards compatibility
 typedef uri URIstate;
+
+// Required by the Bx.h template.  Order URIs by their `data` slice
+// content — covers every populated component since `data` is a view
+// over the original byte source the lexer parsed.
+fun int uricmp(uri const *a, uri const *b) { return $cmp(a->data, b->data); }
+
+// Generate urib / uribFeed1 / uribDataLen / uribData / urisAtP /
+// uricsAtP etc.  Buffer of uri values; one heap allocation per
+// `cli` instance, lifetime owned by the entry frame (CLAUDE.md §5).
+#define X(M, name) M##uri##name
+#include "abc/Bx.h"
+#undef X
 
 // Parse URI from `state->data`.  Like any abc/S.md drain, URILexer
 // CONSUMES its input slice — `state->data[0]` advances as bytes are

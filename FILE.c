@@ -221,6 +221,42 @@ ok64 FILESpawn(path8sc path, u8css argv,
     done;
 }
 
+//  Variant of FILESpawn taking pre-existing fds for the child's stdin
+//  and stdout.  Pass `-1` to inherit the parent's fd unchanged.  The
+//  child dups the supplied fds; the caller still owns them and is
+//  responsible for closing in the parent.  Used by pipeline setups
+//  (producer | pager) where one shared `pipe(2)` plays both roles
+//  and a parent-side pump would just be a redundant copy.
+ok64 FILESpawnFds(path8sc path, u8css argv,
+                  int stdin_fd, int stdout_fd, pid_t *pid_out) {
+    sane($ok(path) && pid_out != NULL);
+
+    a_pad(u8, scratch, FILE_SPAWN_SCRATCH_LEN);
+    char *cargv[FILE_SPAWN_MAX_ARGS + 1];
+    int nargs = 0;
+    $for(u8cs, a, argv) {
+        if (nargs >= FILE_SPAWN_MAX_ARGS) fail(FILESPAWN);
+        cargv[nargs++] = (char *)u8bIdleHead(scratch);
+        call(u8bFeed, scratch, *a);
+        call(u8bFeed1, scratch, 0);
+    }
+    cargv[nargs] = NULL;
+
+    pid_t pid = fork();
+    if (pid < 0) failc(FILESPAWN);
+    if (pid == 0) {
+        if (stdin_fd  >= 0) dup2(stdin_fd,  STDIN_FILENO);
+        if (stdout_fd >= 0) dup2(stdout_fd, STDOUT_FILENO);
+        execvp((char const *)*path, cargv);
+        fprintf(stderr, "FILESpawnFds: exec '%s' failed: errno=%d (%s)\n",
+                (char const *)*path, errno, strerror(errno));
+        _exit(127);
+    }
+
+    *pid_out = pid;
+    done;
+}
+
 ok64 FILEReap(pid_t pid, int *exit_code) {
     sane(pid > 0);
     int st = 0;
