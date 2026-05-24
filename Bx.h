@@ -272,6 +272,20 @@ fun ok64 X(, bFeed)(X(, b) buf, X(, csc) from) {
     return OK;
 }
 
+// bHost: append `orig` to `buf`'s IDLE and report the resulting
+// range — `as[0..1]` borders the freshly-written bytes inside `buf`.
+// The buffer is the new host for the copied content; callers keep a
+// slice that aliases into it.  Refuses with BNOROOM when IDLE is too
+// small (buf untouched, `as` not written).
+fun ok64 X(, bHost)(X(, b) buf, X(, csp) as, X(, csc) orig) {
+    T *p = X(, bIdleHead)(buf);
+    ok64 o = X(, bFeed)(buf, orig);
+    if (o != OK) return o;
+    as[0] = p;
+    as[1] = X(, bIdleHead)(buf);
+    return OK;
+}
+
 fun ok64 X(B, mark)(X(B, ) const buf, range64 *range) {
     range->from = buf[1] - buf[0];
     range->till = buf[2] - buf[0];
