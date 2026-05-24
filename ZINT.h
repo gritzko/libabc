@@ -133,39 +133,34 @@ fun ok64 ZINTu8sDrainFloat(f64* n, $cu8c from) {
     return o;
 }
 
-fun int ZINTu128z($cu8c a, $cu8c b) {
+fun b8 ZINTu128Z($cu8c a, $cu8c b) {
     u8cs aa = $dup(a);
     u8cs bb = $dup(b);
     u128 an = {};
     u128 bn = {};
     ZINTu128drain(&an, aa);
     ZINTu128drain(&bn, bb);
-    return u128cmp(&an, &bn);
+    return u128Z(&an, &bn);
 }
 
-fun int ZINTi64z($cu8c a, $cu8c b) {
+fun b8 ZINTi64Z($cu8c a, $cu8c b) {
     u8cs aa = $dup(a);
     u8cs bb = $dup(b);
     i64 an = 0;
     i64 bn = 0;
     ZINTu8sDrainInt(&an, aa);
     ZINTu8sDrainInt(&bn, bb);
-    return i64cmp(&an, &bn);
+    return i64Z(&an, &bn);
 }
 
-fun int f64z(f64 const* a, f64 const* b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
-
-fun int ZINTf64z($cu8c a, $cu8c b) {
+fun b8 ZINTf64Z($cu8c a, $cu8c b) {
     u8cs aa = $dup(a);
     u8cs bb = $dup(b);
     f64 an = 0;
     f64 bn = 0;
     ZINTu8sDrainFloat(&an, aa);
     ZINTu8sDrainFloat(&bn, bb);
-    return f64z(&an, &bn);
+    return f64Z(&an, &bn);
 }
 
 ok64 ZINTu64sDelta(u64s ints, u64 start);

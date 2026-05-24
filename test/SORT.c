@@ -18,7 +18,7 @@ ok64 SORT1() {
         u64sFeed1(intsidle, i ^ r);
         u64sFeed1(ints3idle, i ^ r);
     }
-    $sort(ints3data, u64cmp);
+    u64sSort(ints3data);
     call(SORTu64, ints2idle, intsdata);
     testeqv((long long)(LEN1), (long long)($len(ints2data)), "%lld");
     for (u64 i = 0; i < LEN1; ++i) {

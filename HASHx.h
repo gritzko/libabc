@@ -23,6 +23,10 @@
 #define MASK (ABC_HASH_LINE - 1)
 #define LMASK (X(, sLen)(data) - 1)
 
+// HASHx uses X(,hashEq) for key-equivalence (matches X(,hash) keying:
+// for kv-like records, hashEq is key-equality; for plain scalars it
+// coincides with full equality).  Each instantiating type defines
+// `X(,hashEq)` next to its `X(,hash)`.
 fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
     sane($ok(data) && ndx != NULL && 0 == ($len(data) & MASK));
     size_t off = (*ndx) & MASK;
@@ -30,7 +34,7 @@ fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
     for (size_t i = off + 1; i < off + ABC_HASH_LINE; ++i) {
         *ndx = base + (i & MASK);
         if (X($, is0)(data, *ndx)) return HASHNONE;
-        if (X(, cmp)(*data + *ndx, rec) == 0) return OK;
+        if (X(, hashEq)(*data + *ndx, rec)) return OK;
     }
     return HASHNOROOM;
 }
@@ -39,7 +43,7 @@ fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
 fun ok64 X(HASH, find)(size_t *ndx, X($, ) data, T const *rec) {
     u64 hash = X(, hash)(rec);
     *ndx = hash & LMASK;
-    if (X(, cmp)(rec, $atp(data, *ndx)) == 0) return OK;
+    if (X(, hashEq)(rec, $atp(data, *ndx))) return OK;
     if (X($, is0)(data, *ndx)) return HASHNONE;
     return X(HASH, scan)(ndx, data, rec);
 }
@@ -49,7 +53,7 @@ fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx) {
     size_t base = ndx & ~MASK;
     for (size_t i = (off + 1) & MASK; i != off; i = (i + 1) & MASK) {
         ndx = base + i;
-        if (X(, cmp)(rec, $atp(data, ndx)) == 0) {
+        if (X(, hashEq)(rec, $atp(data, ndx))) {
             *rec = $at(data, ndx);
             return OK;
         }
@@ -62,7 +66,7 @@ fun ok64 X(HASH, Get)(T *rec, X($, ) data) {
     u64 hash = X(, hash)(rec);
     size_t ndx = hash & LMASK;
     if (X($, is0)(data, ndx)) return HASHNONE;
-    if (X(, cmp)(rec, $atp(data, ndx)) == 0) {
+    if (X(, hashEq)(rec, $atp(data, ndx))) {
         *rec = $at(data, ndx);  // TODO mv
         return OK;
     }
@@ -77,7 +81,7 @@ fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
     size_t base = fit & ~MASK;
     for (size_t i = 0; i < ABC_HASH_LINE; ++i) {
         size_t ndx = base + ((off + i) & MASK);
-        if (X($, is0)(data, ndx) || X(, cmp)(rec, $atp(data, ndx)) == 0) {
+        if (X($, is0)(data, ndx) || X(, hashEq)(rec, $atp(data, ndx))) {
             X(, mv)($atp(data, ndx), &r);
             return OK;
         }
@@ -90,7 +94,7 @@ fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
 fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
     u64 hash = X(, hash)(rec);
     size_t ndx = hash & LMASK;
-    if (X($, is0)(data, ndx) || X(, cmp)(rec, $atp(data, ndx)) == 0) {
+    if (X($, is0)(data, ndx) || X(, hashEq)(rec, $atp(data, ndx))) {
         X(, mv)($atp(data, ndx), rec);
         return OK;
     }

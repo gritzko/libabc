@@ -59,7 +59,7 @@ ok64 ZINTTest2() {
         ZINTu128feed(into, &a);
         u128 b = {};
         ZINTu128drain(&b, data);
-        sane(0 == u128cmp(&a, &b));
+        sane(u128Eq(&a, &b));
     }
 
     done;

@@ -67,7 +67,7 @@ FUZZ(u64, SLOGfuzz) {
     u64cs inp = {input[0], input[1]};
     call(u64gFeed, u64bDataIdle(sorted), inp);
     u64s sortslice = {sorted[1], sorted[2]};
-    $sort(sortslice, &u64cmp);
+    u64sSort(sortslice);
 
     // Build SLOG stream with sorted records
     size_t bufsize = n * 600 + 4096;  // ~600 bytes per record max

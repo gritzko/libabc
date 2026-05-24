@@ -8,13 +8,6 @@
 #include "PRO.h"
 #include "RON.h"
 
-fun int pollercmp(poller const* a, poller const* b) {
-    if (a->callback == NULL || b->callback == NULL) {
-        return a->callback == NULL ? 1 : -1;
-    }
-    return u64cmp(&a->deadline, &b->deadline);
-}
-
 fun b8 pollerZ(poller const* a, poller const* b) {
     if (a->callback == NULL) return NO;
     if (b->callback == NULL) return YES;

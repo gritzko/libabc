@@ -23,6 +23,11 @@ static void fill_random_dups(u64 *arr, size_t n, u64 seed) {
 
 // --- stdlib qsort (function pointer comparator) ---
 
+static int u64cmp_local(const void *a, const void *b) {
+    u64 ua = *(u64 const *)a, ub = *(u64 const *)b;
+    return ua < ub ? -1 : (ua > ub ? 1 : 0);
+}
+
 static void BM_StdlibQSort(benchmark::State &state) {
     size_t n = (size_t)state.range(0);
     u64 *arr = new u64[n];
@@ -30,8 +35,7 @@ static void BM_StdlibQSort(benchmark::State &state) {
         state.PauseTiming();
         fill_random(arr, n, 42);
         state.ResumeTiming();
-        u64s data = {arr, arr + n};
-        $sort(data, u64cmp);
+        qsort(arr, n, sizeof(u64), u64cmp_local);
         benchmark::DoNotOptimize(arr[0]);
     }
     delete[] arr;
@@ -64,11 +68,10 @@ static void BM_StdlibSortDedup(benchmark::State &state) {
         state.PauseTiming();
         fill_random_dups(arr, n, 42);
         state.ResumeTiming();
-        u64s data = {arr, arr + n};
-        $sort(data, u64cmp);
+        qsort(arr, n, sizeof(u64), u64cmp_local);
         // manual dedup
         u64 *w = arr + 1;
-        for (u64 *r = arr + 1; r < data[1]; r++)
+        for (u64 *r = arr + 1; r < arr + n; r++)
             if (*r != *(r - 1)) *w++ = *r;
         benchmark::DoNotOptimize(w);
     }

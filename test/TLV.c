@@ -57,10 +57,7 @@ ok64 TLVtest2() {
     done;
 }
 
-fun int u32pcmp(u32p const *a, u32p const *b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
+fun b8 u32pZ(u32p const *a, u32p const *b) { return *a < *b; }
 
 #define X(M, name) M##u32p##name
 #include "Bx.h"

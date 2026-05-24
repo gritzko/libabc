@@ -14,7 +14,7 @@ FUZZ(u32, HEAPfuzz) {
 
     aBpad(u32, sorted, 1024);
     call(u32bFeed, sorted, input);
-    $sort(u32bDataC(sorted), &u32cmp);
+    u32bSort(sorted);
 
     aBpad(u32, heap, 1024);
     aBpad(u32, heaped, 1024);

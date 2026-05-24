@@ -16,7 +16,7 @@ FUZZ(u64, SORTfuzz) {
     aBpad2(u64, ints3, LEN1);
     $u64feedall(intsidle, input);
     $u64feedall(ints3idle, input);
-    $sort(ints3data, u64cmp);
+    u64sSort(ints3data);
     call(SORTu64, ints2idle, intsdata);
     must($len(ints2data) == $len(ints3data), "length mismatch");
     size_t len = $len(ints2data);

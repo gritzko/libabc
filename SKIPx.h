@@ -172,25 +172,27 @@ fun ok64 X(SKIP, mayfeed)(u8bp buf, X(SKIP, tab) * skips) {
 
 ok64 X(SKIP, load)(X(SKIP, tab) * k, u8bp buf);
 
-fun ok64 X(SKIP, find)(u8c$ range, u8b hay, u8cs needle, $cmpfn cmp) {
-    sane(range != NULL && Bok(hay) && $ok(needle) && cmp != NULL);
+// Find: takes a "less than" predicate z over u8csc slices.  Equality
+// is derived as !z(a,b) && !z(b,a).  Matches the X(,zs) shape from
+// Sx.h.
+fun ok64 X(SKIP, find)(u8csp range, u8b hay, u8cs needle, u8zs z) {
+    sane(range != NULL && Bok(hay) && $ok(needle) && z != NULL);
     X(SKIP, tab) k = {};
     call(X(SKIP, load), &k, hay);
     u64 from = 0;
     for (int h = X(SKIP, top)(k.pos) - 1; h >= 0; --h) {
         size_t pos = X(SKIP, pos)(&k, h);
-        if (from >= pos) continue;  // been there
+        if (from >= pos) continue;
         X(SKIP, tab) hop = {};
         call(X(SKIP, hop), &hop, hay, &k, h);
         u64 b = hop.pos + X(SKIP, tlvlen)(hop.pos);
         a$tail(u8c, sub, u8bData(hay), b);
-        int c = cmp((cc$)needle, (cc$)sub);
-        if (c < 0) {
+        if (z(needle, sub)) {        // needle < sub
             k = hop;
             h = X(SKIP, len)(pos);
-        } else if (c > 0) {
+        } else if (z(sub, needle)) { // needle > sub
             from = b;
-        } else {
+        } else {                     // equal
             from = b;
             break;
         }
@@ -200,14 +202,14 @@ fun ok64 X(SKIP, find)(u8c$ range, u8b hay, u8cs needle, $cmpfn cmp) {
     done;
 }
 
-fun ok64 X(SKIP, findTLV)(u8c$ rec, u8bp buf, u8cs x, $cmpfn cmp) {
+fun ok64 X(SKIP, findTLV)(u8csp rec, u8bp buf, u8cs x, u8zs z) {
     u8cs gap = {};
-    ok64 o = X(SKIP, find)(gap, buf, x, cmp);
+    ok64 o = X(SKIP, find)(gap, buf, x, z);
     if (o != OK) return o;
     u8cs r = {};
     while (!$empty(gap) && OK == (o = TLVDrain$(r, gap))) {
         if ((**r & ~TLVaA) == SKIP_TLV_TYPE) continue;
-        if (cmp((cc$)x, (cc$)r) <= 0) {
+        if (!z(r, x)) {              // x <= r  ⇔  !(r < x)
             $mv(rec, r);
             return OK;
         }

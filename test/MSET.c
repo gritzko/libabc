@@ -40,7 +40,7 @@ ok64 MSET2() {
         input[i] = ref[i] = r;
     }
     u64s refs = {ref, ref + BULK_N};
-    $sort(refs, u64cmp);
+    u64sSort(refs);
     u64cs runs[BULK_K];
     size_t chunk = BULK_N / BULK_K;
     for (int i = 0; i < BULK_K; i++) {

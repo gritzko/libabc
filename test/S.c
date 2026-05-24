@@ -51,7 +51,7 @@ ok64 $test2() {
     call(i32sFeed1, into, 3);
     call(i32sFeed1, into, 6);
 
-    $i32sort(data);
+    i32sSort(data);
 
     a_dup(i32, d, data);
     int j = 0;
@@ -59,7 +59,7 @@ ok64 $test2() {
 
     for (i32 i = 0; i < $len(data); i++) {
         want($at(data, i) == i);
-        i32* p = $i32bsearch(&i, (i32c$)data);
+        i32* p = i32sBinSearch(&i, data);
         want(p - *data == i);
     }
 

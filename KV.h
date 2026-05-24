@@ -9,15 +9,8 @@ typedef struct kv32 {
 
 fun u64 kv32hash(kv32 const *v) { return mix32(v->key); }
 
-fun int kv32cmp(const kv32 *a, const kv32 *b) {
-    if (a->key < b->key) {
-        return -1;
-    } else if (a->key > b->key) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
+fun b8 kv32Z(kv32 const *a, kv32 const *b) { return a->key < b->key; }
+fun b8 kv32hashEq(kv32 const *a, kv32 const *b) { return a->key == b->key; }
 
 #define X(M, name) M##kv32##name
 #include "Bx.h"
@@ -30,20 +23,12 @@ typedef struct kv64 {
 
 fun u64 kv64hash(kv64 const *v) { return mix64(v->key); }
 
-fun int kv64cmp(const kv64 *a, const kv64 *b) {
-    if (a->key < b->key) {
-        return -1;
-    } else if (a->key > b->key) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
+fun b8 kv64Z(kv64 const *a, kv64 const *b) { return a->key < b->key; }
+fun b8 kv64hashEq(kv64 const *a, kv64 const *b) { return a->key == b->key; }
 
 #define X(M, name) M##kv64##name
 #include "Bx.h"
+#include "QSORTx.h"
 #undef X
-
-fun b8 kv64Z(kv64cp a, kv64cp b) { return a->key < b->key; }
 
 #endif

@@ -179,8 +179,8 @@ ok64 LSMu64() {
     u8 tmpbuf[N * sizeof(u64)];
     $u8 tmp = {tmpbuf, tmpbuf + sizeof(tmpbuf)};
     call(LSMSort, data, u64drain, u64less, u64copy, tmp);
-    u64 *copyslice[2] = {copy, copy + N};
-    $sort(copyslice, u64cmp);
+    u64s copyslice = {copy, copy + N};
+    u64sSort(copyslice);
     for (int i = 0; i < N; i++) {
         want(nums[i] == copy[i]);
     }

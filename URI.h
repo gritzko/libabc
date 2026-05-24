@@ -37,7 +37,7 @@ typedef uri URIstate;
 // Required by the Bx.h template.  Order URIs by their `data` slice
 // content — covers every populated component since `data` is a view
 // over the original byte source the lexer parsed.
-fun int uricmp(uri const *a, uri const *b) { return $cmp(a->data, b->data); }
+fun b8 uriZ(uri const *a, uri const *b) { return u8csZ(&a->data, &b->data); }
 
 // Generate urib / uribFeed1 / uribDataLen / uribData / urisAtP /
 // uricsAtP etc.  Buffer of uri values; one heap allocation per

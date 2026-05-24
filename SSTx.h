@@ -94,9 +94,25 @@ fun int X(SST, cmp)($cc a, $cc b) {
     Key keya = X(, max), keyb = X(, max);
     X(, unpack)(&keya, ka);
     X(, unpack)(&keyb, kb);
-    int z = X(, cmp)(&keya, &keyb);
-    if (z == 0) z = u8cmp(&ta, &tb);
-    return z;
+    if (X(, Z)(&keya, &keyb)) return -1;
+    if (X(, Z)(&keyb, &keya)) return 1;
+    if (ta != tb) return ta < tb ? -1 : 1;
+    return 0;
+}
+
+fun b8 X(SST, Z)(u8csc a, u8csc b) {
+    u8 ta = 0, tb = 0;
+    u8cs ka = {}, va = {}, kb = {}, vb = {};
+    a_dup(u8c, aa, a);
+    a_dup(u8c, bb, b);
+    TLVDrainKeyVal(&ta, ka, va, aa);
+    TLVDrainKeyVal(&tb, kb, vb, bb);
+    Key keya = X(, max), keyb = X(, max);
+    X(, unpack)(&keya, ka);
+    X(, unpack)(&keyb, kb);
+    if (X(, Z)(&keya, &keyb)) return YES;
+    if (X(, Z)(&keyb, &keya)) return NO;
+    return ta < tb;
 }
 
 fun ok64 X(SST, locate)(u8c$ rest, X(SST, ) sst, u8 type, Key const* key) {
@@ -107,7 +123,7 @@ fun ok64 X(SST, locate)(u8c$ rest, X(SST, ) sst, u8 type, Key const* key) {
     X(, pack)(rawidle, key);
     *u8bAtP(rawbuf, 1) = $len(rawdata) - 2;
     *u8bAtP(rawbuf, 2) = $len(rawdata) - 3;
-    return SKIPu8find(rest, sst, rawdata, X(SST, cmp));
+    return SKIPu8find(rest, sst, rawdata, X(SST, Z));
 }
 
 fun ok64 X(SST, next)(u8* t, Key* key, u8c$ val, u8cs rest) {
@@ -132,10 +148,9 @@ fun ok64 X(SST, getkv)(u8c$ rec, X(SST, ) sst, u8 type, Key const* key) {
         a$dup(u8c, dup, rest);
         o = X(SST, next)(&t, &k, v, rest);
         if (o != OK) break;
-        int z = X(, cmp)(&k, key);
-        if (z < 0) {
+        if (X(, Z)(&k, key)) {
             continue;
-        } else if (z == 0) {
+        } else if (!X(, Z)(key, &k)) {
             if (type != 0 && type != t) {
                 continue;
             }
@@ -159,10 +174,9 @@ fun ok64 X(SST, get)(u8* type, u8c$ val, X(SST, ) sst, Key const* key) {
         u8 t = 0;
         o = X(SST, next)(&t, &k, val, rest);
         if (o != OK) break;
-        int z = X(, cmp)(&k, key);
-        if (z < 0) {
+        if (X(, Z)(&k, key)) {
             continue;
-        } else if (z == 0) {
+        } else if (!X(, Z)(key, &k)) {
             if (*type == 0) {
                 *type = t;
             } else if (*type != t) {

@@ -55,7 +55,7 @@ fun void X(MSET, _Down)(X(, css) h, size_t at) {
 }
 
 // Sort a slice in-place using the element comparator.
-fun void X(MSET, Sort)(X(, s) data) { $sort(data, X(, cmp)); }
+fun void X(MSET, Sort)(X(, s) data) { X(, sSort)(data); }
 
 // --- Composable iteration primitives ---
 

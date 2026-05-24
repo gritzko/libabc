@@ -24,7 +24,7 @@ static void QSort(benchmark::State &state) {
         for (u64 i = 0; i < n; ++i) {
             u64sFeed1(intsidle, i ^ r);
         }
-        $sort(intsdata, u64cmp);
+        u64sSort(intsdata);
         assert(*$head(intsdata) <= *$last(intsdata));
         assert($len(intsdata) == n);
         Breset(intsbuf);

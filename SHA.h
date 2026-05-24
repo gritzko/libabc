@@ -29,8 +29,8 @@ fun void SHAClose(SHAstate* state, sha256* hash) {
     crypto_hash_sha256_final(state, hash->data);
 }
 
-fun int sha256cmp(sha256 const* a, sha256 const* b) {
-    return memcmp(a, b, sizeof(sha256));
+fun b8 sha256Z(sha256 const* a, sha256 const* b) {
+    return memcmp(a, b, sizeof(sha256)) < 0;
 }
 
 fun int sha256eq(sha256 const* a, sha256 const* b) {

@@ -10,8 +10,6 @@
 #include "OK.h"
 #include "TEST.h"
 
-fun u64 u32hash(u32 const *v) { return mix32(*v); }
-
 #define X(M, name) M##u32##name
 #define ABC_HASH_CONVERGE 1
 #include "HASHx.h"

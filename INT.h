@@ -23,58 +23,28 @@ con ok64 INTBAD = 0x49774b28d;
 #define I64_MIN INT64_MIN
 #define I64_MIN_ABS 0x8000000000000000
 
-fun int u16cmp(const u16 *a, const u16 *b) { return (int)*a - (int)*b; }
-fun int u32cmp(const u32 *a, const u32 *b) {
-    // return (i64)*a - (i64)*b;
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
-fun int u64cmp(const u64 *a, const u64 *b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
-
 fun u64 u64hash(u64 const *v) { return mix64(*v); }
+fun b8 u64hashEq(u64 const *a, u64 const *b) { return *a == *b; }
+fun u64 u32hash(u32 const *v) { return mix32(*v); }
+fun b8 u32hashEq(u32 const *a, u32 const *b) { return *a == *b; }
 
-fun int i8cmp(const i8 *a, const i8 *b) { return (int)*a - (int)*b; }
-fun int i16cmp(const i16 *a, const i16 *b) { return (int)*a - (int)*b; }
-fun int i32cmp(const i32 *a, const i32 *b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
-fun int i64cmp(const i64 *a, const i64 *b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
+fun b8 u128Z(u128 const *a, u128 const *b) {
+    if (a->_64[1] != b->_64[1]) return a->_64[1] < b->_64[1];
+    return a->_64[0] < b->_64[0];
 }
 
-fun int u128cmp(u128 const *a, u128 const *b) {
-    int ret = u64cmp(&a->_64[1], &b->_64[1]);
-    if (ret == 0) {
-        ret = u64cmp(&a->_64[0], &b->_64[0]);
+fun b8 u256Z(u256 const *a, u256 const *b) {
+    for (int i = 3; i >= 0; --i) {
+        if (a->_64[i] != b->_64[i]) return a->_64[i] < b->_64[i];
     }
-    return ret;
+    return NO;
 }
 
-fun int u256cmp(u256 const *a, u256 const *b) {
-    int ret = u64cmp(&a->_64[3], &b->_64[3]);
-    if (ret == 0) {
-        ret = u64cmp(&a->_64[2], &b->_64[2]);
-        if (ret == 0) {
-            ret = u64cmp(&a->_64[1], &b->_64[1]);
-            if (ret == 0) {
-                ret = u64cmp(&a->_64[0], &b->_64[0]);
-            }
-        }
-    }
-    return ret;
-}
-
-fun int u512cmp(u512 const *a, u512 const *b) {
+fun b8 u512Z(u512 const *a, u512 const *b) {
     for (int i = 7; i >= 0; --i) {
-        if (a->_64[i] == b->_64[i]) continue;
-        return a->_64[i] < b->_64[i] ? -1 : 1;
+        if (a->_64[i] != b->_64[i]) return a->_64[i] < b->_64[i];
     }
-    return 0;
+    return NO;
 }
 
 #define X(M, name) M##u16##name
@@ -92,10 +62,7 @@ fun int u512cmp(u512 const *a, u512 const *b) {
 #include "QSORTx.h"
 #undef X
 
-fun int u64bcmp(u64b const *a, u64b const *b) {
-    if ((*a)[0] == (*b)[0]) return 0;
-    return (*a)[0] < (*b)[0] ? -1 : 1;
-}
+fun b8 u64bZ(u64b const *a, u64b const *b) { return (*a)[0] < (*b)[0]; }
 
 // u64bcp needed by Bx-generated u64bbIdx; ABC_X_$ skips it in Sx.h
 typedef u64b const *u64bcp;
@@ -140,10 +107,12 @@ fun ok64 u64bDigup(u64bp buf) {
 
 #define X(M, name) M##i32##name
 #include "Bx.h"
+#include "QSORTx.h"
 #undef X
 
 #define X(M, name) M##i64##name
 #include "Bx.h"
+#include "QSORTx.h"
 #undef X
 
 #define X(M, name) M##u256##name

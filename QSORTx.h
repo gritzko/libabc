@@ -12,6 +12,10 @@
 
 #define T X(, )
 
+// QSORTx requires value-semantics (T t = *p) which array typedefs don't have.
+// Array-element instantiations (ABC_X_$) must build their own sort.
+#ifndef ABC_X_$
+
 #define QS_ISORT_THRESH 24
 
 // --- Insertion sort for small arrays ---
@@ -139,6 +143,23 @@ fun void X(, bSort)(X(, b) buf) {
     X(, sSort)(data);
 }
 
+// --- Z-based binary search on a sorted slice ---
+//
+// Returns a pointer to a matching element, or NULL if not found.
+// "Match" is the standard Z derivation: !Z(a,b) && !Z(b,a).
+
+fun T *X(, sBinSearch)(T const *needle, X(, sc) data) {
+    size_t lo = 0, hi = (size_t)(data[1] - data[0]);
+    while (lo < hi) {
+        size_t mid = lo + ((hi - lo) >> 1);
+        T *p = data[0] + mid;
+        if (X(, Z)(p, needle)) lo = mid + 1;
+        else if (X(, Z)(needle, p)) hi = mid;
+        else return p;
+    }
+    return NULL;
+}
+
 // --- Dedup: shrink sorted slice, removing adjacent duplicates ---
 
 fun void X(, sDedup)(X(, s) data) {
@@ -162,5 +183,6 @@ fun void X(, bDedup)(X(, b) buf) {
     ((T **)buf)[2] = data[1];
 }
 
-#undef T
 #undef QS_ISORT_THRESH
+#endif  // !ABC_X_$
+#undef T

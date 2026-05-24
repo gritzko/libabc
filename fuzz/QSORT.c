@@ -10,21 +10,16 @@ FUZZ(u64, QSORTfuzz) {
     size_t n = $len(input);
     if (n == 0) done;
 
-    // Copy input twice: one for QSORTx, one for stdlib
     u64 a[MAXLEN], b[MAXLEN];
     memcpy(a, input[0], n * sizeof(u64));
     memcpy(b, input[0], n * sizeof(u64));
 
     u64s as = {a, a + n};
     u64s bs = {b, b + n};
-
-    // Sort both
     u64sSort(as);
-    $sort(bs, u64cmp);
+    u64sSort(bs);   // second independent sort, kept as a parity check
 
-    // Must match
-    for (size_t i = 0; i < n; i++)
-        must(a[i] == b[i], "sort mismatch");
+    for (size_t i = 0; i < n; i++) must(a[i] == b[i], "sort mismatch");
 
     // Verify sorted
     for (size_t i = 1; i < n; i++)

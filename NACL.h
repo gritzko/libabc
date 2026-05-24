@@ -18,6 +18,8 @@ typedef u256 blake256;
 
 #define edpub256cmp u256cmp
 #define edsig512cmp u512cmp
+#define edpub256Z u256Z
+#define edsig512Z u512Z
 
 con ok64 NACLBAD = 0x1728c54b28d;
 con ok64 NACLFAIL = 0x5ca3153ca495;

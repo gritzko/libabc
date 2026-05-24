@@ -50,6 +50,10 @@ typedef int16_t i16;
 typedef int32_t i32;
 
 typedef int64_t i64;
+typedef i8 *i8p;
+typedef i8 const *i8cp;
+typedef i16 *i16p;
+typedef i16 const *i16cp;
 typedef i32 *i32p;
 typedef i32 const *i32cp;
 typedef i64 *i64p;
@@ -420,6 +424,8 @@ fun b8 f64Z(f64 const *a, f64 const *b) { return *a < *b; }
 fun b8 u16Z(u16cp a, u16cp b) { return *a < *b; }
 fun b8 u32Z(u32cp a, u32cp b) { return *a < *b; }
 fun b8 u64Z(u64cp a, u64cp b) { return *a < *b; }
+fun b8 i8Z(i8cp a, i8cp b) { return *a < *b; }
+fun b8 i16Z(i16cp a, i16cp b) { return *a < *b; }
 fun b8 i32Z(i32cp a, i32cp b) { return *a < *b; }
 fun b8 i64Z(i64cp a, i64cp b) { return *a < *b; }
 fun b8 u8Z(u8cp a, u8cp b) { return *a < *b; }

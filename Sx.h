@@ -228,21 +228,7 @@ fun T const *X($, lastc)(X($c, c) data) {
     return data[1] - 1;
 }
 
-fun void X($, sort)(X($c, ) data) { $sort(data, X(, cmp)); }
-
-fun void X($, sortfn)(X($c, ) data, X(, cmpfn) fn) { $sort(data, fn); }
-
-fun T *X($, bsearch)(T const *p, X($c, c) data) {
-    return (T *)$bsearch(p, data, X(, cmp));
-}
-
-// sSort: see QSORTx.h (inline comparator, no function pointer overhead)
-
-fun void X(, sSortFn)(X(, s) data, X(, cmpfn) fn) { $sort(data, fn); }
-
-fun T *X(, sBsearch)(T const *p, X(, sc) data) {
-    return (T *)$bsearch(p, data, X(, cmp));
-}
+// sSort / sBinSearch: see QSORTx.h (inline Z comparator, no fn-ptr overhead)
 
 // Find the first entry >= needle, or $term if none.
 fun T const *X(, sFindGE)(X($c, c) haystack, T const *needle) {
@@ -250,15 +236,11 @@ fun T const *X(, sFindGE)(X($c, c) haystack, T const *needle) {
     if (e == 0) return haystack[1];
     while (e > b + 1) {
         size_t m = (b + e) >> 1;
-        int c = X(, cmp)($atp(haystack, m), needle);
-        if (c < 0) {
-            b = m;
-        } else {
-            e = m;
-        }
+        if (X(, Z)($atp(haystack, m), needle)) b = m;
+        else e = m;
     }
-    int c = X(, cmp)($atp(haystack, b), needle);
-    return $atp(haystack, c < 0 ? e : b);
+    if (X(, Z)($atp(haystack, b), needle)) return $atp(haystack, e);
+    return $atp(haystack, b);
 }
 
 // Find sub-slice [sFindGE(lo), sFindGE(hi)) within a sorted haystack.
@@ -819,14 +801,14 @@ fun void X($, str0)(X($, c) s, T const *a) {
     u8 v0[sizeof(T)] = {};
     s[0] = a;
     size_t i = 0;
-    while (X(, cmp)((T const *)&v0, a + i) != 0) ++i;
+    while (0 != memcmp(&v0, a + i, sizeof(T))) ++i;
     s[1] = a + i;
 }
 
 static const u8 X(, zero)[sizeof(T)] = {};
 
 fun b8 X($, is0)(X($, ) s, size_t ndx) {
-    return X(, cmp)((T const *)X(, zero), X(, sAtP)(s, ndx)) == 0;
+    return 0 == memcmp(X(, zero), X(, sAtP)(s, ndx), sizeof(T));
 }
 
 fun b8 X(, IsZero)(X(, cp) p) {

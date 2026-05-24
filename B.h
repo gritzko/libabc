@@ -221,19 +221,20 @@ typedef struct {
 
 // Byte offset range [lo, hi)
 typedef struct { u32 lo; u32 hi; } range32;
-con range32 range32Z = {};
 
-fun int range32cmp(range32 const *a, range32 const *b) {
-    if (a->lo != b->lo) return (a->lo > b->lo) - (a->lo < b->lo);
-    return (a->hi > b->hi) - (a->hi < b->hi);
+fun b8 range32Z(range32 const *a, range32 const *b) {
+    if (a->lo != b->lo) return a->lo < b->lo;
+    return a->hi < b->hi;
 }
 
 // Match range: pairs haystack and needle byte ranges
 typedef struct { range32 hay; range32 ndl; } match32;
-con match32 match32Z = {};
 
-fun int match32cmp(match32 const *a, match32 const *b) {
-    return memcmp(a, b, sizeof(match32));
+fun b8 match32Z(match32 const *a, match32 const *b) {
+    if (a->hay.lo != b->hay.lo) return a->hay.lo < b->hay.lo;
+    if (a->hay.hi != b->hay.hi) return a->hay.hi < b->hay.hi;
+    if (a->ndl.lo != b->ndl.lo) return a->ndl.lo < b->ndl.lo;
+    return a->ndl.hi < b->ndl.hi;
 }
 
 #endif

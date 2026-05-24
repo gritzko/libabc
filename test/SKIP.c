@@ -109,11 +109,11 @@ ok64 SKIP2() {
     done;
 }
 
-fun int cmp($cc a, $cc b) {
-    u64* aa = (u64*)*a;
-    u64* bb = (u64*)*b;
+fun b8 cmpZ(u8csc a, u8csc b) {
+    u64* aa = (u64*)a[0];
+    u64* bb = (u64*)b[0];
     fprintf(stderr, "\t%" PRIu64 " <> %" PRIu64 "\n", *aa, *bb);
-    return u64cmp(aa, bb);
+    return *aa < *bb;
 }
 
 ok64 SKIP3() {
@@ -129,7 +129,7 @@ ok64 SKIP3() {
     for (u64 u = 0; u < SCALE / 16; ++u) {
         u8cs gap = {};
         a_rawc(raw, u);
-        call(SKIPu8find, gap, pad, raw, cmp);
+        call(SKIPu8find, gap, pad, raw, cmpZ);
         u64c* head = (u64c*)*gap;
         want(*head <= u);  // && u - *head < 256 / 8);
         fprintf(stderr, "%" PRIu64 " IN %" PRIu64 " [%zu,%zu) of %zu?\n", u, *head,
@@ -138,13 +138,13 @@ ok64 SKIP3() {
     done;
 }
 
-fun int tlvcmp($cc a, $cc b) {
+fun b8 tlvcmpZ(u8csc a, u8csc b) {
     if ($len(a) < 8 + 2 || $len(b) < 8 + 2) {
         abort();
     }
-    u64* aa = (u64*)(*a + 2);
-    u64* bb = (u64*)(*b + 2);
-    return u64cmp(aa, bb);
+    u64* aa = (u64*)(a[0] + 2);
+    u64* bb = (u64*)(b[0] + 2);
+    return *aa < *bb;
 }
 
 ok64 SKIP4() {
@@ -167,7 +167,7 @@ ok64 SKIP4() {
         };
         *(u64*)(u10 + 2) = u;
         a_rawc(raw, u10);
-        call(SKIPu8findTLV, gap, pad, raw, tlvcmp);
+        call(SKIPu8findTLV, gap, pad, raw, tlvcmpZ);
         call(TLVu8sDrain, gap, &t, val);
         want(t == 'I');
         want($len(val) == 8);

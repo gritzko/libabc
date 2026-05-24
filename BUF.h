@@ -7,22 +7,13 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-fun int u8cmp(const u8 *a, const u8 *b) { return (int)*a - (int)*b; }
+fun b8 u8cpZ(u8 const *const *a, u8 const *const *b) { return *a < *b; }
 
-fun int u8cpcmp(u8 const *const *a, u8 const *const *b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
-
-fun int u8pcmp(u8 *const *a, u8 *const *b) {
-    if (*a == *b) return 0;
-    return *a < *b ? -1 : 1;
-}
-
-fun int u8csmp(u8 const *const *a, u8 const *const *b) { return $cmp(a, b); }
+fun b8 u8pZ(u8 *const *a, u8 *const *b) { return *a < *b; }
 
 #define X(M, name) M##u8##name
 #include "Bx.h"
+#include "QSORTx.h"
 #undef X
 
 fun void u8sFill(u8s s, u8 v) { memset((void *)*s, v, $size(s)); }
@@ -40,17 +31,20 @@ typedef void void0;
 typedef void *void0p;
 typedef void const *void0cp;
 
-fun int void0pcmp(void *const *a, void *const *b) {
-    if (*a < *b) return -1;
-    if (*a > *b) return 1;
-    return 0;
-}
+fun b8 void0pZ(void *const *a, void *const *b) { return *a < *b; }
 
 #define X(M, name) M##void0p##name
 #include "Bx.h"
 #undef X
 
-fun int u8scmp(u8s const *a, u8s const *b) { return $cmp(*a, *b); }
+fun b8 u8sZ(u8s const *a, u8s const *b) {
+    size_t sza = (size_t)((*a)[1] - (*a)[0]);
+    size_t szb = (size_t)((*b)[1] - (*b)[0]);
+    size_t sz = sza < szb ? sza : szb;
+    int ret = memcmp((*a)[0], (*b)[0], sz);
+    if (ret == 0 && sza != szb) return sza < szb;
+    return ret < 0;
+}
 
 typedef u8s const *u8scp;
 
@@ -59,8 +53,6 @@ typedef u8s const *u8scp;
 #include "Bx.h"
 #undef ABC_X_$
 #undef X
-
-fun int u8cscmp(u8cs const *a, u8cs const *b) { return $cmp(*a, *b); }
 
 //  Pull one '\n'-terminated line off the head of `in`, advancing past
 //  the newline.  On OK, `line_out` spans the line bytes (excluding
@@ -82,15 +74,22 @@ fun ok64 u8csDrainLine(u8cs in, u8csp line_out) {
 typedef u8cs const *$u8ccp;
 typedef u8cs const *u8cscp;
 
+fun b8 u8csZ(u8cscp a, u8cscp b) {
+    size_t sza = (size_t)((*a)[1] - (*a)[0]);
+    size_t szb = (size_t)((*b)[1] - (*b)[0]);
+    size_t sz = sza < szb ? sza : szb;
+    int ret = memcmp((*a)[0], (*b)[0], sz);
+    if (ret == 0 && sza != szb) return sza < szb;
+    return ret < 0;
+}
+
 #define X(M, name) M##u8cs##name
 #define ABC_X_$
 #include "Bx.h"
 #undef ABC_X_$
 #undef X
 
-fun int u8bcmp(u8b const *a, u8b const *b) {
-    return u8cpcmp((u8cp *)((*a)[0]), (u8cp *)((*b)[0]));
-}
+fun b8 u8bZ(u8b const *a, u8b const *b) { return (*a)[0] < (*b)[0]; }
 
 typedef u8b const *u8bcp;
 
@@ -270,14 +269,6 @@ fun ok64 u8sPop32(u8cs s, u32p last) {
 // Plain allocated buffers return BNOROOM/BNODATA.
 ok64 u8bWantIdleLen(u8bp buf, size_t need);
 ok64 u8bWantDataLen(u8bp buf, size_t need);
-
-fun b8 u8csZ(u8cscp a, u8cscp b) {
-    size_t sza = u8csLen(*a), szb = u8csLen(*b);
-    size_t sz = sza < szb ? sza : szb;
-    int ret = memcmp(**a, **b, sz);
-    if (ret == 0 && sza != szb) return sza < szb;
-    return ret < 0;
-}
 
 // range32/match32 collection types (typedefs are in B.h)
 #define X(M, name) M##range32##name
