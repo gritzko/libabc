@@ -43,7 +43,7 @@ fun b8 uriZ(uri const *a, uri const *b) { return u8csZ(&a->data, &b->data); }
 // uricsAtP etc.  Buffer of uri values; one heap allocation per
 // `cli` instance, lifetime owned by the entry frame (CLAUDE.md §5).
 #define X(M, name) M##uri##name
-#include "abc/Bx.h"
+#include "Bx.h"
 #undef X
 
 // Parse URI from `state->data`.  Like any abc/S.md drain, URILexer
