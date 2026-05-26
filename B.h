@@ -87,6 +87,26 @@ typedef void **voidbp;
     a_pad(T, n, l);     \
     zerob(n);
 
+// a_lign(T, gauge, buf) — declare T##gp `gauge` over `buf`'s idle,
+// aligned to T.  Any prior DATA + padding lands in PAST.
+#define a_lign(T, gauge, buf) T##gp gauge = T##bAlign(buf)
+
+// a_cq(T, slice, buf) — declare T##cs `slice` capturing `buf`'s
+// current DATA, then collapse DATA into PAST.
+#define a_cq(T, slice, buf) \
+    T##cs slice = {};       \
+    T##bAcq(buf, slice)
+
+// a_rent(T, news, buf, orig) — declare T##cs `news`, rent it from
+// the u8 arena `buf` using T's alignment.  Expands to a decl plus a
+// call(), so the caller must be inside a sane()'d function (PRO.h).
+#define a_rent(T, news, buf, orig) \
+    T##cs news = {};               \
+    call(T##bAren, buf, news, orig)
+
+// a_ren(news, buf, orig) — u8 variant of a_rent (no alignment).
+#define a_ren(news, buf, orig) a_rent(u8, news, buf, orig)
+
 #define s_pad(T, n, l)                              \
     static T _##n[(l)];                             \
     static T *n[4] = {_##n, _##n, _##n, _##n + (l)}

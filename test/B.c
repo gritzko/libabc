@@ -115,10 +115,9 @@ ok64 u8sPrintf_test() {
 
     // u8gPrintf: write into a gauge
     a_pad(u8, gbuf, 64);
-    u8gp gg = u8aOpen(gbuf);
+    a_lign(u8, gg, gbuf);
     call(u8gPrintf, gg, "x=%d", 99);
-    u8cs gleft = {};
-    u8aClose(gbuf, gleft);
+    a_cq(u8, gleft, gbuf);
     a$str(gexp, "x=99");
     $testeq(gexp, gleft);
 

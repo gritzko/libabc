@@ -1,25 +1,24 @@
-#include "AREA.h"
+#include "BUF.h"
 #include "INT.h"
 #include "PRO.h"
 #include "TEST.h"
 
-ok64 AREACarveTest() {
+// Test 1: aCarve — fixed-cap child buffers carved from a u8 arena
+ok64 aCarveTest() {
     sane(1);
 
-    Bu8 area = {};
-    call(AREAOpen, area, MB);
+    Bu8 arena = {};
+    call(u8bMap, arena, MB);
 
-    // Carve three typed buffers
     Bu8 bytes = {};
-    AREACarve(area, u8, bytes, 1000);
+    call(u8aCarve, arena, bytes, 1000);
 
     Bu32 words = {};
-    AREACarve(area, u32, words, 500);
+    call(u32aCarve, arena, words, 500);
 
     Bu64 quads = {};
-    AREACarve(area, u64, quads, 200);
+    call(u64aCarve, arena, quads, 200);
 
-    // Each buffer is empty but has correct capacity
     testeqv((long long)(u8bDataLen(bytes)), (long long)(0), "%lld");
     testeqv((long long)(u8bLen(bytes)), (long long)(1000), "%lld");
     testeqv((long long)(u32bDataLen(words)), (long long)(0), "%lld");
@@ -27,34 +26,19 @@ ok64 AREACarveTest() {
     testeqv((long long)(u64bDataLen(quads)), (long long)(0), "%lld");
     testeqv((long long)(u64bLen(quads)), (long long)(200), "%lld");
 
-    // Buffers don't overlap: each starts at or past the previous end
     test((u8p)words[0] >= (u8p)bytes[3], FAIL);
     test((u8p)quads[0] >= (u8p)words[3], FAIL);
 
-    // Alignment: u32 buffer is 4-aligned, u64 buffer is 8-aligned
     test(((size_t)words[0] & 3) == 0, FAIL);
     test(((size_t)quads[0] & 7) == 0, FAIL);
 
-    // Everything lives inside the area
-    test(AREAContains(area, bytes[0]), FAIL);
-    test(AREAContains(area, words[0]), FAIL);
-    test(AREAContains(area, quads[0]), FAIL);
-    test((u8cp)bytes[3] <= (u8cp)area[3], FAIL);
-    test((u8cp)words[3] <= (u8cp)area[3], FAIL);
-    test((u8cp)quads[3] <= (u8cp)area[3], FAIL);
+    test(u8bContains(arena, bytes[0]), FAIL);
+    test(u8bContains(arena, words[0]), FAIL);
+    test(u8bContains(arena, quads[0]), FAIL);
+    test((u8cp)bytes[3] <= (u8cp)arena[3], FAIL);
+    test((u8cp)words[3] <= (u8cp)arena[3], FAIL);
+    test((u8cp)quads[3] <= (u8cp)arena[3], FAIL);
 
-    // Total consumed <= 1MB
-    size_t used = u8bBusyLen(area);
-    size_t expected = 1000 * sizeof(u8) + 500 * sizeof(u32) +
-                      200 * sizeof(u64);
-    test(used >= expected, FAIL);
-    test(used <= expected + 16, FAIL);
-
-    // Remaining area room
-    size_t left = u8bIdleLen(area);
-    test(left + used == (size_t)Bsize(area), FAIL);
-
-    // Actually use the buffers: feed and read back
     for (u8 i = 0; i < 100; ++i) call(u8bFeed1, bytes, i);
     testeqv((long long)(u8bDataLen(bytes)), (long long)(100), "%lld");
     testeqv((long long)(Bat(bytes, 50)), (long long)(50), "%lld");
@@ -67,49 +51,39 @@ ok64 AREACarveTest() {
     testeqv((long long)(u64bDataLen(quads)), (long long)(100), "%lld");
     testeqv((long long)(Bat(quads, 5)), (long long)(65), "%lld");
 
-    // Outside pointer is not contained
     u8 stack_var = 0;
-    test(!AREAContains(area, &stack_var), FAIL);
+    test(!u8bContains(arena, &stack_var), FAIL);
 
-    call(AREAClose, area);
+    call(u8bUnMap, arena);
     done;
 }
 
-// Test 1: u8aOpen — feed bytes, grab slice, close
-ok64 u8aOpenTest() {
+// Test 2: bAlign/bAcq — u8 source, no alignment
+ok64 bAlignU8Test() {
     sane(1);
 
     Bu8 arena = {};
     call(u8bAllocate, arena, 4096);
 
-    // Open a u8 sub-allocation
-    u8gp g = u8aOpen(arena);
-
-    // Gauge rest is the entire arena idle
+    a_lign(u8, g, arena);
     testeqv((long long)(u8gRestLen(g)), (long long)(4096), "%lld");
     testeqv((long long)(u8gLeftLen(g)), (long long)(0), "%lld");
 
-    // Feed some bytes
     for (u8 i = 0; i < 100; ++i) call(u8gFeed1, g, i);
     testeqv((long long)(u8gLeftLen(g)), (long long)(100), "%lld");
 
-    // Close: commits data to past, returns slice
-    u8cs s1 = {};
-    u8aClose(arena, s1);
+    a_cq(u8, s1, arena);
     testeqv((long long)(u8csLen(s1)), (long long)(100), "%lld");
-
-    // After close, past region consumed 100 bytes
     testeqv((long long)(u8bPastLen(arena)), (long long)(100), "%lld");
 
-    // Open again, feed more
-    g = u8aOpen(arena);
-    testeqv((long long)(u8gRestLen(g)), (long long)(4096 - 100), "%lld");
-    for (u8 i = 0; i < 50; ++i) call(u8gFeed1, g, i);
-    u8cs s1b = {};
-    u8aClose(arena, s1b);
+    a_lign(u8, g2, arena);
+    testeqv((long long)(u8gRestLen(g2)), (long long)(4096 - 100), "%lld");
+    for (u8 i = 0; i < 50; ++i) call(u8gFeed1, g2, i);
+    a_cq(u8, s1b, arena);
+    testeqv((long long)(u8csLen(s1b)), (long long)(50), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(150), "%lld");
 
-    // Original slice still valid (same backing memory)
+    // Earlier slice still valid (same backing memory).
     testeqv((long long)(u8csLen(s1)), (long long)(100), "%lld");
     testeqv((long long)(*s1[0]), (long long)(0), "%lld");
     testeqv((long long)(*(s1[1] - 1)), (long long)(99), "%lld");
@@ -118,40 +92,36 @@ ok64 u8aOpenTest() {
     done;
 }
 
-// Test 2: u32aOpen — feed u32s, verify alignment
-ok64 u32aOpenTest() {
+// Test 3: bAlign/bAcq — typed gauge, alignment padding folds into PAST
+ok64 bAlignU32Test() {
     sane(1);
 
     Bu8 arena = {};
     call(u8bAllocate, arena, 4096);
 
-    // Feed one byte to misalign
-    u8gp g0 = u8aOpen(arena);
+    // Misalign with a 1-byte u8 rental
+    a_lign(u8, g0, arena);
     call(u8gFeed1, g0, 0xFF);
-    u8cs pad = {};
-    u8aClose(arena, pad);
+    a_cq(u8, pad, arena);
+    testeqv((long long)(u8csLen(pad)), (long long)(1), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(1), "%lld");
 
-    // Open u32 arena — should align up to 4
-    u32gp g = u32aOpen(arena);
+    // u32 align: bAlign rounds up to 4
+    a_lign(u32, g, arena);
     test(((uintptr_t)g[1] & 3) == 0, FAIL);
-    // Alignment padding ate 3 bytes
     test(u8bPastLen(arena) >= 4, FAIL);
 
-    // Feed u32 values
     for (u32 i = 0; i < 50; ++i) call(u32gFeed1, g, i * 7);
     testeqv((long long)(u32gLeftLen(g)), (long long)(50), "%lld");
 
-    u32cs left = {};
-    u32aClose(arena, left);
+    a_cq(u32, left, arena);
     testeqv((long long)(u32csLen(left)), (long long)(50), "%lld");
     testeqv((long long)(*left[0]), (long long)(0), "%lld");
     testeqv((long long)(*(left[0] + 10)), (long long)(70), "%lld");
 
-    // Past consumed: 4 (aligned) + 50*4 = 204 bytes
+    // 4 (aligned) + 50*4 = 204 bytes in PAST
     testeqv((long long)(u8bPastLen(arena)), (long long)(4 + 50 * 4), "%lld");
 
-    // Slice data survives after close
     testeqv((long long)(*left[0]), (long long)(0), "%lld");
     testeqv((long long)(*(left[0] + 49)), (long long)(49 * 7), "%lld");
 
@@ -159,41 +129,33 @@ ok64 u32aOpenTest() {
     done;
 }
 
-// Test 3: Mixed u8 + u32 interleaved — model the LESS pattern
+// Test 4: Mixed u8 + u32 — typical interleaved workload
 ok64 MixedArenaTest() {
     sane(1);
 
     Bu8 arena = {};
     call(u8bAllocate, arena, 8192);
 
-    // Phase 1: write some u8 bytes
-    u8gp g8 = u8aOpen(arena);
     u8cs hello = $u8str("hello");
+    a_lign(u8, g8, arena);
     call(u8gFeed, g8, hello);
-    u8cs s_hello = {};
-    u8aClose(arena, s_hello);
+    a_cq(u8, s_hello, arena);
     testeqv((long long)(u8bPastLen(arena)), (long long)(5), "%lld");
 
-    // Phase 2: write some u32 tokens
-    u32gp g32 = u32aOpen(arena);
+    a_lign(u32, g32, arena);
     test(((uintptr_t)g32[1] & 3) == 0, FAIL);
     for (u32 i = 0; i < 10; ++i) call(u32gFeed1, g32, i + 100);
-    u32cs toks = {};
-    u32aClose(arena, toks);
+    a_cq(u32, toks, arena);
     testeqv((long long)(u32csLen(toks)), (long long)(10), "%lld");
 
-    // Phase 3: more u8 bytes
-    g8 = u8aOpen(arena);
     u8cs world = $u8str("world");
-    call(u8gFeed, g8, world);
-    u8cs s_world = {};
-    u8aClose(arena, s_world);
+    a_lign(u8, g8b, arena);
+    call(u8gFeed, g8b, world);
+    a_cq(u8, s_world, arena);
 
-    // All data inside the arena
     test(u8bPastLen(arena) > 0, FAIL);
     test(u8bPastLen(arena) <= 8192, FAIL);
 
-    // Original slices still point to valid data
     $testeq(s_hello, hello);
     testeqv((long long)(u32csLen(toks)), (long long)(10), "%lld");
     testeqv((long long)(*toks[0]), (long long)(100), "%lld");
@@ -204,75 +166,64 @@ ok64 MixedArenaTest() {
     done;
 }
 
-// Test 4: Multiple cycles then arena reset
+// Test 5: Many rentals then u8bReset reuses the whole arena
 ok64 ArenaCycleTest() {
     sane(1);
 
     Bu8 arena = {};
     call(u8bAllocate, arena, 4096);
 
-    // Do 10 open/feed/close cycles
     for (int cycle = 0; cycle < 10; ++cycle) {
-        u32gp g = u32aOpen(arena);
+        a_lign(u32, g, arena);
         for (u32 i = 0; i < 20; ++i) call(u32gFeed1, g, i);
         testeqv((long long)(u32gLeftLen(g)), (long long)(20), "%lld");
-        u32cs cyc = {};
-        u32aClose(arena, cyc);
+        a_cq(u32, cyc, arena);
+        (void)cyc;
     }
 
-    // Arena should have consumed 10 * 20 * 4 = 800 bytes (plus alignment)
     test(u8bPastLen(arena) >= 800, FAIL);
     test(u8bPastLen(arena) <= 800 + 10 * 4, FAIL);
 
-    // Reset the arena — reuse all space
     u8bReset(arena);
     testeqv((long long)(u8bPastLen(arena)), (long long)(0), "%lld");
     testeqv((long long)(u8bIdleLen(arena)), (long long)(4096), "%lld");
 
-    // Can fill again after reset
-    u8gp g8 = u8aOpen(arena);
+    a_lign(u8, g8, arena);
     for (u8 i = 0; i < 200; ++i) call(u8gFeed1, g8, i);
-    testeqv((long long)(u8gLeftLen(g8)), (long long)(200), "%lld");
-    u8cs refill = {};
-    u8aClose(arena, refill);
+    a_cq(u8, refill, arena);
+    testeqv((long long)(u8csLen(refill)), (long long)(200), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(200), "%lld");
 
     call(u8bFree, arena);
     done;
 }
 
-// Test 5: Verify slices remain valid after close
+// Test 6: All earlier rentals stay valid as later ones land
 ok64 ArenaSliceValidTest() {
     sane(1);
 
     Bu8 arena = {};
     call(u8bAllocate, arena, 4096);
 
-    // Allocate three slices
-    u8gp g1 = u8aOpen(arena);
     u8cs pat1 = $u8str("AAAA");
+    a_lign(u8, g1, arena);
     call(u8gFeed, g1, pat1);
-    u8cs s1 = {};
-    u8aClose(arena, s1);
+    a_cq(u8, s1, arena);
 
-    u32gp g2 = u32aOpen(arena);
+    a_lign(u32, g2, arena);
     call(u32gFeed1, g2, 0xDEADBEEF);
-    u32cs s2 = {};
-    u32aClose(arena, s2);
+    a_cq(u32, s2, arena);
 
-    u8gp g3 = u8aOpen(arena);
     u8cs pat3 = $u8str("ZZZZ");
+    a_lign(u8, g3, arena);
     call(u8gFeed, g3, pat3);
-    u8cs s3 = {};
-    u8aClose(arena, s3);
+    a_cq(u8, s3, arena);
 
-    // All three slices still valid, no overlap corruption
     $testeq(s1, pat1);
     testeqv((long long)(u32csLen(s2)), (long long)(1), "%lld");
     testeqv((long long)(*s2[0]), (long long)((u32)0xDEADBEEF), "%lld");
     $testeq(s3, pat3);
 
-    // Slices don't overlap
     test((u8cp)s1[1] <= (u8cp)s2[0], FAIL);
     test((u8cp)s2[1] <= (u8cp)s3[0], FAIL);
 
@@ -280,14 +231,53 @@ ok64 ArenaSliceValidTest() {
     done;
 }
 
+// Test 7: a_ren / a_rent — one-shot rental over a known source
+ok64 ArenaRenTest() {
+    sane(1);
+
+    Bu8 arena = {};
+    call(u8bAllocate, arena, 4096);
+
+    u8cs hello = $u8str("hello");
+    a_ren(stored_hello, arena, hello);
+    $testeq(stored_hello, hello);
+    test(u8bContains(arena, stored_hello[0]), FAIL);
+    testeqv((long long)u8bPastLen(arena), (long long)5, "%lld");
+
+    u32 raw[4] = {10, 20, 30, 40};
+    u32cs src = {raw, raw + 4};
+    a_rent(u32, stored_toks, arena, src);
+    testeqv((long long)u32csLen(stored_toks), (long long)4, "%lld");
+    test(((uintptr_t)stored_toks[0] & 3) == 0, FAIL);
+    testeqv((long long)*stored_toks[0], (long long)10, "%lld");
+    testeqv((long long)*(stored_toks[0] + 3), (long long)40, "%lld");
+    // 5 bytes hello + 3 align pad + 16 bytes u32s = 24 in PAST
+    testeqv((long long)u8bPastLen(arena), (long long)24, "%lld");
+
+    $testeq(stored_hello, hello);
+
+    // BNOROOM path
+    Bu8 small = {};
+    call(u8bAllocate, small, 4);
+    u8cs too_big = $u8str("overflow");
+    u8cs out = {};
+    ok64 o = u8bAren(small, out, too_big);
+    test(o == BNOROOM, FAIL);
+    call(u8bFree, small);
+
+    call(u8bFree, arena);
+    done;
+}
+
 ok64 AREAtest() {
     sane(1);
-    call(AREACarveTest);
-    call(u8aOpenTest);
-    call(u32aOpenTest);
+    call(aCarveTest);
+    call(bAlignU8Test);
+    call(bAlignU32Test);
     call(MixedArenaTest);
     call(ArenaCycleTest);
     call(ArenaSliceValidTest);
+    call(ArenaRenTest);
     done;
 }
 

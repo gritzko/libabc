@@ -462,6 +462,92 @@ ok64 PATHTestRoundTrip() {
     done;
 }
 
+// PATHu8bAren preserves trailing NUL across subsequent rentals.
+ok64 PATHTestAren() {
+    sane(1);
+
+    Bu8 arena = {};
+    call(u8bAllocate, arena, 4096);
+
+    a$str(src1, "src/main.c");
+    a_ren_path(p1, arena, src1);
+    same(*p1[1], 0);
+    testeqv((long long)u8csLen(p1), (long long)10, "%lld");
+    // PAST grew by 10 + 1 (NUL)
+    testeqv((long long)u8bPastLen(arena), (long long)11, "%lld");
+
+    // Next rental must NOT clobber p1's NUL terminator.
+    a$str(src2, "README");
+    a_ren_path(p2, arena, src2);
+    same(*p1[1], 0);
+    same(*p2[1], 0);
+    testeqv((long long)u8csLen(p2), (long long)6, "%lld");
+    testeqv((long long)u8bPastLen(arena), (long long)(11 + 7), "%lld");
+
+    // Empty path: just the NUL, slice is empty.
+    a$str(src3, "");
+    a_ren_path(p3, arena, src3);
+    same(*p3[1], 0);
+    testeqv((long long)u8csLen(p3), (long long)0, "%lld");
+
+    // BNOROOM on overflow (path bytes + NUL doesn't fit).
+    Bu8 small = {};
+    call(u8bAllocate, small, 4);
+    a$str(too_big, "longer");
+    u8cs out = {};
+    ok64 o = PATHu8bAren(small, out, too_big);
+    test(o == BNOROOM, FAIL);
+    call(u8bFree, small);
+
+    call(u8bFree, arena);
+    done;
+}
+
+// PATHu8bAcq seals a multi-feed cycle with a NUL parked in PAST.
+ok64 PATHTestAcq() {
+    sane(1);
+
+    Bu8 arena = {};
+    call(u8bAllocate, arena, 4096);
+
+    //  Compose "refs/heads/feat" piecewise via three feeds, seal with NUL.
+    a$str(refs_pfx, "refs/heads/");
+    a$str(branch,   "feat");
+    (void)u8bAlign(arena);
+    call(u8bFeed, arena, refs_pfx);
+    call(u8bFeed, arena, branch);
+    a_cq_path(refname, arena);
+    same(*refname[1], 0);
+    testeqv((long long)u8csLen(refname), (long long)15, "%lld");
+    testeqv((long long)u8bPastLen(arena), (long long)16, "%lld");
+
+    //  Next rental must not clobber refname's NUL.
+    a$str(other, "main");
+    a_ren_path(other_stored, arena, other);
+    same(*refname[1], 0);
+    same(*other_stored[1], 0);
+
+    //  Empty cycle: just the NUL.
+    (void)u8bAlign(arena);
+    a_cq_path(empty, arena);
+    same(*empty[1], 0);
+    testeqv((long long)u8csLen(empty), (long long)0, "%lld");
+
+    //  BNOROOM when no idle byte is left for the NUL.
+    Bu8 small = {};
+    call(u8bAllocate, small, 2);
+    (void)u8bAlign(small);
+    a$str(two, "ab");
+    call(u8bFeed, small, two);
+    u8cs out = {};
+    ok64 o = PATHu8bAcq(small, out);
+    test(o == BNOROOM, FAIL);
+    call(u8bFree, small);
+
+    call(u8bFree, arena);
+    done;
+}
+
 ok64 PATHtest() {
     sane(1);
     call(PATHTestVerify);
@@ -474,6 +560,8 @@ ok64 PATHtest() {
     call(PATHTestAbsolute);
     call(PATHTestPush);
     call(PATHTestRoundTrip);
+    call(PATHTestAren);
+    call(PATHTestAcq);
     done;
 }
 

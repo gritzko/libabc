@@ -134,6 +134,54 @@ ok64 PATHu8bReal(path8b out, u8cs path);
 // NULL-terminated.  u8c *const * accepts both u8cs and u8csc.
 ok64 PATHu8bBuildN(path8b p, u8c *const **slices);
 
+// PATHu8bAren: like u8bAren, but additionally writes a trailing NUL
+// byte after the copy and parks it in PAST so the rented slice is
+// NUL-terminated (path8b invariant) and survives subsequent rentals.
+// `ren[1]` points at the NUL byte (it sits one past the slice end).
+// Returns BNOROOM if the arena can't fit path bytes + NUL.
+fun ok64 PATHu8bAren(u8 *const *arena, u8csp ren, u8csc orig) {
+    size_t n = (size_t)(orig[1] - orig[0]);
+    if (arena[2] + n + 1 > arena[3]) return BNOROOM;
+    u8 *base = arena[2];
+    if (n) memcpy(base, orig[0], n);
+    base[n] = 0;
+    ren[0] = base;
+    ren[1] = base + n;
+    ((u8 **)arena)[1] = base + n + 1;
+    ((u8 **)arena)[2] = base + n + 1;
+    return OK;
+}
+
+// a_ren_path(news, arena, orig): u8 path rental that preserves the
+// NUL terminator at `news[1]` (path8b-compatible).  Uses call(); must
+// run inside a sane()'d function.
+#define a_ren_path(news, arena, orig) \
+    u8cs news = {};                   \
+    call(PATHu8bAren, arena, news, orig)
+
+// PATHu8bAcq: NUL-preserving counterpart to u8bAcq.  Writes a NUL
+// byte at the current IDLE start, snapshots DATA into `ren`, then
+// parks both DATA bytes AND the NUL into PAST so the slice stays
+// NUL-terminated across subsequent rentals.  `*ren[1]` is the NUL.
+// Pair with `u8bAlign(arena)` to open the rental.  Returns BNOROOM
+// if no byte is left for the NUL.
+fun ok64 PATHu8bAcq(u8 *const *arena, u8csp ren) {
+    if (arena[2] >= arena[3]) return BNOROOM;
+    arena[2][0] = 0;
+    ren[0] = arena[1];
+    ren[1] = arena[2];
+    ((u8 **)arena)[1] = arena[2] + 1;
+    ((u8 **)arena)[2] = arena[2] + 1;
+    return OK;
+}
+
+// a_cq_path(news, buf): path-flavored a_cq — declare `news` (u8cs),
+// seal current DATA with a NUL parked in PAST.  Uses call(); must
+// run inside a sane()'d function.
+#define a_cq_path(news, buf) \
+    u8cs news = {};          \
+    call(PATHu8bAcq, buf, news)
+
 // --- Stack allocation macros ---
 
 // a_path(name)                    -- empty path buffer, NUL-terminated

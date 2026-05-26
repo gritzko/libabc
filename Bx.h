@@ -440,22 +440,56 @@ fun ok64 X(, bSplice)(X(, bp) buf, size_t off, size_t cut, X(, csc) paste) {
     return OK;
 }
 
-// Arena: carve T-typed gauge from u8 buffer's IDLE space.
-// Open flushes DATA->PAST, returns gauge over idle (buf+1 reinterpreted).
-// Close flushes DATA->PAST again, committing written Ts.
-// Buffer limits are assumed aligned to T. Cannot fail; returns
-// an empty gauge when idle is exhausted.
-fun X(, gp) X(, aOpen)(u8 *const *buf) {
-    uintptr_t al = ((uintptr_t)buf[2] + sizeof(T) - 1) & ~(sizeof(T) - 1);
-    ((u8 **)buf)[1] = (u8 *)al;     // DATA -> PAST, aligned up to T
-    ((u8 **)buf)[2] = (u8 *)al;
-    return (X(, gp))(buf + 1);      // gauge {buf[1]==buf[2], buf[2], buf[3]}
+// Arena trio (bAlign / bAcq / bAren): rent typed slices out of a u8
+// arena.  PAST keeps every sealed rental; DATA is the in-flight one;
+// IDLE is the rest.  Padding for T-alignment lands in PAST.
+
+// bAlign(arena) -> T##gp
+//   Collapse any pending DATA into PAST, align IDLE up to _Alignof(T),
+//   return a typed gauge over the aligned IDLE.  Cannot fail; if IDLE
+//   is exhausted the returned gauge is empty.
+fun X(, gp) X(, bAlign)(u8 *const *arena) {
+    uintptr_t al = ((uintptr_t)arena[2] + _Alignof(T) - 1)
+                 & ~((uintptr_t)_Alignof(T) - 1);
+    u8 *base = (u8 *)al;
+    if (base > arena[3]) base = arena[3];
+    ((u8 **)arena)[1] = base;
+    ((u8 **)arena)[2] = base;
+    return (X(, gp))(arena + 1);
 }
 
-fun void X(, aClose)(u8 *const *buf, X(, csp) s) {
-    s[0] = (T const *)buf[1];
-    s[1] = (T const *)buf[2];
-    ((u8 **)buf)[1] = buf[2];       // DATA -> PAST
+// bAcq(arena, ren)
+//   Snapshot current DATA into typed const slice `ren`, then collapse
+//   DATA into PAST so the slice survives subsequent rentals.
+fun void X(, bAcq)(u8 *const *arena, X(, csp) ren) {
+    ren[0] = (T const *)arena[1];
+    ren[1] = (T const *)arena[2];
+    ((u8 **)arena)[1] = arena[2];
+}
+
+// bContains(buf, p): is pointer `p` inside the buffer's backing range?
+fun b8 X(, bContains)(X(, b) buf, void const *p) {
+    return (u8c *)p >= (u8c *)buf[0] && (u8c *)p < (u8c *)buf[3];
+}
+
+// bAren(arena, ren, orig)
+//   One-shot rental: append `orig` into the arena (with T-alignment
+//   padding folded into PAST), fill `ren` to span the freshly stored
+//   copy.  Equivalent to bAlign + gFeed + bAcq but does a single
+//   bounds-checked memcpy.  Returns BNOROOM if the arena can't fit.
+fun ok64 X(, bAren)(u8 *const *arena, X(, csp) ren, X(, csc) orig) {
+    size_t count = (size_t)(orig[1] - orig[0]);
+    size_t need  = count * sizeof(T);
+    uintptr_t al = ((uintptr_t)arena[2] + _Alignof(T) - 1)
+                 & ~((uintptr_t)_Alignof(T) - 1);
+    u8 *base = (u8 *)al;
+    if (base + need > arena[3]) return BNOROOM;
+    if (need) memcpy(base, orig[0], need);
+    ren[0] = (T const *)base;
+    ren[1] = (T const *)base + count;
+    ((u8 **)arena)[1] = base + need;
+    ((u8 **)arena)[2] = base + need;
+    return OK;
 }
 
 // Carve a fixed-cap child T-buffer out of the parent u8 buffer's IDLE.

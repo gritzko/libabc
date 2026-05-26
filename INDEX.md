@@ -5,8 +5,6 @@
 | 01.h | Basic types and macros foundation (u8, u16, u32, u64, fun, con, slice types) |
 | ABC.h | Main umbrella header that includes all major ABC modules |
 | ANSI.h | ANSI terminal color and text formatting codes |
-| AREA.h | Memory arena allocation with typed buffer carving |
-| AREN.h | Arena alignment macros for 32-bit and 64-bit allocation |
 | B.h | Buffer type system with mmap support and error codes |
 | BIN.h | Logarithmical bins for aligned intervals (tail111 encoding) |
 | BSD.h | In-memory bsdiff/bspatch implementation (no compression, no malloc) |

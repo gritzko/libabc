@@ -148,12 +148,6 @@ target_compile_options(NESTtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(NESTtest abc)
 add_test(NAME NESTtest COMMAND NESTtest)
 
-add_executable(ARENtest AREN.c)
-target_link_options(ARENtest PRIVATE ${TEST_LDD_FLAGS})
-target_compile_options(ARENtest PRIVATE ${TEST_CXX_FLAGS})
-target_link_libraries(ARENtest abc)
-add_test(NAME ARENtest COMMAND ARENtest)
-
 add_executable(AREAtest AREA.c)
 target_link_options(AREAtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(AREAtest PRIVATE ${TEST_CXX_FLAGS})
