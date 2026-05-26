@@ -759,8 +759,8 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
     // dummy page SIGBUS — so b[3] must stay at map (empty buffer)
     // until a caller FILEBookEnsure-s and grows the file.
     size_t sp = FILESysPage();
-    book_size = roundup(book_size, sp);
-    size_t map_size = roundup(actual_size ? actual_size : 1, sp);
+    book_size = roundup2(book_size, sp);
+    size_t map_size = roundup2(actual_size ? actual_size : 1, sp);
     test(map_size <= book_size, BADARG);
 
     // Materialise the mmap'd tail-of-page on disk so RW writes into
@@ -862,7 +862,7 @@ ok64 FILEBookCreate(u8bp *buf, path8s path, size_t book_size,
     int fd = FILE_CLOSED;
     call(FILECreate, &fd, path);
     size_t sp = FILESysPage();
-    init_size = roundup(init_size, sp);
+    init_size = roundup2(init_size, sp);
     if (init_size == 0) init_size = sp;
     call(FILEResize, &fd, init_size);
     call(FILEBookFD, buf, &fd, book_size, O_RDWR);
@@ -878,7 +878,7 @@ ok64 FILEBookCreateAt(u8bp *buf, int dir, path8s path, size_t book_size,
     int fd = FILE_CLOSED;
     call(FILECreateAt, &fd, dir, path);
     size_t sp = FILESysPage();
-    init_size = roundup(init_size, sp);
+    init_size = roundup2(init_size, sp);
     if (init_size == 0) init_size = sp;
     call(FILEResize, &fd, init_size);
     call(FILEBookFD, buf, &fd, book_size, O_RDWR);
@@ -900,7 +900,7 @@ ok64 FILEBookExtend(u8bp buf, size_t new_size) {
     size_t book_size = booked_end - base;
 
     size_t sp = FILESysPage();
-    new_size = roundup(new_size, sp);
+    new_size = roundup2(new_size, sp);
     test(new_size <= book_size, BNOROOM);
 
     size_t old_size = buf[3] - base;
@@ -941,7 +941,7 @@ ok64 FILEBookGrow(u8bp buf, size_t need) {
     size_t grow = cur + (cur >> 3);         // cur * 9/8
     if (grow < target) grow = target;
     if (grow < cur + sp) grow = cur + sp;
-    grow = roundup(grow, sp);
+    grow = roundup2(grow, sp);
     return FILEBookExtend(buf, grow);
 }
 

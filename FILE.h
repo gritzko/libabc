@@ -609,13 +609,13 @@ ok64 FILETrimMap(u8bp buf);
 
 // Extend the mapped file by 1/2
 fun ok64 FILEremap15(Bu8 buf) {
-    size_t new_size = roundup(Bsize(buf) * 3 / 2, PAGESIZE);
+    size_t new_size = roundup2(Bsize(buf) * 3 / 2, PAGESIZE);
     return FILEReMap(buf, new_size);
 }
 
 // Extend the mapped file by 1/4
 fun ok64 FILEremap125(Bu8 buf) {
-    size_t new_size = roundup(Bsize(buf) * 5 / 4, PAGESIZE);
+    size_t new_size = roundup2(Bsize(buf) * 5 / 4, PAGESIZE);
     return FILEReMap(buf, new_size);
 }
 
@@ -703,7 +703,7 @@ ok64 FILEBookInit();
 
 fun ok64 FILEInit() {
     if (*FILE_RW != NULL) return OK;
-    ok64 o = u8bAllocate(FILE_RW, roundup(FILE_MAX_OPEN >> 3, 64));
+    ok64 o = u8bAllocate(FILE_RW, roundup2(FILE_MAX_OPEN >> 3, 64));
     if (o == OK) o = u8pbAllocate(FILE_BOOK, FILE_MAX_OPEN);
     if (o == OK) o = FILEBookInit();
     return o;

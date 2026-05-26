@@ -143,7 +143,7 @@ fun ok64 Brealloc(Bvoid b, size_t sz) {
 fun ok64 Breserve(Bvoid b, size_t sz) {
     size_t i = $size(Bidle(b));
     if (i >= sz) return OK;
-    return Brealloc(b, roundup(Busysize(b) + sz, 256));
+    return Brealloc(b, roundup2(Busysize(b) + sz, 256));
 }
 
 #define BNULLify(buf) memset((void **)buf, 0, sizeof(Bvoid));

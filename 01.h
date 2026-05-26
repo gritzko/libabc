@@ -256,7 +256,12 @@ fun u8 log_2(size_t x) {
     return 63 - z;
 }
 
-fun u64 roundup(u64 val, u64 page) {
+// Round `val` up to a multiple of `page`, which MUST be a power of two.
+// BSD <sys/param.h> spells this `roundup2` (= __builtin_align_up); its
+// bare `roundup` is the slower any-`y` divide form.  We override the
+// macro with our own typed, single-evaluation version.
+#undef roundup2
+fun u64 roundup2(u64 val, u64 page) {
     u64 mask = page - 1;
     if (val & mask) val = (val & ~mask) + page;
     return val;

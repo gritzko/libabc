@@ -360,6 +360,11 @@ fun ok64 X(, bPop)(X(, b) buf) {
     return OK;
 }
 
+// MAP_NORESERVE is a Linux-only swap-reservation hint; elsewhere it is a no-op.
+#ifndef MAP_NORESERVE
+#define MAP_NORESERVE 0
+#endif
+
 fun ok64 X(, bMap)(X(, b) buf, size_t len) {
     size_t size = len * sizeof(T);
     T *map = (T *)mmap(NULL, size, PROT_READ | PROT_WRITE,

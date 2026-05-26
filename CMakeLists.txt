@@ -37,6 +37,14 @@ if (PkgConfig_FOUND)
         pkg_check_modules(ROCKSDB REQUIRED rocksdb)
     endif()
 endif()
+# Fallback lz4 detection for hosts without pkg-config (cf. sodium above)
+if (NOT LZ4_FOUND)
+    find_library(LZ4_LIBRARIES NAMES lz4 HINTS /usr /usr/local /opt/homebrew)
+    find_path(LZ4_INCLUDE_DIRS NAMES lz4.h HINTS /usr/include /usr/local/include /opt/homebrew/include)
+    if (LZ4_LIBRARIES AND LZ4_INCLUDE_DIRS)
+        set(LZ4_FOUND TRUE)
+    endif()
+endif()
 
 list(APPEND ABC_HEADERS
 S.h

@@ -54,7 +54,7 @@ ok64 SST0() {
     int fd = FILE_CLOSED;
     a$strc(path, "/tmp/SST0.sst");
     SSTab tab = {};
-    call(SSTu128init, sst, &fd, path, roundup(ITER * 32, PAGESIZE));
+    call(SSTu128init, sst, &fd, path, roundup2(ITER * 32, PAGESIZE));
     for (u64 n = 0; n < ITER; ++n) {
         u128 id = {SrcAlice, n};
         a$rawc(val, n);

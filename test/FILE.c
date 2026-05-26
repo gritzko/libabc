@@ -495,7 +495,7 @@ ok64 FILEBookTest() {
 
     // Verify initial size
     size_t sp = sysconf(_SC_PAGESIZE);
-    testeqv((long long)(Bsize(buf)), (long long)(roundup(4 * KB, sp)), "%lld");
+    testeqv((long long)(Bsize(buf)), (long long)(roundup2(4 * KB, sp)), "%lld");
 
     // Save base address
     u8p base = buf[0];
@@ -510,7 +510,7 @@ ok64 FILEBookTest() {
 
     // Verify base address unchanged (the whole point!)
     testeqv((long long)(buf[0]), (long long)(base), "%lld");
-    testeqv((long long)(Bsize(buf)), (long long)(roundup(64 * KB, sp)), "%lld");
+    testeqv((long long)(Bsize(buf)), (long long)(roundup2(64 * KB, sp)), "%lld");
 
     // Verify data survived
     testeqv((long long)(memcmp(buf[1], "Hello booked world!", 19)), (long long)(0), "%lld");
