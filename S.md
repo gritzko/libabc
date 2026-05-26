@@ -10,6 +10,31 @@ consumed by moving `head` towards `term`. Four shades of const:
 
 Slices are passed by pointer; use `a_dup` to create a consumable copy.
 
+##  `u8s` vs `u8sp` — consume vs assign
+
+The two shapes have the same ABI (both decay to `u8 **`) but mark
+different roles. Pick the type by what the function *does* to the
+slice:
+
+  - **`u8s` (slice consumed)** — the function reads from or writes
+    into the slice, advancing `head` as it goes. The caller hands
+    over a working slice and the function eats / fills it. Streaming
+    helpers (`u8sFeed`, `HEXu8sFeedSome`, `SHA1u8sFeedHex`) are the
+    canonical shape: they push bytes forward, never look back.
+    Buffer callers pass `u8bIdle(buf)`; gauge callers pass
+    `u8gRest(g)`; either yields the right slice cursor.
+  - **`u8sp` (slice assigned)** — the function writes a fresh
+    `(head, term)` pair into the two cells the pointer addresses.
+    Use this for output parameters whose value is the slice itself
+    (e.g. `*ren[0] = …; *ren[1] = …`), not the bytes inside it.
+    `PATHu8bAcq`, `u8bAren` and friends are typical assigners.
+
+Rule of thumb: if the body of the function does `s[0] += n` or
+`u8sFeed(s, …)`, it's `u8s` (consumed). If the body does `out[0] =
+…; out[1] = …`, it's `u8sp` (assigned). Prefer streaming helpers to
+take `u8s` so they compose with both buffers and gauges at the call
+site.
+
 ##  Typed functions (preferred)
 
 Always prefer typed functions over generic macros:
