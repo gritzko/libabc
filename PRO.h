@@ -3,7 +3,7 @@
 
 // It is not recommended to include this header from
 // public .h files. It pollutes the namespace for non-ABC code.
-// PRO.h use implies use of MAIN(), TEST() or fuzz() macros in executables.
+// PRO.h use implies use of MAIN(), TEST() or FUZZ() macros in executables.
 
 #include <errno.h>
 #include <stdint.h>
