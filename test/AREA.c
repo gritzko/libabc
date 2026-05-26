@@ -3,21 +3,21 @@
 #include "PRO.h"
 #include "TEST.h"
 
-// Test 1: aCarve — fixed-cap child buffers carved from a u8 arena
-ok64 aCarveTest() {
+// Test 1: bAcquire — fixed-cap child buffers acquired from a u8 arena
+ok64 bAcquireTest() {
     sane(1);
 
     Bu8 arena = {};
     call(u8bMap, arena, MB);
 
     Bu8 bytes = {};
-    call(u8aCarve, arena, bytes, 1000);
+    call(u8bAcquire, arena, bytes, 1000);
 
     Bu32 words = {};
-    call(u32aCarve, arena, words, 500);
+    call(u32bAcquire, arena, words, 500);
 
     Bu64 quads = {};
-    call(u64aCarve, arena, quads, 200);
+    call(u64bAcquire, arena, quads, 200);
 
     testeqv((long long)(u8bDataLen(bytes)), (long long)(0), "%lld");
     testeqv((long long)(u8bLen(bytes)), (long long)(1000), "%lld");
@@ -65,21 +65,21 @@ ok64 bAlignU8Test() {
     Bu8 arena = {};
     call(u8bAllocate, arena, 4096);
 
-    a_lign(u8, g, arena);
+    b_lign(u8, g, arena);
     testeqv((long long)(u8gRestLen(g)), (long long)(4096), "%lld");
     testeqv((long long)(u8gLeftLen(g)), (long long)(0), "%lld");
 
     for (u8 i = 0; i < 100; ++i) call(u8gFeed1, g, i);
     testeqv((long long)(u8gLeftLen(g)), (long long)(100), "%lld");
 
-    a_cq(u8, s1, arena);
+    b_cq(u8, s1, arena);
     testeqv((long long)(u8csLen(s1)), (long long)(100), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(100), "%lld");
 
-    a_lign(u8, g2, arena);
+    b_lign(u8, g2, arena);
     testeqv((long long)(u8gRestLen(g2)), (long long)(4096 - 100), "%lld");
     for (u8 i = 0; i < 50; ++i) call(u8gFeed1, g2, i);
-    a_cq(u8, s1b, arena);
+    b_cq(u8, s1b, arena);
     testeqv((long long)(u8csLen(s1b)), (long long)(50), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(150), "%lld");
 
@@ -100,21 +100,21 @@ ok64 bAlignU32Test() {
     call(u8bAllocate, arena, 4096);
 
     // Misalign with a 1-byte u8 rental
-    a_lign(u8, g0, arena);
+    b_lign(u8, g0, arena);
     call(u8gFeed1, g0, 0xFF);
-    a_cq(u8, pad, arena);
+    b_cq(u8, pad, arena);
     testeqv((long long)(u8csLen(pad)), (long long)(1), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(1), "%lld");
 
     // u32 align: bAlign rounds up to 4
-    a_lign(u32, g, arena);
+    b_lign(u32, g, arena);
     test(((uintptr_t)g[1] & 3) == 0, FAIL);
     test(u8bPastLen(arena) >= 4, FAIL);
 
     for (u32 i = 0; i < 50; ++i) call(u32gFeed1, g, i * 7);
     testeqv((long long)(u32gLeftLen(g)), (long long)(50), "%lld");
 
-    a_cq(u32, left, arena);
+    b_cq(u32, left, arena);
     testeqv((long long)(u32csLen(left)), (long long)(50), "%lld");
     testeqv((long long)(*left[0]), (long long)(0), "%lld");
     testeqv((long long)(*(left[0] + 10)), (long long)(70), "%lld");
@@ -137,21 +137,21 @@ ok64 MixedArenaTest() {
     call(u8bAllocate, arena, 8192);
 
     u8cs hello = $u8str("hello");
-    a_lign(u8, g8, arena);
+    b_lign(u8, g8, arena);
     call(u8gFeed, g8, hello);
-    a_cq(u8, s_hello, arena);
+    b_cq(u8, s_hello, arena);
     testeqv((long long)(u8bPastLen(arena)), (long long)(5), "%lld");
 
-    a_lign(u32, g32, arena);
+    b_lign(u32, g32, arena);
     test(((uintptr_t)g32[1] & 3) == 0, FAIL);
     for (u32 i = 0; i < 10; ++i) call(u32gFeed1, g32, i + 100);
-    a_cq(u32, toks, arena);
+    b_cq(u32, toks, arena);
     testeqv((long long)(u32csLen(toks)), (long long)(10), "%lld");
 
     u8cs world = $u8str("world");
-    a_lign(u8, g8b, arena);
+    b_lign(u8, g8b, arena);
     call(u8gFeed, g8b, world);
-    a_cq(u8, s_world, arena);
+    b_cq(u8, s_world, arena);
 
     test(u8bPastLen(arena) > 0, FAIL);
     test(u8bPastLen(arena) <= 8192, FAIL);
@@ -174,10 +174,10 @@ ok64 ArenaCycleTest() {
     call(u8bAllocate, arena, 4096);
 
     for (int cycle = 0; cycle < 10; ++cycle) {
-        a_lign(u32, g, arena);
+        b_lign(u32, g, arena);
         for (u32 i = 0; i < 20; ++i) call(u32gFeed1, g, i);
         testeqv((long long)(u32gLeftLen(g)), (long long)(20), "%lld");
-        a_cq(u32, cyc, arena);
+        b_cq(u32, cyc, arena);
         (void)cyc;
     }
 
@@ -188,9 +188,9 @@ ok64 ArenaCycleTest() {
     testeqv((long long)(u8bPastLen(arena)), (long long)(0), "%lld");
     testeqv((long long)(u8bIdleLen(arena)), (long long)(4096), "%lld");
 
-    a_lign(u8, g8, arena);
+    b_lign(u8, g8, arena);
     for (u8 i = 0; i < 200; ++i) call(u8gFeed1, g8, i);
-    a_cq(u8, refill, arena);
+    b_cq(u8, refill, arena);
     testeqv((long long)(u8csLen(refill)), (long long)(200), "%lld");
     testeqv((long long)(u8bPastLen(arena)), (long long)(200), "%lld");
 
@@ -206,18 +206,18 @@ ok64 ArenaSliceValidTest() {
     call(u8bAllocate, arena, 4096);
 
     u8cs pat1 = $u8str("AAAA");
-    a_lign(u8, g1, arena);
+    b_lign(u8, g1, arena);
     call(u8gFeed, g1, pat1);
-    a_cq(u8, s1, arena);
+    b_cq(u8, s1, arena);
 
-    a_lign(u32, g2, arena);
+    b_lign(u32, g2, arena);
     call(u32gFeed1, g2, 0xDEADBEEF);
-    a_cq(u32, s2, arena);
+    b_cq(u32, s2, arena);
 
     u8cs pat3 = $u8str("ZZZZ");
-    a_lign(u8, g3, arena);
+    b_lign(u8, g3, arena);
     call(u8gFeed, g3, pat3);
-    a_cq(u8, s3, arena);
+    b_cq(u8, s3, arena);
 
     $testeq(s1, pat1);
     testeqv((long long)(u32csLen(s2)), (long long)(1), "%lld");
@@ -231,7 +231,7 @@ ok64 ArenaSliceValidTest() {
     done;
 }
 
-// Test 7: a_ren / a_rent — one-shot rental over a known source
+// Test 7: b_ren / b_rent — one-shot rental over a known source
 ok64 ArenaRenTest() {
     sane(1);
 
@@ -239,14 +239,14 @@ ok64 ArenaRenTest() {
     call(u8bAllocate, arena, 4096);
 
     u8cs hello = $u8str("hello");
-    a_ren(stored_hello, arena, hello);
+    b_ren(stored_hello, arena, hello);
     $testeq(stored_hello, hello);
     test(u8bContains(arena, stored_hello[0]), FAIL);
     testeqv((long long)u8bPastLen(arena), (long long)5, "%lld");
 
     u32 raw[4] = {10, 20, 30, 40};
     u32cs src = {raw, raw + 4};
-    a_rent(u32, stored_toks, arena, src);
+    b_rent(u32, stored_toks, arena, src);
     testeqv((long long)u32csLen(stored_toks), (long long)4, "%lld");
     test(((uintptr_t)stored_toks[0] & 3) == 0, FAIL);
     testeqv((long long)*stored_toks[0], (long long)10, "%lld");
@@ -271,7 +271,7 @@ ok64 ArenaRenTest() {
 
 ok64 AREAtest() {
     sane(1);
-    call(aCarveTest);
+    call(bAcquireTest);
     call(bAlignU8Test);
     call(bAlignU32Test);
     call(MixedArenaTest);

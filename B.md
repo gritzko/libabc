@@ -13,9 +13,22 @@ Consumption of a slice (DATA or IDLE) enlarges the adjoined slice
 buf[0]      buf[1]        buf[2]              buf[3]
 ```
 
-Buffers imply ownership; if you hold the buffer you own the memory.
-Pass buffers down the call stack by pointer (`u8bp`), never duplicate.
-Buffers can be stack-allocated, malloc-ed, or memory-mapped.
+Pass buffers down the call stack by pointer (`u8bp`), never
+duplicate.  A buffer's backing memory comes from exactly one of
+three sources, and the verb that creates it determines who
+releases it:
+
+| Verb (create)                 | Backing | Release            |
+|-------------------------------|---------|--------------------|
+| `u8bAllocate(buf, cap)`       | heap    | `u8bFree(buf)`     |
+| `u8bMap(buf, cap)`            | mmap    | `u8bUnMap(buf)`    |
+| `u8bAcquire(arena, buf, cap)` | arena   | arena rewind/reset |
+| `a_pad(u8, buf, cap)`         | stack   | scope exit (auto)  |
+
+Provenance lives in the caller's head, not in the buffer's type —
+match the release verb to the creation verb at every site.  A
+buffer acquired from an arena has no per-buffer release; it dies
+when the arena pops past it (see "Arenas" below).
 
 ##  Typed functions (preferred)
 
@@ -41,16 +54,46 @@ Buffers can be stack-allocated, malloc-ed, or memory-mapped.
 | Reset           | `u8bReset(buf)`     | clear PAST and DATA      |
 | Shift           | `u8bShift(buf, n)`  | move DATA, set PAST to n |
 
-##  Creation and memory
+##  Arenas
+
+A `u8a` is an **arena**: a buffer that dispenses memory to other
+buffers via `u8bAcquire`.  Arena use is strictly along the call
+tree, strictly LIFO — a function that acquires from an arena
+must rewind before returning, so the arena's dispense cursor
+moves in lockstep with the call stack.  No cross-cut handoffs.
 
 ```c
-a_pad(u8, buf, 1024)        // stack buffer (common case)
-u8bAlloc(buf, len)          // heap allocate
-u8bFree(buf)                // heap free
-u8bMap(buf, len)            // mmap anonymous
-u8bUnMap(buf)               // munmap
-u8bReserve(buf, len)        // ensure capacity (may realloc)
+u8 *u8aMark(u8a arena)              // remember current dispense point
+void u8aRewind(u8a arena, u8 *mark) // pop everything acquired since mark
+void u8aReset(u8a arena)            // full wipe (non-LIFO release)
 ```
+
+Canonical pattern:
+
+```c
+ok64 worker(u8a arena, ...) {
+    sane(arena);
+    u8 *mark = u8aMark(arena);
+    u8b tbuf = {}, bbuf = {};
+    call(u8bAcquire, arena, tbuf, 1UL << 20);
+    call(u8bAcquire, arena, bbuf, 1UL << 20);
+    try(inner, ..., tbuf, bbuf);
+    u8aRewind(arena, mark);   // releases tbuf + bbuf in one pop
+    done;
+}
+```
+
+The arena itself is just a `u8b` that was Allocated (or Mapped)
+at some outer scope — typically once per process, per CLI
+session, or per long-running operation — and is passed down the
+call chain.  Any function that takes a `u8a` parameter pairs its
+own `u8aMark` / `u8aRewind` around any `u8bAcquire` calls it
+makes, so callees see the arena in a clean state and the caller
+sees its own acquired buffers undisturbed.
+
+For typed slice borrowing (not whole-buffer rental), see
+"Buffers as arenas" below — `a_lign` / `a_cq` / `a_ren` are the
+slice-flavored siblings of `u8bAcquire`.
 
 ##  Example
 

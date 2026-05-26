@@ -442,7 +442,7 @@ fun ok64 X(, bSplice)(X(, bp) buf, size_t off, size_t cut, X(, csc) paste) {
 
 // Arena trio (bAlign / bAcq / bAren): rent typed slices out of a u8
 // arena.  PAST keeps every sealed rental; DATA is the in-flight one;
-// IDLE is the rest.  Padding for T-alignment lands in PAST.
+// IDLE is the free space.  Padding for T-alignment lands in PAST.
 
 // bAlign(arena) -> T##gp
 //   Collapse any pending DATA into PAST, align IDLE up to _Alignof(T),
@@ -492,25 +492,27 @@ fun ok64 X(, bAren)(u8 *const *arena, X(, csp) ren, X(, csc) orig) {
     return OK;
 }
 
-// Carve a fixed-cap child T-buffer out of the parent u8 buffer's IDLE.
-// After the carve: child has `cap`-sized capacity, empty PAST/DATA;
-// parent's PAST/DATA boundary advances past the carve (aligned up to T)
-// so subsequent carves get fresh space.  Returns BNOROOM if IDLE
-// lacks `cap*sizeof(T)` bytes after alignment.
+// Acquire a fixed-cap child T-buffer from a u8 arena's IDLE.  See
+// `abc/B.md` §Arenas for the LIFO-along-call-tree discipline.
+// After Acquire: child has `cap`-sized capacity, empty PAST/DATA;
+// arena's PAST/DATA boundary advances past the acquired region
+// (aligned up to T) so subsequent acquires get fresh space.  Returns
+// BNOROOM if IDLE lacks `cap*sizeof(T)` bytes after alignment.
 //
-// The child borrows the parent's memory: do NOT u8bFree / u8bReMap /
-// u8bUnMap a carved child, and ensure it does not outlive the parent.
-// One u8bFree on the parent reclaims every carve.
-fun ok64 X(, aCarve)(u8 *const *parent, X(, b) child, size_t cap) {
-    uintptr_t al = ((uintptr_t)parent[2] + sizeof(T) - 1) & ~(sizeof(T) - 1);
+// The child borrows arena memory: NEVER u8bFree / u8bReMap /
+// u8bUnMap an Acquired child, and ensure it does not outlive its
+// arena scope.  Release happens via u8aRewind / u8aReset on the
+// arena (see abc/B.h).
+fun ok64 X(, bAcquire)(u8a arena, X(, b) child, size_t cap) {
+    uintptr_t al = ((uintptr_t)arena[2] + sizeof(T) - 1) & ~(sizeof(T) - 1);
     u8 *base = (u8 *)al;
     size_t sz = cap * sizeof(T);
-    if (base + sz > parent[3]) return BNOROOM;
+    if (base + sz > arena[3]) return BNOROOM;
     T **c = (T **)child;
     c[0] = c[1] = c[2] = (T *)base;
     c[3] = (T *)(base + sz);
-    ((u8 **)parent)[1] = base + sz;
-    ((u8 **)parent)[2] = base + sz;
+    ((u8 **)arena)[1] = base + sz;
+    ((u8 **)arena)[2] = base + sz;
     return OK;
 }
 

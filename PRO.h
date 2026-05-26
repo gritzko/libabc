@@ -17,6 +17,28 @@ extern uint8_t _pro_depth;
 // use this with every int main() {...}
 #define ABC_INIT uint8_t _pro_depth = 0;
 
+// ===== ABC_BASS: thread-local scratch arena =====
+//
+// Buffer-Arena-Scratch-Stack — a per-thread LIFO arena that lives for
+// the program's lifetime.  Set up by MAIN() / TEST() / FUZZ() at
+// program entry; every call() / try() snapshots its boundaries on
+// entry and rewinds them on return, so a procedure's BASS scratch
+// dies automatically when control returns to the caller.  Forked
+// children inherit BASS via CoW (MAP_PRIVATE).
+//
+// See abc/B.md §Arenas.  The macros a_lign / a_cquire / a_rent / a_ren
+// / a_carve (below) act on BASS implicitly — there is no explicit
+// arena parameter to pass down.
+//
+// Override ABC_BASS_BYTES before #include "PRO.h" to customize size.
+// Default 1 GiB; mmap is lazy + MAP_NORESERVE so unused pages cost
+// nothing until first touch.
+#ifndef ABC_BASS_BYTES
+#define ABC_BASS_BYTES (1UL << 30)
+#endif
+
+extern _Thread_local u8 *ABC_BASS[4];
+
 con char *_pro_indent =
     "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
 
@@ -48,10 +70,17 @@ con char *_pro_indent =
 //
 // In short: orthogonal resource mgmt vs control flow.  `call` only
 // propagates errors; releasing belongs to the owner.
+// `call` snapshots ABC_BASS (data+idle heads) on entry and rewinds
+// on return, so any BASS scratch the callee acquired dies before
+// control comes back.  Caller-side gauges / carves are preserved
+// (their pointers sit below the snapshot).
 #define call(f, ...)                                                    \
     {                                                                   \
         u8 __depth = _pro_depth++;                                      \
+        a_dup(u8c, __bass, u8bDataC(ABC_BASS));                         \
         __ = (f(__VA_ARGS__));                                          \
+        ((u8 **)ABC_BASS)[1] = (u8 *)__bass[0];                         \
+        ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
@@ -63,10 +92,15 @@ con char *_pro_indent =
 // e.g. scan(u64sDrain1, numbers, &i) { ... }  seen(NODATA);
 #define scan(f, ...) while (OK == (__ = f(__VA_ARGS__)))
 
+// `try` is like `call` minus the on-failure return; BASS still
+// rewinds either way.
 #define try(f, ...)                                                     \
     {                                                                   \
         u8 __depth = _pro_depth++;                                      \
+        a_dup(u8c, __bass, u8bDataC(ABC_BASS));                         \
         __ = (f(__VA_ARGS__));                                          \
+        ((u8 **)ABC_BASS)[1] = (u8 *)__bass[0];                         \
+        ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
@@ -83,7 +117,10 @@ con char *_pro_indent =
 #define callsafe(fcall, ffail)                                          \
     {                                                                   \
         u8 __depth = _pro_depth++;                                      \
+        a_dup(u8c, __bass, u8bDataC(ABC_BASS));                         \
         __ = (fcall);                                                   \
+        ((u8 **)ABC_BASS)[1] = (u8 *)__bass[0];                         \
+        ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
@@ -182,6 +219,61 @@ con char *_pro_indent =
         __builtin_trap();                                               \
     }
 
+// ===== BASS-implicit arena macros =====
+//
+// a_lign / a_cquire / a_rent / a_ren / a_carve all act on ABC_BASS.
+// Each is one-liner sugar over the underlying u8a primitives (see
+// abc/B.h u8aMark / u8aRewind / u8bAcquire / u8bAren and the typed
+// gauge ops in Sx.h).  Within a procedure, all acquired bytes die at
+// the surrounding call() / try() boundary — no manual release.
+//
+// IMPORTANT: these macros invoke the underlying function DIRECTLY
+// (not via `call()`), because `call()` would snapshot+restore BASS
+// and immediately undo the acquisition.  Errors propagate via `__`
+// + `return __` exactly like `call()` does, just without the
+// snapshot wrapper.
+//
+// Discipline: do NOT a_rent / a_carve between an a_lign and its
+// matching a_cquire — those one-shot copies advance both DATA and
+// IDLE boundaries and would corrupt the in-flight gauge.  The
+// `must()` guards enforce DATA-empty at entry to those macros.
+
+#define a_lign(T, gauge) T##gp gauge = T##bAlign(ABC_BASS)
+
+#define a_cquire(T, slice) \
+    T##cs slice = {};      \
+    T##bAcq(ABC_BASS, slice)
+
+#define a_rent(T, news, src)                                          \
+    T##cs news = {};                                                  \
+    do {                                                              \
+        must(ABC_BASS[1] == ABC_BASS[2], "a_rent in open gauge");     \
+        __ = T##bAren(ABC_BASS, news, src);                           \
+        if (__ != OK) {                                               \
+            trace("%s<%s at %s:%i\n", PROindent, ok64str(__),         \
+                  __func__, __LINE__);                                \
+            return __;                                                \
+        }                                                             \
+    } while (0)
+
+#define a_ren(news, src) a_rent(u8, news, src)
+
+// Note: B##T (non-const pointer array) instead of T##b (const-pointer
+// array) — the function writes the pointers via const-cast, which the
+// compiler is free to ignore on a const-declared variable.  B##T tells
+// the compiler the pointers do change.
+#define a_carve(T, child, cap)                                        \
+    B##T child = {};                                                  \
+    do {                                                              \
+        must(ABC_BASS[1] == ABC_BASS[2], "a_carve in open gauge");    \
+        __ = T##bAcquire(ABC_BASS, child, cap);                       \
+        if (__ != OK) {                                               \
+            trace("%s<%s at %s:%i\n", PROindent, ok64str(__),         \
+                  __func__, __LINE__);                                \
+            return __;                                                \
+        }                                                             \
+    } while (0)
+
 #define $testeq(a, b)                                                         \
     {                                                                         \
         if (!likely($size(a) == $size(b) && 0 == memcmp(*a, *b, $size(a)))) { \
@@ -267,10 +359,16 @@ fun ok64 PROStderrToFile(char const *name) {
     uint8_t _pro_depth = 0;                                              \
     u8cs _STD_ARGS[64] = {};                                             \
     u8cs *STD_ARGS[4] = {};                                              \
+    _Thread_local u8 *ABC_BASS[4] = {};                                  \
     int main(int argn, char **args) {                                    \
         _PRO_TRACE_INIT(args[0]);                                        \
         _parse_args(argn, args);                                         \
+        if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {                    \
+            fprintf(stderr, "ABC_BASS u8bMap failed\n");                 \
+            return 1;                                                    \
+        }                                                                \
         ok64 ret = f();                                                  \
+        u8bUnMap(ABC_BASS);                                              \
         if (ret != OK) {                                                 \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(ret), __func__, \
                   __LINE__);                                             \

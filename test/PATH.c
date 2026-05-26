@@ -470,7 +470,7 @@ ok64 PATHTestAren() {
     call(u8bAllocate, arena, 4096);
 
     a$str(src1, "src/main.c");
-    a_ren_path(p1, arena, src1);
+    b_ren_path(p1, arena, src1);
     same(*p1[1], 0);
     testeqv((long long)u8csLen(p1), (long long)10, "%lld");
     // PAST grew by 10 + 1 (NUL)
@@ -478,7 +478,7 @@ ok64 PATHTestAren() {
 
     // Next rental must NOT clobber p1's NUL terminator.
     a$str(src2, "README");
-    a_ren_path(p2, arena, src2);
+    b_ren_path(p2, arena, src2);
     same(*p1[1], 0);
     same(*p2[1], 0);
     testeqv((long long)u8csLen(p2), (long long)6, "%lld");
@@ -486,7 +486,7 @@ ok64 PATHTestAren() {
 
     // Empty path: just the NUL, slice is empty.
     a$str(src3, "");
-    a_ren_path(p3, arena, src3);
+    b_ren_path(p3, arena, src3);
     same(*p3[1], 0);
     testeqv((long long)u8csLen(p3), (long long)0, "%lld");
 
@@ -516,20 +516,20 @@ ok64 PATHTestAcq() {
     (void)u8bAlign(arena);
     call(u8bFeed, arena, refs_pfx);
     call(u8bFeed, arena, branch);
-    a_cq_path(refname, arena);
+    b_cq_path(refname, arena);
     same(*refname[1], 0);
     testeqv((long long)u8csLen(refname), (long long)15, "%lld");
     testeqv((long long)u8bPastLen(arena), (long long)16, "%lld");
 
     //  Next rental must not clobber refname's NUL.
     a$str(other, "main");
-    a_ren_path(other_stored, arena, other);
+    b_ren_path(other_stored, arena, other);
     same(*refname[1], 0);
     same(*other_stored[1], 0);
 
     //  Empty cycle: just the NUL.
     (void)u8bAlign(arena);
-    a_cq_path(empty, arena);
+    b_cq_path(empty, arena);
     same(*empty[1], 0);
     testeqv((long long)u8csLen(empty), (long long)0, "%lld");
 

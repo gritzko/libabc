@@ -152,10 +152,11 @@ fun ok64 PATHu8bAren(u8 *const *arena, u8csp ren, u8csc orig) {
     return OK;
 }
 
-// a_ren_path(news, arena, orig): u8 path rental that preserves the
-// NUL terminator at `news[1]` (path8b-compatible).  Uses call(); must
-// run inside a sane()'d function.
-#define a_ren_path(news, arena, orig) \
+// b_ren_path(news, arena, orig): explicit-arena u8 path rental that
+// preserves the NUL terminator at `news[1]` (path8b-compatible).
+// Uses call(); must run inside a sane()'d function.  For BASS-
+// implicit form, see `a_ren_path` in PRO.h.
+#define b_ren_path(news, arena, orig) \
     u8cs news = {};                   \
     call(PATHu8bAren, arena, news, orig)
 
@@ -175,12 +176,13 @@ fun ok64 PATHu8bAcq(u8 *const *arena, u8csp ren) {
     return OK;
 }
 
-// a_cq_path(news, buf): path-flavored a_cq — declare `news` (u8cs),
-// seal current DATA with a NUL parked in PAST.  Uses call(); must
-// run inside a sane()'d function.
-#define a_cq_path(news, buf) \
-    u8cs news = {};          \
-    call(PATHu8bAcq, buf, news)
+// b_cq_path(news, arena): explicit-arena path-flavored cq — declare
+// `news` (u8cs), seal current DATA with a NUL parked in PAST.  Uses
+// call(); must run inside a sane()'d function.  For BASS-implicit
+// form, see `a_cq_path` in PRO.h.
+#define b_cq_path(news, arena) \
+    u8cs news = {};            \
+    call(PATHu8bAcq, arena, news)
 
 // --- Stack allocation macros ---
 

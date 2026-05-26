@@ -34,6 +34,32 @@ typedef void const *const *voidc$;
 typedef void *voidb[4];
 typedef void **voidbp;
 
+//  u8a — an *arena*: same 4-pointer shape as Bu8, but used as a
+//  byte dispenser for `u8bAcquire`.  Arena use is strictly along
+//  the call tree, strictly LIFO — see `abc/B.md` §Arenas.  The
+//  type is interchangeable with Bu8 at the ABI level; the name
+//  signals intent (this buffer dispenses, not stores).
+typedef u8 *u8a[4];
+
+//  Save the arena's current dispense point (= IdleHead).  Pair with
+//  u8aRewind to pop everything Acquired since the mark.
+fun u8 *u8aMark(u8a arena) { return arena[2]; }
+
+//  Pop all bytes Acquired since `mark`; arena is ready to dispense
+//  again from `mark` forward.  Any child `Bu8` Acquired between
+//  the Mark and this Rewind is now invalid — do not touch it.
+fun void u8aRewind(u8a arena, u8 *mark) {
+    arena[1] = mark;
+    arena[2] = mark;
+}
+
+//  Full reset — pop everything ever Acquired from this arena.
+//  Equivalent to u8aRewind back to arena[0].
+fun void u8aReset(u8a arena) {
+    arena[1] = arena[0];
+    arena[2] = arena[0];
+}
+
 #define B(T, b) B##T b = {0, 0, 0, 0}
 
 #define Bbusy(b) {b[0], b[2]}
@@ -87,25 +113,25 @@ typedef void **voidbp;
     a_pad(T, n, l);     \
     zerob(n);
 
-// a_lign(T, gauge, buf) — declare T##gp `gauge` over `buf`'s idle,
-// aligned to T.  Any prior DATA + padding lands in PAST.
-#define a_lign(T, gauge, buf) T##gp gauge = T##bAlign(buf)
+// The BASS-implicit `a_lign` / `a_cquire` / `a_rent` / `a_ren` /
+// `a_carve` macros live in PRO.h and act on ABC_BASS.  Use those
+// for the common case.
+//
+// `b_lign` / `b_cq` / `b_rent` / `b_ren` are the explicit-arena
+// variants — same shape, plus an `arena` argument naming the u8
+// buffer to dispense from.  Use them when you need a buffer other
+// than BASS as the arena (e.g. a per-session arena passed down).
+#define b_lign(T, gauge, arena) T##gp gauge = T##bAlign(arena)
 
-// a_cq(T, slice, buf) — declare T##cs `slice` capturing `buf`'s
-// current DATA, then collapse DATA into PAST.
-#define a_cq(T, slice, buf) \
-    T##cs slice = {};       \
-    T##bAcq(buf, slice)
+#define b_cq(T, slice, arena) \
+    T##cs slice = {};         \
+    T##bAcq(arena, slice)
 
-// a_rent(T, news, buf, orig) — declare T##cs `news`, rent it from
-// the u8 arena `buf` using T's alignment.  Expands to a decl plus a
-// call(), so the caller must be inside a sane()'d function (PRO.h).
-#define a_rent(T, news, buf, orig) \
-    T##cs news = {};               \
-    call(T##bAren, buf, news, orig)
+#define b_rent(T, news, arena, src) \
+    T##cs news = {};                \
+    call(T##bAren, arena, news, src)
 
-// a_ren(news, buf, orig) — u8 variant of a_rent (no alignment).
-#define a_ren(news, buf, orig) a_rent(u8, news, buf, orig)
+#define b_ren(news, arena, src) b_rent(u8, news, arena, src)
 
 #define s_pad(T, n, l)                              \
     static T _##n[(l)];                             \
