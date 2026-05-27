@@ -149,9 +149,9 @@ ok64 FILEGetCwd(path8b out) {
     done;
 }
 
-// Limits for the per-spawn stack scratch (argv pointers + NUL-term bytes).
-#define FILE_SPAWN_MAX_ARGS    64
-#define FILE_SPAWN_SCRATCH_LEN (16 * 1024)
+// argv scratch + cargv array are sized to the actual argv at call
+// time and acquired from ABC_BASS — no fixed cap.  Both buffers die
+// at the caller's `call()` boundary along with the rest of BASS.
 
 ok64 FILESpawn(path8sc path, u8css argv,
                int *stdin_w, int *stdout_r, pid_t *pid_out) {
@@ -162,13 +162,19 @@ ok64 FILESpawn(path8sc path, u8css argv,
     // intra-buffer offsets become the char* entries in cargv.
     //  Scratch only needs argv NUL-terminated copies — `path` is
     //  already NUL-terminated by the path8sc contract.
-    a_pad(u8, scratch, FILE_SPAWN_SCRATCH_LEN);
-    char *cargv[FILE_SPAWN_MAX_ARGS + 1];
-
-    int nargs = 0;
+    size_t nargs = 0;
+    size_t scratch_bytes = 0;
     $for(u8cs, a, argv) {
-        if (nargs >= FILE_SPAWN_MAX_ARGS) fail(FILESPAWN);
-        cargv[nargs++] = (char *)u8bIdleHead(scratch);
+        ++nargs;
+        scratch_bytes += $len(*a) + 1;
+    }
+    a_carve(u8, scratch, scratch_bytes);
+    a_carve(void0p, cargv_b, nargs + 1);
+    char **cargv = (char **)cargv_b[1];
+
+    size_t i = 0;
+    $for(u8cs, a, argv) {
+        cargv[i++] = (char *)u8bIdleHead(scratch);
         call(u8bFeed, scratch, *a);
         call(u8bFeed1, scratch, 0);
     }
@@ -231,12 +237,19 @@ ok64 FILESpawnFds(path8sc path, u8css argv,
                   int stdin_fd, int stdout_fd, pid_t *pid_out) {
     sane($ok(path) && pid_out != NULL);
 
-    a_pad(u8, scratch, FILE_SPAWN_SCRATCH_LEN);
-    char *cargv[FILE_SPAWN_MAX_ARGS + 1];
-    int nargs = 0;
+    size_t nargs = 0;
+    size_t scratch_bytes = 0;
     $for(u8cs, a, argv) {
-        if (nargs >= FILE_SPAWN_MAX_ARGS) fail(FILESPAWN);
-        cargv[nargs++] = (char *)u8bIdleHead(scratch);
+        ++nargs;
+        scratch_bytes += $len(*a) + 1;
+    }
+    a_carve(u8, scratch, scratch_bytes);
+    a_carve(void0p, cargv_b, nargs + 1);
+    char **cargv = (char **)cargv_b[1];
+
+    size_t i = 0;
+    $for(u8cs, a, argv) {
+        cargv[i++] = (char *)u8bIdleHead(scratch);
         call(u8bFeed, scratch, *a);
         call(u8bFeed1, scratch, 0);
     }

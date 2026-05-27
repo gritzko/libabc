@@ -295,21 +295,27 @@ con char *_pro_indent =
 // NUL-terminated so the slice's pointers can be safely passed where
 // a NUL-term char* is needed.
 //
+// Backing storage is acquired from ABC_BASS by `_parse_args` — sized
+// exactly to argn, so there is no fixed cap.  MAIN must map ABC_BASS
+// before calling `_parse_args`.
+//
 // Use `$arglen` for argv count, `$arg(i)` to get the i-th slice by
 // value, `a$rg(name, i)` to bind a u8cs local, `an_arg(name, i)` for
 // a safe optional bind (empty if i >= argc).  Pass `u8csbDataC(STD_ARGS)`
 // to anything wanting a u8css over the whole argv (e.g. FILESpawn for
 // self-exec).
-extern u8cs _STD_ARGS[];
 extern u8cs *STD_ARGS[];
 
-fun void _parse_args(int argn, char **args) {
+fun ok64 _parse_args(int argn, char **args) {
+    if (argn < 0) return BADARG;
+    ok64 o = u8csbAcquire(ABC_BASS, STD_ARGS, (size_t)argn);
+    if (o != OK) return o;
     for (int i = 0; i < argn; ++i) {
         u8c *s[2] = $u8str(args[i]);
-        memcpy(_STD_ARGS + i, s, sizeof(s));
+        memcpy(STD_ARGS[1] + i, s, sizeof(s));
     }
-    STD_ARGS[0] = STD_ARGS[1] = _STD_ARGS;
-    STD_ARGS[2] = STD_ARGS[3] = _STD_ARGS + argn;
+    STD_ARGS[2] = STD_ARGS[3];  // mark all DATA filled
+    return OK;
 }
 
 #define $arglen $len(u8csbData(STD_ARGS))
@@ -357,14 +363,17 @@ fun ok64 PROStderrToFile(char const *name) {
 
 #define MAIN(f)                                                          \
     uint8_t _pro_depth = 0;                                              \
-    u8cs _STD_ARGS[64] = {};                                             \
     u8cs *STD_ARGS[4] = {};                                              \
     _Thread_local u8 *ABC_BASS[4] = {};                                  \
     int main(int argn, char **args) {                                    \
         _PRO_TRACE_INIT(args[0]);                                        \
-        _parse_args(argn, args);                                         \
         if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {                    \
             fprintf(stderr, "ABC_BASS u8bMap failed\n");                 \
+            return 1;                                                    \
+        }                                                                \
+        if (_parse_args(argn, args) != OK) {                             \
+            fprintf(stderr, "STD_ARGS acquire failed\n");                \
+            u8bUnMap(ABC_BASS);                                          \
             return 1;                                                    \
         }                                                                \
         ok64 ret = f();                                                  \

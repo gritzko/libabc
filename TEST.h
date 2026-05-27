@@ -17,7 +17,6 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
 
 #define TEST(f)                                                       \
     uint8_t _pro_depth = 0;                                           \
-    u8cs _STD_ARGS[64] = {};                                          \
     u8cs *STD_ARGS[4] = {};                                           \
     _Thread_local u8 *ABC_BASS[4] = {};                               \
     int main(int argn, char **args) {                                 \
@@ -26,6 +25,7 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
             fprintf(stderr, "ABC_BASS u8bMap failed\n");              \
             return 1;                                                 \
         }                                                             \
+        (void)argn; (void)args;                                       \
         ok64 ret = f();                                               \
         u8bUnMap(ABC_BASS);                                           \
         if (ret != OK) {                                              \
