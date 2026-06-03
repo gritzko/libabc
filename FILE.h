@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
@@ -385,9 +386,17 @@ ok64 FILEResize(int const *fd, size_t new_size);
 
 ok64 FILERename(path8s oldname, path8s newname);
 
+//  Ignore SIGPIPE process-wide.  Without it, writing to a pipe/socket
+//  whose read end has closed (a peer dying mid-transfer) delivers
+//  SIGPIPE and terminates the process by default; with it, the write
+//  fails cleanly with EPIPE → FILEFAIL, which propagates as an error.
+//  Idempotent; call from any wire server/client entry point.
+fun void FILEIgnoreSIGPIPE(void) { signal(SIGPIPE, SIG_IGN); }
+
 // Drains the data to the file; if the slice is non empty on return, see errno!
 fun ok64 FILEFeed(int fd, u8 const **data) {
-    ssize_t re = write(fd, *data, $size(data));
+    ssize_t re;
+    do { re = write(fd, *data, $size(data)); } while (re < 0 && errno == EINTR);
     if (re <= 0) return FILEFAIL;
     *data += re;
     return OK;
@@ -420,7 +429,8 @@ fun void u8cssdrained(u8css datav, size_t re) {
 fun ok64 FILEFeedv(int fd, u8css datav) {
     struct iovec io[FILEmaxiov];
     int l = FILE2iovec(io, datav);
-    ssize_t re = writev(fd, io, l);
+    ssize_t re;
+    do { re = writev(fd, io, l); } while (re < 0 && errno == EINTR);
     if (re <= 0) return FILEFAIL;
     u8cssdrained(datav, re);
     return OK;
@@ -437,7 +447,8 @@ fun ok64 FILEFeedAll(int fd, uint8_t const *const *data) {
 }
 
 fun ok64 FILEdrain(u8 **into, int fd) {
-    ssize_t ret = read(fd, *into, $size(into));
+    ssize_t ret;
+    do { ret = read(fd, *into, $size(into)); } while (ret < 0 && errno == EINTR);
     if (ret <= 0) {
         if (ret == 0) return FILEEND;
         return FILEFAIL;  // TODO
@@ -448,7 +459,8 @@ fun ok64 FILEdrain(u8 **into, int fd) {
 
 // FILEDrain: read from fd into slice (fd-first arg order, matches FILEFeed)
 fun ok64 FILEDrain(int fd, $u8 into) {
-    ssize_t ret = read(fd, *into, $len(into));
+    ssize_t ret;
+    do { ret = read(fd, *into, $len(into)); } while (ret < 0 && errno == EINTR);
     if (ret <= 0) {
         if (ret == 0) return FILEEND;
         return FILEFAIL;
@@ -460,7 +472,8 @@ fun ok64 FILEDrain(int fd, $u8 into) {
 fun ok64 FILEdrainv($$u8 datav, int fd) {
     struct iovec io[FILEmaxiov];
     int l = FILE2iovec(io, (u8cssp)datav);
-    ssize_t re = readv(fd, io, l);
+    ssize_t re;
+    do { re = readv(fd, io, l); } while (re < 0 && errno == EINTR);
     if (re <= 0) return FILEFAIL;
     u8cssdrained((u8cssp)datav, re);
     return OK;
