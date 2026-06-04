@@ -148,6 +148,17 @@ ok64 findStest() {
     a_dup(u8c,h5,short_hay);
     want(u8csFindS(h5, ln) == NONE);
 
+    // Regression (fuzz crash-d402460f via spot grep): the needle's first
+    // byte appears within nlen-1 of the term, so csFind advances the
+    // cursor there and the memcmp must NOT read past the haystack end.
+    // Exact-sized stack array so ASAN traps any over-read.
+    u8 tail_hay[5] = {'a', 'a', 'a', 'a', 'A'};
+    u8cs th = {tail_hay, tail_hay + 5};
+    u8 tail_ndl[] = "ABCDE";              // 5-byte needle, first byte at hay[4]
+    u8cs tn = {tail_ndl, tail_ndl + 5};
+    a_dup(u8c, hT, th);
+    want(u8csFindS(hT, tn) == NONE);
+
     // Empty needle
     u8cs empty = {needle1, needle1};
     a_dup(u8c,h6,haystack);

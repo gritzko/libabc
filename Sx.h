@@ -388,6 +388,10 @@ fun ok64 X(, csFindS)(X(, cs) haystack, X(, csc) needle) {
     }
     while ($len(haystack) >= nlen) {
         if (X(, csFind)(haystack, **needle) != OK) break;
+        //  csFind advanced *haystack to the first-byte match, which may
+        //  sit within nlen-1 of the term — re-check before memcmp so it
+        //  never reads past haystack[1] (fuzz crash-d402460f).
+        if ($len(haystack) < nlen) break;
         if (memcmp(*haystack, *needle, $size(needle)) == 0) return OK;
         ++*haystack;
     }
