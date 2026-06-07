@@ -6,10 +6,22 @@
 
 #include "PRO.h"
 
+// Release every resource a half-built pack handle owns, preserving the
+// failure code in *err.  Used on the error paths of PACKCreate/PACKOpen
+// where resources were acquired below the failing check (MEM-015): the
+// owner releases on failure rather than leaving the caller to PACKClose
+// a half-built handle.  Safe when writing==0 (no flush, pure free).
+fun ok64 PACKAbort(packp p, ok64 err) {
+    sane(p != NULL);
+    try(PACKClose, p);  // frees pg + idx mmap + fd, clears the handle
+    return err;         // propagate the original failure, not Close's
+}
+
 ok64 PACKCreate(packp p, const char *path, u64 maxlen) {
     sane(p != NULL && path != NULL && maxlen > 0);
 
     memset(p, 0, sizeof(pack));
+    p->fd = -1;  // -1, not memset's 0, so PACKAbort/PACKClose never close(0)
 
     // Calculate pages needed
     u64 npages = (maxlen + PAGESIZE - 1) / PAGESIZE;
@@ -20,19 +32,21 @@ ok64 PACKCreate(packp p, const char *path, u64 maxlen) {
     if (bufpages > npages) bufpages = npages;
     call(PAGECreate, &p->pg, bufpages * PAGESIZE, NULL, NULL);
 
-    // Map index buffer
+    // Map index buffer.  On failure the PAGE is the only resource taken
+    // so far; PACKClose releases it (writing==0 -> no flush, pure free).
     size_t idxsize = nblocks * PACK_BLOCK_SIZE;
     u64 *idx = mmap(NULL, idxsize, PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    test(idx != MAP_FAILED, PACKFAIL);
+    testsafe(idx != MAP_FAILED, PACKFAIL, __ = PACKAbort(p, __));
     ((u64 **)p->idx)[0] = idx;
     ((u64 **)p->idx)[1] = idx;
     ((u64 **)p->idx)[2] = idx;
     ((u64 **)p->idx)[3] = idx + nblocks * 4;
 
-    // Open file for writing
+    // Open file for writing.  PAGE + index mmap are now owned by p, so
+    // release both via PACKClose if open() fails (MEM-015).
     p->fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    test(p->fd >= 0, PACKFAIL);
+    testsafe(p->fd >= 0, PACKFAIL, __ = PACKAbort(p, __));
 
     p->datalen = 0;
     p->foff = 0;
@@ -153,31 +167,37 @@ ok64 PACKOpen(packp p, const char *path) {
     sane(p != NULL && path != NULL);
 
     memset(p, 0, sizeof(pack));
+    p->fd = -1;  // -1, not memset's 0, so PACKAbort/PACKClose never close(0)
 
     // Open file for reading
     p->fd = open(path, O_RDONLY);
     test(p->fd >= 0, PACKFAIL);
+    // From here on p owns the fd (and, below, the index mmap + PAGE);
+    // every failure path releases via PACKAbort so a failed PACKOpen
+    // leaks nothing and the caller need not PACKClose it (MEM-015).
 
     // Get file size
     off_t fsize = lseek(p->fd, 0, SEEK_END);
-    test(fsize > 16, PACKCORRUPT);  // At least trailer size
+    testsafe(fsize > 16, PACKCORRUPT, __ = PACKAbort(p, __));  // trailer size
 
     // Read trailer: uncompressed length (u64) + index size (u64)
     u64 trailer[2];
-    test(lseek(p->fd, fsize - 16, SEEK_SET) >= 0, PACKFAIL);
-    test(read(p->fd, trailer, 16) == 16, PACKFAIL);
+    testsafe(lseek(p->fd, fsize - 16, SEEK_SET) >= 0, PACKFAIL,
+             __ = PACKAbort(p, __));
+    testsafe(read(p->fd, trailer, 16) == 16, PACKFAIL, __ = PACKAbort(p, __));
 
     p->datalen = trailer[0];
     u64 idxsize = trailer[1];
 
     u64 npages = (p->datalen + PAGESIZE - 1) / PAGESIZE;
-    test(idxsize == PACKIdxSize(npages), PACKCORRUPT);
+    testsafe(idxsize == PACKIdxSize(npages), PACKCORRUPT,
+             __ = PACKAbort(p, __));
 
     // Map index buffer
     u64 nblocks = PACKIdxBlocks(npages);
     u64 *idx = mmap(NULL, idxsize, PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    test(idx != MAP_FAILED, PACKFAIL);
+    testsafe(idx != MAP_FAILED, PACKFAIL, __ = PACKAbort(p, __));
     ((u64 **)p->idx)[0] = idx;
     ((u64 **)p->idx)[1] = idx;
     ((u64 **)p->idx)[2] = idx;
@@ -185,11 +205,14 @@ ok64 PACKOpen(packp p, const char *path) {
 
     // Read index
     off_t idxoff = fsize - 16 - idxsize;
-    test(lseek(p->fd, idxoff, SEEK_SET) >= 0, PACKFAIL);
-    test(read(p->fd, p->idx[0], idxsize) == (ssize_t)idxsize, PACKFAIL);
+    testsafe(lseek(p->fd, idxoff, SEEK_SET) >= 0, PACKFAIL,
+             __ = PACKAbort(p, __));
+    testsafe(read(p->fd, p->idx[0], idxsize) == (ssize_t)idxsize, PACKFAIL,
+             __ = PACKAbort(p, __));
 
     // Create PAGE for decompressed data, set buf[2] to actual data length
-    call(PAGECreate, &p->pg, npages * PAGESIZE, PACKEnsure, p);
+    callsafe(PAGECreate(&p->pg, npages * PAGESIZE, PACKEnsure, p),
+             __ = PACKAbort(p, __));
     ((u8 **)p->pg->buf)[2] = p->pg->buf[0] + p->datalen;
 
     p->writing = NO;

@@ -1,5 +1,6 @@
 #include "PACK.h"
 
+#include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -155,11 +156,93 @@ ok64 PACKtestIndex() {
     done;
 }
 
+// Count PAGE registry slots currently in use (buf[0] != NULL).
+// A leaked PAGE keeps its slot occupied (and its mmap reachable from
+// the global registry), so this is a deterministic, ASan-independent
+// signal of a PAGE/index leak on a failed PACKCreate/PACKOpen.
+static u32 PACKtestPagesUsed() {
+    u32 n = 0;
+    for (u32 i = 0; i < PAGE_REGISTRY_LEN; i++) {
+        if (PAGE_REGISTRY[i].buf[0] != NULL) n++;
+    }
+    return n;
+}
+
+// MEM-015: PACKCreate must not leak the PAGE + index mmap when open()
+// fails *after* both maps succeed.  Force open() failure with an
+// unwritable path (parent dir does not exist); do NOT PACKClose the
+// failed handle — a correct Create releases its own resources.
+ok64 PACKtestCreateFail() {
+    sane(1);
+
+    u32 before = PACKtestPagesUsed();
+
+    pack pw = {};
+    // /nonexistent_dir_mem015/x.lz4 — open(O_CREAT) fails ENOENT,
+    // after PAGECreate + idx mmap have already succeeded.
+    __ = PACKCreate(&pw, "/nonexistent_dir_mem015/x.lz4", PAGESIZE * 10);
+    test(__ != OK, PACKFAIL);  // Create must report the failure
+    __ = OK;                   // consume the deliberate failure
+
+    u32 after = PACKtestPagesUsed();
+    // No PAGE slot may stay occupied: the PAGE (and its idx mmap) leaked
+    // if this fails.  Also asserts the anonymous idx mmap is released
+    // (it is unreachable once pw goes out of scope -> ASan would flag it).
+    test(after == before, PACKFAIL);
+    // Handle must be fully reset so a caller cannot double-free.
+    test(pw.pg == NULL && pw.fd < 0 && pw.idx[0] == NULL, PACKFAIL);
+
+    done;
+}
+
+// MEM-015: PACKOpen must not leak the fd + index mmap when a later
+// step (here: read of a truncated/corrupt index) fails after the
+// idx mmap succeeds.  Build a file whose trailer claims a valid-sized
+// index but the file is too short to contain it, so the index read
+// fails after mmap.
+ok64 PACKtestOpenFail() {
+    sane(1);
+
+    u32 before = PACKtestPagesUsed();
+
+    // Craft a file: trailer says datalen=PAGESIZE (npages=1), idxsize
+    // matches PACKIdxSize(1), but file has no room for the index body,
+    // so the index read at PACKOpen fails after the idx mmap succeeds.
+    u64 datalen = PAGESIZE;
+    u64 npages = 1;
+    u64 idxsize = PACKIdxSize(npages);
+    int fd = open(TEST_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    test(fd >= 0, PACKFAIL);
+    // Layout: [pad 8B][trailer 16B] so fsize=24 (>16, passes the early
+    // check) and the LAST 16B are the trailer.  idxoff = 24-16-idxsize
+    // = -24 < 0 -> the index lseek fails *after* the idx mmap succeeds,
+    // which is exactly the leak window we want to exercise.
+    u64 pad = 0;
+    test(write(fd, &pad, sizeof(pad)) == sizeof(pad), PACKFAIL);
+    u64 trailer[2] = {datalen, idxsize};
+    test(write(fd, trailer, sizeof(trailer)) == sizeof(trailer), PACKFAIL);
+    close(fd);
+
+    pack pr = {};
+    __ = PACKOpen(&pr, TEST_FILE);
+    test(__ != OK, PACKFAIL);  // Open must report the failure
+    __ = OK;                   // consume the deliberate failure
+
+    u32 after = PACKtestPagesUsed();
+    test(after == before, PACKFAIL);
+    test(pr.pg == NULL && pr.fd < 0 && pr.idx[0] == NULL, PACKFAIL);
+
+    unlink(TEST_FILE);
+    done;
+}
+
 ok64 PACKtest() {
     sane(1);
     call(PACKtestIndex);
     call(PACKtestBasic);
     call(PACKtestLargeFile);
+    call(PACKtestCreateFail);
+    call(PACKtestOpenFail);
     done;
 }
 
