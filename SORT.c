@@ -25,12 +25,8 @@ ok64 SORTu64($u64 into, $u64 from) {
                 u8cs chunk;
                 chunk[0] = (u8c*)p;
                 p += clen;
-                chunk[1] = (u8c*)p;
+                chunk[1] = p > from64[1] ? (u8c*)from64[1] : (u8c*)p;
                 HEAPu8csPush1Z(chunksbuf, chunk, SORTu64z);
-            }
-            u8c$ last = *$last(chunksdata);
-            if (last[1] > (u8c*)from64[1]) {
-                last[1] = (u8c*)from64[1];
             }
             while (o == OK && !$empty(chunksdata)) {
                 o = SORTu64next(into8, chunksdata);
