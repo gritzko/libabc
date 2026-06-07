@@ -145,6 +145,54 @@ ok64 BSDtestShrink() {
     done;
 }
 
+// --- crafted (untrusted) patch repro ---
+// A malformed BSDIFF01 patch whose second control triple carries a
+// near-INT64_MAX diff_len. The old additive guards (`newpos+diff_len
+// <= neusize`, `total_diff` accumulation, `24+ctrl_bytes+...`) all
+// wrap on signed i64 overflow, so the patch passes every bound and
+// drives an attacker-controlled memcpy OOB write into `neu`
+// (ASan-reproduced). A hardened BSDPatch must reject it with
+// BSDCORRUPT instead.
+
+// little-endian signed-magnitude i64, matching BSDofftout()
+static void BSDtestPutOff(i64 x, u8 *buf) {
+    i64 y = x < 0 ? -x : x;
+    for (int k = 0; k < 8; k++) buf[k] = (u8)((y >> (8 * k)) & 0xff);
+    if (x < 0) buf[7] |= 0x80;
+}
+
+ok64 BSDtestOverflowPatch() {
+    sane(1);
+
+    // 24-byte header + 2 ctrl triples (48 bytes) + 1 diff byte.
+    u8 pbuf[24 + 48 + 1];
+    zero(pbuf);
+    memcpy(pbuf, "BSDIFF01", 8);
+    BSDtestPutOff(16, pbuf + 8);   // neusize fits in `neu` below
+    BSDtestPutOff(2, pbuf + 16);   // ctrl_count = 2
+
+    // triple 0: diff_len=1, extra_len=0, seek_off=0
+    BSDtestPutOff(1, pbuf + 24);
+    BSDtestPutOff(0, pbuf + 32);
+    BSDtestPutOff(0, pbuf + 40);
+    // triple 1: diff_len near INT64_MAX -> additive guards wrap
+    BSDtestPutOff(0x7fffffffffffffffLL, pbuf + 48);
+    BSDtestPutOff(0, pbuf + 56);
+    BSDtestPutOff(0, pbuf + 64);
+
+    u8csc patch = {pbuf, pbuf + sizeof(pbuf)};
+    a$str(old, "0123456789abcdef");
+    u8 result[16];
+    u8s neu = {result, result + sizeof(result)};
+
+    // Must reject, not crash. (Old code: ASan OOB write in memcpy.)
+    // Call directly (not via try/call) so `__` stays OK for `done`.
+    ok64 o = BSDPatch(neu, old, patch);
+    same(o, BSDCORRUPT);
+
+    done;
+}
+
 typedef struct {
     char const *name;
     ok64 (*fn)();
@@ -165,6 +213,7 @@ ok64 BSDtest() {
         {"repetitive", BSDtestRepetitive},
         {"grow", BSDtestGrow},
         {"shrink", BSDtestShrink},
+        {"overflow_patch", BSDtestOverflowPatch},
     };
 
     i64 count = sizeof(cases) / sizeof(cases[0]);

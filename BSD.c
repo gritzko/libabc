@@ -412,15 +412,24 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
     u8cp ob = old[0];
     u8p nb = neu[0];
 
-    // ctrl block starts at offset 24
+    // ctrl block starts at offset 24. All bounds below subtract from
+    // patchlen/neusize (never add into them) so attacker-controlled
+    // fields can't wrap a signed i64 past a guard. `patchlen >= 24` and
+    // `neusize >= 0` already hold here.
     u8cp cp = pb + 24;
+    // Reject ctrl_count before multiplying: (patchlen-24)/24 is exact
+    // and non-negative, so ctrl_bytes = ctrl_count*24 cannot overflow.
+    test(ctrl_count <= (patchlen - 24) / 24, BSDCORRUPT);
     i64 ctrl_bytes = ctrl_count * 24;
-    test(patchlen >= 24 + ctrl_bytes, BSDCORRUPT);
+
+    // Body bytes after the ctrl block hold the diff then extra blocks.
+    i64 body = patchlen - 24 - ctrl_bytes;  // >= 0 by the test above
 
     // diff block follows ctrl
     u8cp dp = cp + ctrl_bytes;
-    // extra block follows diff (we compute pointer as we go)
-    // First, compute total diff_len to find extra start
+    // Pre-scan ctrl triples to size the diff/extra blocks. Each field is
+    // bounded by the remaining body so the running totals stay within
+    // [0, body] and never wrap.
     i64 total_diff = 0;
     i64 total_extra = 0;
     {
@@ -431,15 +440,20 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
             i64 el = BSDofftin(tp);
             tp += 8;
             tp += 8;  // skip seek
-            test(dl >= 0 && el >= 0, BSDCORRUPT);
+            // dl and el each fit in what the body still has unspent.
+            test(dl >= 0 && dl <= body - total_diff - total_extra,
+                 BSDCORRUPT);
             total_diff += dl;
+            test(el >= 0 && el <= body - total_diff - total_extra,
+                 BSDCORRUPT);
             total_extra += el;
         }
     }
 
-    test(patchlen >= 24 + ctrl_bytes + total_diff + total_extra, BSDCORRUPT);
-
-    u8cp ep = dp + total_diff;
+    // diff block = [dp, dp+total_diff); extra block = [ep, ep+total_extra).
+    u8cp dpend = dp + total_diff;
+    u8cp ep = dpend;
+    u8cp epend = ep + total_extra;
     i64 oldpos = 0, newpos = 0;
 
     for (i64 ci = 0; ci < ctrl_count; ci++) {
@@ -450,7 +464,10 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
         i64 seek_off = BSDofftin(cp);
         cp += 8;
 
-        test(newpos + diff_len <= neusize, BSDCORRUPT);
+        // Bound by subtraction; neusize - newpos stays non-negative.
+        test(diff_len >= 0 && diff_len <= neusize - newpos, BSDCORRUPT);
+        // Re-validate the diff source has these bytes before block end.
+        test(diff_len <= dpend - dp, BSDCORRUPT);
 
         // Read diff bytes and add old data
         memcpy(nb + newpos, dp, diff_len);
@@ -462,7 +479,9 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
         newpos += diff_len;
         oldpos += diff_len;
 
-        test(newpos + extra_len <= neusize, BSDCORRUPT);
+        test(extra_len >= 0 && extra_len <= neusize - newpos, BSDCORRUPT);
+        // Re-validate the extra source has these bytes before block end.
+        test(extra_len <= epend - ep, BSDCORRUPT);
 
         // Copy extra bytes
         memcpy(nb + newpos, ep, extra_len);
