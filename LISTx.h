@@ -15,6 +15,11 @@ fun ok64 X(LIST, insert)(X(, b) list, T const* entry, u32 prev) {
     ok64 o = X(, bFeedP)(list, entry);
     if (o != OK) return o;
     u32 next = X(, bAtP)(list, prev)->_list.next;
+    // MEM-014: the successor index is taken from a list link that may be
+    // corrupt or caller-controlled; validate it against the list length
+    // before dereferencing list[next], since bAtP only asserts (compiled
+    // out in release) and would otherwise write out of bounds at :next.
+    if (next > len) return LISTBADNDX;
     X(, bAtP)(list, len)->_list.next = next;
     X(, bAtP)(list, len)->_list.prev = prev;
     X(, bAtP)(list, prev)->_list.next = len;
