@@ -58,6 +58,28 @@ fun int POLFind(int tofd) {
     return -1;
 }
 
+// Re-resolve a poller after a re-entrant callback that may have
+// sUp/sDown-swapped or ejected heap slots. `key` is the pre-callback
+// snapshot. File pollers keep a stable tofd; timer callbacks rewrite
+// tofd, so timers are matched by their stable (callback,payload) pair.
+// Returns the current index, or -1 if the poller is gone.
+fun int POLRefind(poller const* key) {
+    poller** data = pollerbData(POL_QUEUE);
+    size_t len = $len(data);
+    b8 timer = key->tofd < 0;
+    for (size_t i = 0; i < len; i++) {
+        poller const* p = *data + i;
+        if (timer) {
+            if (p->callback == key->callback && p->payload == key->payload &&
+                p->tofd < 0)
+                return (int)i;
+        } else if (p->tofd == key->tofd) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
 ok64 POLTrackEvents(int fd, poller p) {
     sane(p.callback != NULL);  // tofd can be 0 for stdin
     u64 now = POLNow();
@@ -184,17 +206,25 @@ ok64 POLLoop(u64 timens) {
                 continue;
             }
             at->deadline = now;
-            at->callback(at->tofd, at);
+            poller key = *at;  // stable identity snapshot for re-resolution
+            at->callback(key.tofd, at);
+            // The callback may have sUp/sDown-swapped or ejected slots for
+            // other pollers, so `at`/root are stale now: re-resolve by stable
+            // identity before testing/clearing/re-heapifying.
+            int idx = POLRefind(&key);
+            if (idx < 0) continue;  // callback already removed us
+            data = pollerbData(POL_QUEUE);
+            at = *data + idx;
             // Remove if callback cleared itself
             if (at->callback == NULL) {
-                poller dummy;
-                HEAPpollerPopZ(&dummy, POL_QUEUE, pollerZ);
+                HEAPpollerEjectAtZ(POL_QUEUE, idx, pollerZ);
                 data = pollerbData(POL_QUEUE);
                 continue;
             }
             int period_ms = at->tofd < 0 ? -at->tofd : 1000;
             at->deadline = now + period_ms * POLNanosPerMSec;
-            pollersDownZ(data, pollerZ);
+            pollersUpAtZ(data, idx, pollerZ);
+            pollersDownAtZ(data, idx, pollerZ);
         }
 
         if ($empty(data)) break;
@@ -244,6 +274,13 @@ ok64 POLLoop(u64 timens) {
             if (at->callback == NULL) continue;
             at->revents = vec[i].revents;
             short events = at->callback(fd, at);
+            // The callback may have sUp/sDown-swapped or ejected slots for
+            // other fds (POLTrackEvents/POLIgnoreEvents/POLAddTime), so idx/at
+            // are stale now: re-resolve this fd before testing/clearing/ejecting.
+            idx = POLFind(fd);
+            if (idx < 0) continue;  // callback already removed us
+            data = pollerbData(POL_QUEUE);
+            at = *data + idx;
             // Remove if callback cleared itself or no events requested
             if (at->callback == NULL || (at->tofd >= 0 && events == 0)) {
                 HEAPpollerEjectAtZ(POL_QUEUE, idx, pollerZ);
