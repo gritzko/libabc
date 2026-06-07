@@ -73,11 +73,38 @@ ok64 OKdec() {
     done;
 }
 
+// MEM-002: i64decdrain must propagate the inner u64decdrain failure and
+// must NOT read/produce a value from uninitialized stack memory. A lone
+// sign (or sign followed by a non-digit) leaves the inner decode with no
+// digits: u64decdrain returns SBADARG without writing x. i64decdrain must
+// return that error and leave the out-parameter untouched.
+ok64 BADdec() {
+    sane(1);
+    // Each input has a leading sign so sane(!$empty) passes, then the inner
+    // u64decdrain sees no digit and returns SBADARG without writing x. Also
+    // a bare non-digit "x" reaches u64decdrain directly with the same result.
+    char const *bad[] = {"-", "+", "+a", "-z", "x"};
+    for (int n = 0; n < (int)(sizeof(bad) / sizeof(bad[0])); ++n) {
+        a$str(dec, bad[n]);
+        i64 const sentinel = 0x7eadbeef7eadbeefLL;
+        i64 i = sentinel;
+        // not call(): we expect a non-OK code, assert on it rather than return
+        otry(i64decdrain, &i, dec);
+        // the inner u64decdrain failure must propagate verbatim
+        testeqv((long long)(__), (long long)(SBADARG), "%llx");
+        // out-parameter must be untouched on the error path (no garbage)
+        testeqv((long long)(i), (long long)(sentinel), "%llx");
+        __ = OK;
+    }
+    done;
+}
+
 ok64 Utest() {
     sane(1);
     call(Utest1);
     call(Utest2);
     call(OKdec);
+    call(BADdec);
     done;
 }
 
