@@ -319,3 +319,11 @@ target_link_libraries(ROCKtest abc)
 add_test(NAME ROCKtest COMMAND ROCKtest)
 endif()
 
+# Pure (rocksdb-free) sizing helpers for the merge operator: runs without
+# a live RocksDB so the overflow guards are always exercised (MEM-012).
+add_executable(ROCKMERGEtest ROCKMERGE.c)
+target_link_options(ROCKMERGEtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(ROCKMERGEtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(ROCKMERGEtest abc)
+add_test(NAME ROCKMERGEtest COMMAND ROCKMERGEtest)
+

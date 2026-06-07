@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ROCKMERGE.h"
 #include "PRO.h"
 
 // Alloc default options (bloom filter, LRU cache)
@@ -97,23 +98,33 @@ static char *ROCKmerge_full(void *state, const char *key, size_t key_length,
                             size_t *new_value_length) {
     ROCKmerge_state *ms = (ROCKmerge_state *)state;
     *new_value_length = 0;
-    int total = num_operands + (existing_value != NULL ? 1 : 0);
+    // Compute total record count in size_t; a negative or overflowing
+    // num_operands must not wrap the stack/heap selector (MEM-012).
+    size_t total = 0;
+    if (ROCKmergeTotal(num_operands, existing_value != NULL, &total) != OK) {
+        *success = 0;
+        return NULL;
+    }
     if (total == 0) {
         *success = 1;
         return calloc(1, 1);
     }
 
     // Build u8css from existing_value + operands (heap for large counts)
-    u8cs stack_recs[64];
+    u8cs stack_recs[ROCKMERGE_STACK];
     u8cs *recs = stack_recs;
-    if (total > 64) {
+    if (!ROCKmergeOnStack(total)) {
+        if (total > SIZE_MAX / sizeof(u8cs)) {
+            *success = 0;
+            return NULL;
+        }
         recs = malloc(total * sizeof(u8cs));
         if (recs == NULL) {
             *success = 0;
             return NULL;
         }
     }
-    int ri = 0;
+    size_t ri = 0;
     if (existing_value != NULL) {
         recs[ri][0] = (u8cp)existing_value;
         recs[ri][1] = (u8cp)existing_value + existing_value_length;
@@ -126,11 +137,13 @@ static char *ROCKmerge_full(void *state, const char *key, size_t key_length,
     }
     u8css records = {recs, recs + total};
 
-    // Allocate output buffer (sum of inputs as initial estimate)
+    // Allocate output buffer (2 * sum of inputs, overflow-guarded estimate)
     size_t cap = 0;
-    for (int i = 0; i < total; i++) cap += $len(recs[i]);
-    if (cap == 0) cap = 64;
-    cap *= 2;
+    if (ROCKmergeCap(records, &cap) != OK) {
+        if (recs != stack_recs) free(recs);
+        *success = 0;
+        return NULL;
+    }
 
     char *out = malloc(cap);
     if (out == NULL) {

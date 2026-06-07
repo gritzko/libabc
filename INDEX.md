@@ -47,6 +47,7 @@
 | PRO.h | Procedural macros (call, done, sane, try, fail) for error handling |
 | RAP.h | rapidhash wrapper for fast non-cryptographic hashing |
 | ROCK.h | RocksDB C API wrapper with error handling |
+| ROCKMERGE.h | Overflow-safe sizing helpers for ROCK.c's merge operator (rocksdb-free) |
 | RON.h | RON Base64 encoding and ron60 type definitions |
 | S.h | Slice types and macros ($head, $term, $len, etc.) |
 | SAN.h | Namespace sanitizer that undefines ABC macros |
