@@ -644,8 +644,70 @@ ok64 FILEBookEnsureTest() {
     done;
 }
 
+// MEM-011 repro: FILEFlush must consume the written DATA prefix (advance
+// buf[1]), not grow DATA into uninitialised IDLE (advance buf[2]).  Drive a
+// FILE_WANT_BUFS stream past PAGESIZE, flush, and assert the written prefix
+// was consumed: DATA shrinks, PAST grows, the buffer never reaches into the
+// uninitialised IDLE tail.  Pre-fix the buggy `u8bFed(buf,r)` left DATA at
+// 2*N and PAST at 0, so a second flush re-wrote the data plus N zero bytes.
+ok64 FILEFlushStreamTest() {
+    sane(1);
+    a_path(path, $cstr("/tmp"));
+    a_cstr(tmpl, "FILEFlushStream_XXXXXX");
+    call(PATHu8bAddTmp, path, tmpl);
+
+    // Booked write stream: 8MB reserved, 1 page initial -> FILE_WANT_BUFS slot
+    u8bp buf = NULL;
+    call(FILEBookCreate, &buf, $path(path), 8 * MB, PAGESIZE);
+    int fd = FILEBookedFD(buf);
+    test(fd >= 0, FILEFAIL);
+
+    // Feed a position-dependent pattern well past PAGESIZE so the flush fires.
+    size_t const N = 3 * PAGESIZE;
+    for (size_t i = 0; i < N; i++) {
+        call(FILEBookEnsure, buf, 1);
+        call(u8bFeed1, buf, (u8)(i & 0xFF));
+    }
+    testeqv((long long)(u8bDataLen(buf)), (long long)(N), "%lld");
+    testeqv((long long)(u8bPastLen(buf)), (long long)(0), "%lld");
+
+    // First flush: writes the whole DATA, must consume the written prefix.
+    call(FILEFlush, &fd);
+    // FIX: written prefix consumed -> DATA emptied, never grown into IDLE.
+    // BUG: u8bFed grew DATA to 2*N (the extra N bytes uninitialised IDLE).
+    testeqv((long long)(u8bDataLen(buf)), (long long)(0), "%lld");
+
+    // Second flush is a no-op (DATA below threshold); must not corrupt.
+    call(FILEFlush, &fd);
+    testeqv((long long)(u8bDataLen(buf)), (long long)(0), "%lld");
+
+    call(FILEUnBook, buf);
+
+    // Read the file back: exactly the N fed bytes, in order, no duplication
+    // and no trailing garbage from a re-flushed uninitialised tail.
+    int rfd = FILE_CLOSED;
+    call(FILEOpen, &rfd, $path(path), O_RDONLY);
+    size_t fsize = 0;
+    call(FILESize, &fsize, &rfd);
+    testeqv((long long)(fsize), (long long)(N), "%lld");
+    aBpad2(u8, back, 3 * PAGESIZE);
+    call(FILEDrain, rfd, backidle);
+    while (u8bDataLen(backbuf) < N && u8bHasRoom(backbuf)) {
+        call(FILEDrain, rfd, backidle);
+    }
+    testeqv((long long)(u8bDataLen(backbuf)), (long long)(N), "%lld");
+    u8csp got = u8bDataC(backbuf);
+    for (size_t i = 0; i < N; i++) {
+        testeqv((long long)((*got)[i]), (long long)((u8)(i & 0xFF)), "%lld");
+    }
+    call(FILEClose, &rfd);
+    call(FILEUnLink, $path(path));
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
+    call(FILEFlushStreamTest);
     call(FILEtest1);
     call(FILEtest2);
     call(FILE3);

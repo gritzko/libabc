@@ -511,7 +511,10 @@ ok64 FILEFlush(int const *fd) {
     if (u8bDataLen(buf) >= PAGESIZE) {
         int r = write(*fd, *u8bDataC(buf), u8bDataLen(buf));
         if (r < 0) fail(FILEERROR);  // todo
-        u8bFed(buf, r);
+        if (r == 0) done;  // nothing written: avoid a no-op flush loop
+        // Consume the written prefix (advance PAST->DATA boundary buf[1]);
+        // never grow DATA into the uninitialised IDLE tail (MEM-011).
+        call(u8bUsed, buf, (size_t)r);
         if (u8bPastLen(buf) >= u8bDataLen(buf)) u8bShift(buf, 0);
         // todo if grows too fast
     }
