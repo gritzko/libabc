@@ -50,6 +50,7 @@ ok64 TCPListen(int *fd, u8cs addr) {
         int rc = bind(sfd, rp->ai_addr, rp->ai_addrlen);
         if (rc != 0) {
             trace("bind failed: %s\n", strerror(errno));
+            close(sfd);
             if (result) NETFreeAddress(&result);
             return TCPFAIL;
         }
