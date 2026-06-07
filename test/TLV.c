@@ -116,12 +116,43 @@ ok64 TLVtest4() {
     done;
 }
 
+// MEM-004: a huge-type TLV record whose declared body length is near
+// u64max makes the additive guard `hlen + blen <= len` wrap below `len`,
+// so the bounds check passes and a wild, out-of-bounds value slice is
+// returned. The probe MUST reject such a record (TLVNODATA), and a drain
+// must not advance the stream past the (tiny) buffer.
+ok64 TLVtest5() {
+    sane(1);
+    a_pad(u8, pad, 64);
+    // huge-type byte ('!'..':'); '!' maps to type 'A' inside the probe
+    u8 huge = '!';
+    // 9 + blen wraps to a small value below $len(data) for the buggy guard
+    u64 blen = u64max - 4;
+    u8 **into = u8bIdle(pad);
+    call(u8sFeed8, into, &huge);
+    call(u8sFeed64, into, &blen);
+
+    // A drain (which internally probes) must reject: the declared body
+    // cannot fit in the 9-byte buffer. The buggy additive guard wraps and
+    // returns OK, then forms a wild slice and desyncs the stream.
+    u8c **from = u8bDataC(pad);
+    size_t before = $len(from);
+    u8cs rec = {};
+    try(TLVDrain$, rec, from);
+    testeqv((long long)(TLVNODATA), (long long)(__), "%lld");
+    // stream must not have advanced past the tiny buffer
+    testeqv((long long)(before), (long long)($len(from)), "%lld");
+    __ = OK;  // the expected-failure above left __ set; clear before done
+    done;
+}
+
 ok64 TLVtest() {
     sane(1);
     call(TLVtest1);
     call(TLVtest2);
     call(TLVtest3);
     call(TLVtest4);
+    call(TLVtest5);
     done;
 }
 

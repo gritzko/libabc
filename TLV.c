@@ -24,7 +24,11 @@ fun ok64 TLVprobe(u8* t, u8* hlen, u64* blen, $cu8c data) {
     } else {
         return TLVBADREC;
     }
-    return (*hlen + *blen) <= $len(data) ? OK : TLVNODATA;
+    // Subtraction-based bound: each branch above guaranteed
+    // $len(data) >= *hlen, so $len(data) - *hlen cannot underflow.
+    // Comparing the room that remains avoids the additive wrap where a
+    // huge *blen would make (*hlen + *blen) overflow below $len(data).
+    return *blen <= (u64)$len(data) - *hlen ? OK : TLVNODATA;
 }
 
 ok64 _TLVu8sDrain(u8cs from, u8p type, u8csp value) {
