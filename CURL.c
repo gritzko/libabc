@@ -170,6 +170,13 @@ static ok64 CURLStart(CURLreq *req) {
     curl_easy_setopt(req->easy, CURLOPT_PRIVATE, req);
     curl_easy_setopt(req->easy, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(req->easy, CURLOPT_TIMEOUT, 30L);
+    // Bound the connect so a firewalled/unreachable host fails fast and
+    // surfaces as a clean CURL transfer error, independent of any outer
+    // ctest TIMEOUT. Caller may override via CURLOPT before CURLStart.
+    if (req->connect_ms)
+        curl_easy_setopt(req->easy, CURLOPT_CONNECTTIMEOUT_MS, (long)req->connect_ms);
+    else
+        curl_easy_setopt(req->easy, CURLOPT_CONNECTTIMEOUT, 10L);
 
     CURLMcode mc = curl_multi_add_handle(curl_multi, req->easy);
     if (mc != CURLM_OK) {
@@ -185,6 +192,10 @@ static ok64 CURLStart(CURLreq *req) {
 }
 
 ok64 CURLGet(const char *url, CURLcb cb, void *userdata) {
+    return CURLGetTimed(url, 0, cb, userdata);
+}
+
+ok64 CURLGetTimed(const char *url, u32 connect_ms, CURLcb cb, void *userdata) {
     if (!curl_multi) return CURLBAD;
 
     CURLreq *req = (CURLreq *)calloc(1, sizeof(CURLreq));
@@ -192,6 +203,7 @@ ok64 CURLGet(const char *url, CURLcb cb, void *userdata) {
     req->url = strdup(url);
     req->callback = cb;
     req->userdata = userdata;
+    req->connect_ms = connect_ms;
 
     curl_easy_setopt(req->easy, CURLOPT_URL, req->url);
 

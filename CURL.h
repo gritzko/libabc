@@ -20,6 +20,7 @@ typedef struct CURLreq {
     u8b response;
     CURLcb callback;
     void *userdata;
+    u32 connect_ms;  // 0 = default connect timeout; else CONNECTTIMEOUT_MS
 } CURLreq;
 
 // Initialize curl subsystem, integrate with POL
@@ -30,6 +31,10 @@ ok64 CURLFree();
 
 // Start a GET request (async, calls callback when complete)
 ok64 CURLGet(const char *url, CURLcb cb, void *userdata);
+
+// Start a GET with an explicit connect timeout in milliseconds (0 = default).
+// Used to bound a firewalled/unreachable host so it fails fast and clean.
+ok64 CURLGetTimed(const char *url, u32 connect_ms, CURLcb cb, void *userdata);
 
 // Start a POST request
 ok64 CURLPost(const char *url, u8cs body, const char *content_type,

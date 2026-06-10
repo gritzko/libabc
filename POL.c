@@ -114,26 +114,64 @@ ok64 POLIgnoreEvents(int fd) {
     return HEAPpollerEjectAtZ(POL_QUEUE, idx, pollerZ);
 }
 
+fun int POLFindTimer(void* payload);
+
 short POLTimer(int fd, struct poller* p) {
     if (p->callback == NULL || p->payload == NULL) return 0;
-    timercb timer = p->payload;
+    void* payload = p->payload;  // stable identity; survives heap reorder
+    timercb timer = payload;
     u32 ms = timer(p->deadline);
-    // If timer returns >= 1 hour, treat as "never" - remove from queue
+    // The user timer callback may have re-entered POL (POLTrackTime /
+    // POLAddTime / POLIgnoreEvents from libcurl's multi-timer callback) and
+    // sUp/sDown-swapped or ejected heap slots, so `p` may no longer point at
+    // THIS timer -- it could now alias a file (curl socket) poller. Writing
+    // `p->tofd` blindly here is the residual ABC-001 corruption: it stamps a
+    // negative tofd onto a file poller, which is then driven as a bogus fd
+    // into curl_multi_socket_action (wild-pointer SEGV). Re-resolve our own
+    // slot by stable (POLTimer, payload) identity before mutating it.
+    poller** data = pollerbData(POL_QUEUE);
+    int idx = POLFindTimer(payload);
+    if (idx < 0) return 0;  // we were ejected during the callback
+    poller* self = *data + idx;
+    // If the timer requested "never" (>= 1 hour), clear it for removal.
     if (ms >= 3600000) {
-        p->callback = NULL;
+        self->callback = NULL;
         return 0;
     }
-    p->tofd = -(int)ms;  // negative for timer period
+    self->tofd = -(int)ms;  // negative for timer period
     return 0;
 }
 
 ok64 POLTrackTime(timercb callback) {
+    sane(callback != NULL);
+    // A POLTimer poller's tofd drifts to -period_ms on every fire, so it is
+    // NOT a stable key. Dedup by the timer's stable (POLTimer, payload)
+    // identity, never by tofd: matching by tofd lets a repeated TrackTime
+    // (e.g. libcurl re-arming its multi timer every tick) push DUPLICATE
+    // timer pollers, which then collide in POLRefind, scramble the heap and
+    // ultimately stamp a negative tofd onto a *file* poller -> a bogus fd is
+    // driven into curl_multi_socket_action (wild-pointer SEGV). One timer
+    // per payload, always.
+    u64 now = POLNow();
+    int idx = POLFindTimer((void *)callback);
+    if (idx >= 0) {
+        // Already tracked: re-arm at the -1ms initial cadence, re-heapify.
+        poller **data = pollerbData(POL_QUEUE);
+        poller *t = *data + idx;
+        t->tofd = -1;
+        t->deadline = now + 1 * POLNanosPerMSec;
+        pollersUpAtZ(data, (size_t)idx, pollerZ);
+        pollersDownAtZ(data, (size_t)idx, pollerZ);
+        done;
+    }
     poller t = {
         .callback = &POLTimer,
-        .payload = callback,
+        .payload = (void *)callback,
         .tofd = -1,  // -1ms initial
+        .deadline = now + 1 * POLNanosPerMSec,
     };
-    return POLTrackEvents(-1, t);
+    call(HEAPpollerPushZ, POL_QUEUE, &t, pollerZ);
+    done;
 }
 
 // Find timer by callback payload (since timers use POLTimer as callback)

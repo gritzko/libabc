@@ -218,6 +218,16 @@ target_link_libraries(POLtest abc)
 add_test(NAME POLtest COMMAND POLtest)
 set_tests_properties(POLtest PROPERTIES TIMEOUT 20)
 
+# ABC-001: deterministic, hermetic firewalled/unreachable-host regression.
+# Uses RFC-5737 TEST-NET addresses with a short connect timeout (no live DNS),
+# so it must time out cleanly with ZERO ASan reports and never SEGV.
+add_executable(CURLfwtest CURLfw.c)
+target_link_options(CURLfwtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(CURLfwtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(CURLfwtest abc)
+add_test(NAME CURLfwtest COMMAND CURLfwtest)
+set_tests_properties(CURLfwtest PROPERTIES TIMEOUT 30)
+
 endif()
 
 add_executable(POLlooptest POLloop.c)
