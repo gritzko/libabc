@@ -28,6 +28,11 @@ add_executable(SORTfuzz SORT.c ../SORT.c ../RON.c)
 add_executable(DIFFfuzz DIFF.c ../RON.c)
 
 add_executable(URIfuzz URI.c ../URI.c ../URI.rl.c)
+#  URISplitPath now walks the path via abc/PATH's PATHu8sDrainNE
+#  (URI-004), so the fuzz target needs PATH.c + its UTF8/ryu deps —
+#  pulled on demand from the abc library (URI symbols stay instrumented
+#  via the explicit ../URI.c above; the lib's copies are not pulled).
+target_link_libraries(URIfuzz abc)
 
 add_executable(SLOGfuzz SLOG.c)
 target_link_libraries(SLOGfuzz abc)

@@ -64,7 +64,7 @@
 | TLV.h | Type-Length-Value encoding with variable-length support |
 | TTY.h | Terminal styled output with RGB colors and padding |
 | UDP.h | UDP socket operations (bind, connect, send, receive) |
-| URI.h | URI parser with scheme, authority, path, query, fragment extraction |
+| URI.h | URI parser (scheme/authority/path/query/fragment views into source); walk path via abc/PATH, collect URIs as u8css text |
 | URI.rl.h | Ragel-generated URI lexer enums and callbacks |
 | UTF8.h | UTF-8 encoding/decoding and validation |
 | Y.h | Y-merge framework error codes and heap instantiation |

@@ -1,5 +1,6 @@
 #include "URI.h"
 
+#include "PATH.h"
 #include "PRO.h"
 
 ok64 URIonPath(u8cs tok, urip state) {
@@ -49,23 +50,15 @@ ok64 URIonAuthority(u8cs tok, urip state) {
 }
 ok64 URIonURI(u8cs tok, urip state) { return OK; }
 ok64 URIonRoot(u8cs tok, urip state) { return OK; }
-ok64 URIonSegment(u8cs tok, urip state) {
-    if (state->segments) {
-        return u8cssFeed1(u8csbIdle(state->segments), tok);
-    }
-    return OK;
-}
-ok64 URIonSegment_nz(u8cs tok, urip state) {
-    if (state->segments) {
-        return u8cssFeed1(u8csbIdle(state->segments), tok);
-    }
-    return OK;
-}
+//  Path segments are no longer materialized at parse time (URI-004):
+//  the lexer leaves the whole path in `state->path`; readers walk it
+//  on demand via abc/PATH (see URISplitPath below).  These two
+//  callbacks are now inert.
+ok64 URIonSegment(u8cs tok, urip state) { return OK; }
+ok64 URIonSegment_nz(u8cs tok, urip state) { return OK; }
 
 ok64 URIutf8Drain(u8cs from, urip u) {
-    u8csbp segs = u->segments;  // preserve optional segments buffer
     zerop(u);
-    u->segments = segs;
     $mv(u->data, from);
     return URILexer(u);
 }
@@ -111,28 +104,20 @@ ok64 URIutf8Feed(u8s into, uricp u) {
 // Static buffer for relative path computation results
 static u8 URIRelPathBuf[4096];
 
-// Split path into segments (by '/')
-// Skips leading slash, stores each segment in segs buffer
+// Split path into its non-empty segments, storing each (a view into
+// `path`) in the `segs` buffer.  Walks the path on demand via abc/PATH
+// (URI-004): no hand-rolled '/'-splitting, no parse-time segments
+// buffer.  PATHu8sDrainNE skips empty runs (leading '/', '//',
+// trailing '/'), matching the old behaviour exactly.
 static ok64 URISplitPath(u8csbp segs, u8csc path) {
     sane(segs);
     u8csbReset(segs);
     if (u8csEmpty(path)) done;
 
-    u8cp p = path[0];
-    u8cp end = path[1];
-
-    // Skip leading slash
-    if (p < end && *p == '/') p++;
-
-    while (p < end) {
-        u8cp seg_start = p;
-        while (p < end && *p != '/') p++;
-        // Add segment (even if empty, for consecutive slashes)
-        if (p > seg_start) {
-            u8cs seg = {seg_start, p};
-            call(u8cssFeed1, u8csbIdle(segs), seg);
-        }
-        if (p < end) p++;  // skip slash
+    a_dup(u8c, cursor, path);
+    u8cs seg = {};
+    while (PATHu8sDrainNE(cursor, seg) == OK) {
+        call(u8cssFeed1, u8csbIdle(segs), seg);
     }
     done;
 }

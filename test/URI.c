@@ -5,6 +5,7 @@
 
 #include "B.h"
 #include "FILE.h"
+#include "PATH.h"
 #include "PRO.h"
 #include "TEST.h"
 
@@ -125,33 +126,44 @@ ok64 URItest5() {
     done;
 }
 
-// Test segment collection
+// URI-004: the lexer no longer materializes a path-`segments` buffer.
+// Readers walk the parsed `path` component on demand via abc/PATH.
+// This table-driven test parses each URI, then asserts that an
+// abc/PATH segment walk of `u.path` yields exactly the expected
+// non-empty segments — the same result the old `segments` buffer
+// produced (PATHu8sDrainNE skips empty runs: leading '/', '//',
+// trailing '/').  Cases cover the basic path, a trailing slash, a
+// path with NO segments (bare '/'), and a URI with no path at all.
 ok64 URITestSegments() {
     sane(1);
 
-    // Parse URI with segments buffer
-    a$str(uri_str, "http://example.com/a/b/c");
-    uri u = {};
-    a_pad(u8cs, segs, 16);
-    u.segments = segs;
-    call(URIutf8Drain, uri_str, &u);
+    static struct {
+        char const *uri;
+        char const *segs[8];   // NULL-terminated expected segment list
+    } cases[] = {
+        { "http://example.com/a/b/c", { "a", "b", "c", NULL } },
+        { "http://example.com/a/b/",  { "a", "b", NULL } },     // trailing '/'
+        { "http://example.com/",      { NULL } },               // zero segments
+        { "http://example.com",       { NULL } },               // no path slot
+        { "http://h/single",          { "single", NULL } },     // one segment
+        { "/a/b/c",                   { "a", "b", "c", NULL } }, // path-only ref
+    };
 
-    // Should have 3 segments: "a", "b", "c"
-    u8cscs seg_data;
-    u8cscsDup(seg_data, u8csbDataC(segs));
-    test(u8cscsLen(seg_data) == 3, URIFAIL);
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        a_cstr(uri_str, cases[i].uri);
+        uri u = {};
+        call(URIutf8Drain, uri_str, &u);
 
-    a$str(expect_a, "a");
-    a$str(expect_b, "b");
-    a$str(expect_c, "c");
-    $testeq(*u8cscsAtP(seg_data, 0), expect_a);
-    $testeq(*u8cscsAtP(seg_data, 1), expect_b);
-    $testeq(*u8cscsAtP(seg_data, 2), expect_c);
-
-    // Test without segments buffer (should still work)
-    uri u2 = {};
-    call(URIutf8Drain, uri_str, &u2);
-    $testeq(u.path, u2.path);
+        size_t n = 0;
+        $eachseg(seg, u.path) {
+            test(cases[i].segs[n] != NULL, URIFAIL);   // not too many
+            a_cstr(expect, cases[i].segs[n]);
+            $testeq(seg, expect);
+            n++;
+        }
+        // Walked exactly the expected count (no missing tail).
+        test(cases[i].segs[n] == NULL, URIFAIL);
+    }
 
     done;
 }

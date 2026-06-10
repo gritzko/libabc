@@ -23,8 +23,6 @@ typedef struct {
     u8cs path;
     u8cs query;
     u8cs fragment;
-
-    u8csbp segments;  // optional: if non-NULL, lexer populates with path segments
 } uri;
 
 typedef uri* urip;
@@ -34,17 +32,11 @@ typedef uri const uric;
 // Backwards compatibility
 typedef uri URIstate;
 
-// Required by the Bx.h template.  Order URIs by their `data` slice
-// content — covers every populated component since `data` is a view
-// over the original byte source the lexer parsed.
-fun b8 uriZ(uri const *a, uri const *b) { return u8csZ(&a->data, &b->data); }
-
-// Generate urib / uribFeed1 / uribDataLen / uribData / urisAtP /
-// uricsAtP etc.  Buffer of uri values; one heap allocation per
-// `cli` instance, lifetime owned by the entry frame (CLAUDE.md §5).
-#define X(M, name) M##uri##name
-#include "Bx.h"
-#undef X
+// `uri` is a variable parse-result whose component slices VIEW into
+// the source text (`data`) — not a fixed-bit-layout record — so it has
+// no Bx container.  Collections of URIs carry the UNPARSED text
+// (`u8css` / `u8csb`) and parse one entry at a time on demand; walk
+// the path's segments via abc/PATH's `$eachseg` / PATHu8sDrain.
 
 // Parse URI from `state->data`.  Like any abc/S.md drain, URILexer
 // CONSUMES its input slice — `state->data[0]` advances as bytes are
