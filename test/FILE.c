@@ -1,6 +1,7 @@
 #include "FILE.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <stdlib.h>
 
 #include "INT.h"
@@ -291,7 +292,7 @@ ok64 FILEtest8b() {
     done;
 }
 
-// Test FILEerrno translation
+// Test FILEErr errno translation
 ok64 FILEtest9() {
     sane(1);
 
@@ -304,12 +305,13 @@ ok64 FILEtest9() {
     ok64 res = FILEStat(&s, $path(nofile));
     test(res == FILENONE, FILEFAIL);
 
-    // Verify FILEerrno translates correctly
-    test(FILEerrno(ENOENT) == FILENONE, FILEFAIL);
-    test(FILEerrno(EACCES) == FILEACCES, FILEFAIL);
-    test(FILEerrno(EEXIST) == FILEEXIST, FILEFAIL);
-    test(FILEerrno(0) == OK, FILEFAIL);
-    test(FILEerrno(9999) == FILEFAIL, FILEFAIL);  // unknown errno
+    // Verify FILEErr translates the current errno correctly
+    errno = ENOENT; test(FILEErr(FILEFAIL) == FILENONE, FILEFAIL);
+    errno = EACCES; test(FILEErr(FILEFAIL) == FILEACCES, FILEFAIL);
+    errno = EEXIST; test(FILEErr(FILEFAIL) == FILEEXIST, FILEFAIL);
+    errno = 0;      test(FILEErr(FILEFAIL) == OK, FILEFAIL);
+    errno = 9999;   test(FILEErr(FILEFAIL) == FILEFAIL, FILEFAIL);  // unknown errno
+    errno = 0;
 
     done;
 }
@@ -752,8 +754,45 @@ ok64 FILEExistsTest() {
     done;
 }
 
+//  ABC-002: one errno→ok64 source of truth — the switch lives in
+//  FILEErr() (FILE.c).  Assert it maps each errno to its canonical FILE*
+//  symbol and falls back to the caller's `def` for an errno it does not
+//  map.  Pre-fix the old FILE_ERR_VOCAB table returned a separate
+//  prefix-less encoding that never matched these symbols.
+ok64 FILEErrTest() {
+    sane(1);
+    static const struct { int e; ok64 want; } M[] = {
+        {0, OK},                   {EACCES, FILEACCES},
+        {EAGAIN, FILEAGAIN},       {EBADF, FILEBADF},
+        {EBUSY, FILEBUSY},         {EEXIST, FILEEXIST},
+        {EFAULT, FILEFAULT},       {EFBIG, FILEFBIG},
+        {EINTR, FILEINTR},         {EINVAL, FILEINVAL},
+        {EIO, FILEIO},             {EISDIR, FILEISDIR},
+        {ELOOP, FILELOOP},         {EMFILE, FILEMFILE},
+        {ENAMETOOLONG, FILE2LONG}, {ENFILE, FILENFILE},
+        {ENODEV, FILENODEV},       {ENOENT, FILENONE},
+        {ENOMEM, FILENOMEM},       {ENOSPC, FILENOSPC},
+        {ENOTDIR, FILENOTDIR},     {ENOTEMPTY, FILENOTEMP},
+        {EPERM, FILEPERM},         {EROFS, FILEROFS},
+        {EXDEV, FILEXDEV},
+    };
+    for (size_t i = 0; i < sizeof(M) / sizeof(M[0]); i++) {
+        errno = M[i].e;
+        //  `def` is a sentinel we must never see for a mapped errno.
+        testeqv((unsigned long long)FILEErr(FILENAMEBAD),
+                (unsigned long long)M[i].want, "0x%llx");
+    }
+    //  An errno the switch does NOT map returns the caller's `def`.
+    errno = ECHILD;
+    testeqv((unsigned long long)FILEErr(FILENAMEBAD),
+            (unsigned long long)FILENAMEBAD, "0x%llx");
+    errno = 0;
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
+    call(FILEErrTest);
     call(FILEExistsTest);
     call(FILEFlushStreamTest);
     call(FILEtest1);

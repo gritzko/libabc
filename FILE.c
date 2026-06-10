@@ -13,20 +13,39 @@
 #include "PRO.h"
 #include "S.h"
 
-u64 FILE_ERR_VOCAB[][2] = {
-    {EBADF, 0xe2ca34f},           {EBUSY, 0xe2de722},
-    {EDQUOT, 0x38d69e61d},        {EINVAL, 0x3925df295},
-    {EISDIR, 0x39270d49b},        {ENAMETOOLONG, 0x729639d6185585d0},
-    {ENOENT, 0x3d254e5d85ce},     {ENOMEM, 0x397616396},  // ENOENT→FILENONE (stopgap; ABC-002 unifies)
-    {ENOSPC, 0x39761c64c},        {ENOTDIR, 0xe5d874d49b},
-    {EOVERFLOW, 0xe61f39b3d5620}, {EPERM, 0xe64e6d6},
-    {ETXTBSY, 0xe76174b722},      {0, 0}};
-
+//  ABC-002: the single errno→ok64 mapping.  Maps the current `errno` to
+//  its canonical FILE* code; returns the caller's `def` for any errno we
+//  do not map (errno 0 → OK).  Callers that want the unmapped sentinel
+//  pass `FILEFAIL` as `def`.
 ok64 FILEErr(ok64 def) {
-    int err = errno;
-    for (int i = 0; FILE_ERR_VOCAB[i][0] != 0; i++)
-        if (FILE_ERR_VOCAB[i][0] == err) return FILE_ERR_VOCAB[i][1];
-    return def;
+    switch (errno) {
+        case 0:            return OK;
+        case EACCES:       return FILEACCES;
+        case EAGAIN:       return FILEAGAIN;
+        case EBADF:        return FILEBADF;
+        case EBUSY:        return FILEBUSY;
+        case EEXIST:       return FILEEXIST;
+        case EFAULT:       return FILEFAULT;
+        case EFBIG:        return FILEFBIG;
+        case EINTR:        return FILEINTR;
+        case EINVAL:       return FILEINVAL;
+        case EIO:          return FILEIO;
+        case EISDIR:       return FILEISDIR;
+        case ELOOP:        return FILELOOP;
+        case EMFILE:       return FILEMFILE;
+        case ENAMETOOLONG: return FILE2LONG;
+        case ENFILE:       return FILENFILE;
+        case ENODEV:       return FILENODEV;
+        case ENOENT:       return FILENONE;
+        case ENOMEM:       return FILENOMEM;
+        case ENOSPC:       return FILENOSPC;
+        case ENOTDIR:      return FILENOTDIR;
+        case ENOTEMPTY:    return FILENOTEMP;
+        case EPERM:        return FILEPERM;
+        case EROFS:        return FILEROFS;
+        case EXDEV:        return FILEXDEV;
+        default:           return def;
+    }
 }
 
 ok64 FILEMakeDir(path8s path) {
@@ -1079,7 +1098,7 @@ ok64 FILEScanSorted(path8bp path, FILE_SCAN mode, u8bp buf, u8csz z,
 ok64 FILEIterOpen(fileitp it, path8bp path) {
     sane(it && path && u8bOK(path));
     it->dir = opendir((char const *)u8bDataHead(path));
-    if (!it->dir) return FILEerrno(errno);
+    if (!it->dir) return FILEErr(FILEFAIL);
     it->path = path;
     it->dirend = u8bIdleHead(path);
     it->type = 0;
@@ -1150,7 +1169,7 @@ fun ok64 FILELoadSorted(fileitp it, DIR *dir, u8csz z) {
 ok64 FILEIterOpenSorted(fileitp it, path8bp path, u8bp buf, u8csz z) {
     sane(it && path && u8bOK(path) && Bok(buf) && z);
     DIR *dir = opendir((char const *)u8bDataHead(path));
-    if (!dir) return FILEerrno(errno);
+    if (!dir) return FILEErr(FILEFAIL);
 
     // Setup iterator basics
     it->path = path;
@@ -1257,7 +1276,7 @@ ok64 FILENext(fileitp it) {
 ok64 FILEInto(fileitp child, fileitp parent) {
     sane(child && parent && parent->path && parent->type == DT_DIR);
     DIR *dir = opendir((char const *)u8bDataHead(parent->path));
-    if (!dir) return FILEerrno(errno);
+    if (!dir) return FILEErr(FILEFAIL);
 
     child->path = parent->path;
     child->dirend = u8bIdleHead(parent->path);

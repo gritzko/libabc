@@ -70,70 +70,19 @@ con ok64 FILEROFS = 0x3d254e6d83dc;       // EROFS: read-only file system
 con ok64 FILEXDEV = 0x3d254e84d39f;       // EXDEV: cross-device link
 con ok64 FILENAMEBAD = 0xf49539729638b28d;
 
-// Translate errno to ok64
-fun ok64 FILEerrno(int e) {
-    switch (e) {
-        case 0:
-            return OK;
-        case EACCES:
-            return FILEACCES;
-        case EAGAIN:
-            return FILEAGAIN;
-        case EBADF:
-            return FILEBADF;
-        case EBUSY:
-            return FILEBUSY;
-        case EEXIST:
-            return FILEEXIST;
-        case EFAULT:
-            return FILEFAULT;
-        case EFBIG:
-            return FILEFBIG;
-        case EINTR:
-            return FILEINTR;
-        case EINVAL:
-            return FILEINVAL;
-        case EIO:
-            return FILEIO;
-        case EISDIR:
-            return FILEISDIR;
-        case ELOOP:
-            return FILELOOP;
-        case EMFILE:
-            return FILEMFILE;
-        case ENAMETOOLONG:
-            return FILE2LONG;
-        case ENFILE:
-            return FILENFILE;
-        case ENODEV:
-            return FILENODEV;
-        case ENOENT:
-            return FILENONE;
-        case ENOMEM:
-            return FILENOMEM;
-        case ENOSPC:
-            return FILENOSPC;
-        case ENOTDIR:
-            return FILENOTDIR;
-        case ENOTEMPTY:
-            return FILENOTEMP;
-        case EPERM:
-            return FILEPERM;
-        case EROFS:
-            return FILEROFS;
-        case EXDEV:
-            return FILEXDEV;
-        default:
-            return FILEFAIL;
-    }
-}
+// The errno→ok64 mapping is the switch in `FILEErr` (FILE.c).
 
 #define FILEok(fd) (fd >= 0)
 
-// Test syscall return; on failure return errno as ok64
-#define FILETestC(cond)                       \
-    do {                                      \
-        if (!(cond)) return FILEerrno(errno); \
+// Map the current `errno` to its canonical FILE* ok64 (the single
+// errno→ok64 switch, in FILE.c); returns `def` for an errno not in the
+// mapping — pass `FILEFAIL` for the raw unmapped sentinel.
+ok64 FILEErr(ok64 def);
+
+// Test syscall return; on failure return the current errno as ok64
+#define FILETestC(cond)                      \
+    do {                                     \
+        if (!(cond)) return FILEErr(FILEFAIL); \
     } while (0)
 
 extern u8 *FILE_RW[4];

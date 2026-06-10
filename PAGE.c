@@ -233,7 +233,7 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
             ssize_t n = write(fd, *data, u8csLen(data));
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) done;
-                fail(FILEerrno(errno));
+                fail(FILEErr(FILEFAIL));
             }
             if (n == 0) fail(PAGEFAIL);
             u8bUsed(p->buf, n);  // consume written data from start
@@ -251,7 +251,7 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
             ssize_t n = read(fd, *idle, u8sLen(idle));
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) done;
-                fail(FILEerrno(errno));
+                fail(FILEErr(FILEFAIL));
             }
             if (n == 0) return END;
             *idle += n;
