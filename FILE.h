@@ -61,7 +61,6 @@ con ok64 FILEMFILE = 0xf4953963d254e;     // EMFILE: too many open files
 con ok64 FILE2LONG = 0xf4953825585d0;     // ENAMETOOLONG: filename too long
 con ok64 FILENFILE = 0xf4953973d254e;     // ENFILE: file table overflow
 con ok64 FILENODEV = 0xf49539760d39f;     // ENODEV: no such device
-con ok64 FILENOENT = 0xf49539760e5dd;     // ENOENT: no such file or directory
 con ok64 FILENOMEM = 0xf495397616396;     // ENOMEM: out of memory
 con ok64 FILENOSPC = 0xf49539761c64c;     // ENOSPC: no space left on device
 con ok64 FILENOTDIR = 0x3d254e5d874d49b;  // ENOTDIR: not a directory
@@ -109,7 +108,7 @@ fun ok64 FILEerrno(int e) {
         case ENODEV:
             return FILENODEV;
         case ENOENT:
-            return FILENOENT;
+            return FILENONE;
         case ENOMEM:
             return FILENOMEM;
         case ENOSPC:
@@ -332,7 +331,11 @@ fun ok64 FILEUnlock(int const *fd) {
     return OK;
 }
 
-// ok64 FILEExists(path8 path);
+//  Existence probe — returns FILEStat's code, never discards it: OK if an
+//  entry exists at `path`, FILENONE if absent (safe to create), or a real
+//  FILE* error (perms/IO — do NOT blindly create).  Guard pattern:
+//  `e=FILEExists(p); if(e==OK) skip; if(e!=FILENONE) return e; create;`.
+ok64 FILEExists(path8s path);
 
 //  Filesystem entry classification.  REG/DIR/LNK cover the cases the
 //  rest of the code branches on; everything else (sockets, fifos,

@@ -296,16 +296,16 @@ ok64 FILEtest9() {
     sane(1);
 
 
-    // FILEStat on non-existent file should return FILENOENT
+    // FILEStat on non-existent file should return FILENONE
     a_path(nofile, $cstr("/tmp"));
     a_cstr(tmpl, "FILEtest9_XXXXXX");
     call(PATHu8bAddTmp, nofile, tmpl);
     filestat s = {};
     ok64 res = FILEStat(&s, $path(nofile));
-    test(res == FILENOENT, FILEFAIL);
+    test(res == FILENONE, FILEFAIL);
 
     // Verify FILEerrno translates correctly
-    test(FILEerrno(ENOENT) == FILENOENT, FILEFAIL);
+    test(FILEerrno(ENOENT) == FILENONE, FILEFAIL);
     test(FILEerrno(EACCES) == FILEACCES, FILEFAIL);
     test(FILEerrno(EEXIST) == FILEEXIST, FILEFAIL);
     test(FILEerrno(0) == OK, FILEFAIL);
@@ -705,8 +705,56 @@ ok64 FILEFlushStreamTest() {
     done;
 }
 
+//  FILEExists guards a seed so it never truncates a live file (SUBS-016 /
+//  ULOG-001): FILENONE for a missing path, OK once present; the guard
+//  `if (FILENONE==FILEExists) FILECreate` leaves existing content intact.
+ok64 FILEExistsTest() {
+    sane(1);
+    a_path(path, $cstr("/tmp"));
+    a_cstr(tmpl, "FILEExists_XXXXXX");
+    call(PATHu8bAddTmp, path, tmpl);
+    want(FILEExists($path(path)) == FILENONE);   // AddTmp yields an unused name
+
+    //  Fresh seed: guard sees absent → create empty.
+    if (FILENONE == FILEExists($path(path))) {
+        int fd = FILE_CLOSED;
+        call(FILECreate, &fd, $path(path));
+        call(FILEClose, &fd);
+    }
+    want(FILEExists($path(path)) == OK);
+    {
+        filestat s = {};
+        want(FILEStat(&s, $path(path)) == OK);
+        want(s.kind == FILE_KIND_REG);
+        want(s.size == 0);
+    }
+
+    //  Put real content in it (a live refs/wtlog).
+    int wfd = FILE_CLOSED;
+    call(FILEOpen, &wfd, $path(path), O_WRONLY);
+    a_cstr(payload, "LIVE-LOG-DO-NOT-TRUNCATE\n");
+    call(FILEFeedAll, wfd, payload);
+    call(FILEClose, &wfd);
+
+    //  Re-seed: guard sees present → skips the create, content preserved.
+    if (FILENONE == FILEExists($path(path))) {
+        int fd = FILE_CLOSED;
+        call(FILECreate, &fd, $path(path));
+        call(FILEClose, &fd);
+    }
+    {
+        filestat s = {};
+        want(FILEStat(&s, $path(path)) == OK);
+        want(s.size == (u64)u8csLen(payload));   // content preserved
+    }
+
+    call(FILEUnLink, $path(path));
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
+    call(FILEExistsTest);
     call(FILEFlushStreamTest);
     call(FILEtest1);
     call(FILEtest2);

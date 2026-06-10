@@ -17,7 +17,7 @@ u64 FILE_ERR_VOCAB[][2] = {
     {EBADF, 0xe2ca34f},           {EBUSY, 0xe2de722},
     {EDQUOT, 0x38d69e61d},        {EINVAL, 0x3925df295},
     {EISDIR, 0x39270d49b},        {ENAMETOOLONG, 0x729639d6185585d0},
-    {ENOENT, 0x39760e5dd},        {ENOMEM, 0x397616396},
+    {ENOENT, 0x3d254e5d85ce},     {ENOMEM, 0x397616396},  // ENOENT→FILENONE (stopgap; ABC-002 unifies)
     {ENOSPC, 0x39761c64c},        {ENOTDIR, 0xe5d874d49b},
     {EOVERFLOW, 0xe61f39b3d5620}, {EPERM, 0xe64e6d6},
     {ETXTBSY, 0xe76174b722},      {0, 0}};
@@ -333,6 +333,15 @@ ok64 FILECreateAt(int *fd, int dir, path8s path) {
                  S_IRUSR | S_IWUSR);
     if (*fd < 0) fail(FILEErr(FILENOOPEN));
     done;
+}
+
+//  Existence probe — returns FILEStat's code, never discards it: OK if an
+//  entry exists at `path`, FILENONE if absent (safe to create), or a real
+//  FILE* error (perms/IO).  Guard: `e=FILEExists(p); if(e==OK) skip;
+//  if(e!=FILENONE) return e; create;` (ULOG-001 / SUBS-016 zeroing class).
+ok64 FILEExists(path8s path) {
+    filestat st = {};
+    return FILEStat(&st, path);   // OK / FILENONE (absent) / real error
 }
 
 ok64 FILEOpen(int *fd, path8s path, int flags) {
