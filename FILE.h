@@ -561,6 +561,11 @@ ok64 FILEChmod(path8s path, u32 mode);
 // Read getcwd into a path buffer. NUL-terminates and feeds DATA.
 ok64 FILEGetCwd(path8b out);
 
+// getenv(3) as a slice over the process environment: writes env var
+// `name`'s value into `out` (empty slice if unset).  Points into the
+// environment — valid until the next setenv/putenv; copy to persist.
+void FILEGetEnv(char const *name, u8cs out);
+
 // Spawn a child process running `path` (slice — copied + NUL-termed
 // internally for execv).  `argv` is a slice of u8cs slices; each
 // element is an argument (also copied + NUL-termed).  argv[0] is the

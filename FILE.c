@@ -149,6 +149,16 @@ ok64 FILEGetCwd(path8b out) {
     done;
 }
 
+//  getenv(3) as a slice over the process environment: writes env var
+//  `name`'s value into `out` (empty slice if unset).  Slice points into
+//  the environment — valid until the next setenv/putenv; copy to persist.
+void FILEGetEnv(char const *name, u8cs out) {
+    char const *v = getenv(name);
+    if (v == NULL) v = "";
+    a_cstr(val, v);
+    u8csMv(out, val);
+}
+
 // argv scratch + cargv array are sized to the actual argv at call
 // time and acquired from ABC_BASS — no fixed cap.  Both buffers die
 // at the caller's `call()` boundary along with the rest of BASS.
