@@ -668,7 +668,9 @@ ok64 FILECloseAll() {
     done;
 }
 
-ok64 FILEMapFD(u8bp *buf, int const *fd, int mode) {
+//  Inner worker: all the fallible map logic.  Owns nothing; the
+//  wrapper FILEMapFD closes the fd on any non-OK return from here.
+static ok64 FILEMapFD_(u8bp *buf, int const *fd, int mode) {
     sane(buf != NULL && FILEok(*fd));
     test(*fd >= 0 && *fd < FILE_MAX_OPEN, BADARG);
     call(FILEBookInit);
@@ -684,6 +686,22 @@ ok64 FILEMapFD(u8bp *buf, int const *fd, int mode) {
     if (0 == (mode & PROT_WRITE)) b[2] += size;
     call(FILENoteMap, fd, slot, (mode & PROT_WRITE) != 0);
     *buf = slot;
+    done;
+}
+
+//  FILEMapFD owns the fd handed to it: on a successful map the fd stays
+//  open (the mapping holds it; FILEUnMap closes it later), but on ANY
+//  internal failure the fd is closed exactly once here so callers that
+//  open-then-hand-in (FILEMapRO/RW/Create*) never leak it (MEM-037).
+ok64 FILEMapFD(u8bp *buf, int const *fd, int mode) {
+    sane(buf != NULL && FILEok(*fd));
+    try(FILEMapFD_, buf, fd, mode);
+    nedo {
+        //  Plain call (not call()/try()) so FILEClose's own status does
+        //  not clobber `__`; we return the worker's failure code.
+        int dfd = *fd;
+        FILEClose(&dfd);
+    }
     done;
 }
 
@@ -778,7 +796,10 @@ ok64 FILEUnMap(u8bp buf) {
 // page-align ftruncate and map PROT_READ only — so a read-only
 // consumer can open and close without growing the file behind a
 // concurrent writer's back, and ULOGClose has nothing to trim.
-fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
+//  Inner worker: all the fallible book logic.  Owns nothing; the
+//  wrapper FILEBookFD closes the fd on any non-OK return from here.
+static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
+                        int mode) {
     sane(buf != NULL && FILEok(*fd));
     test(*fd >= 0 && *fd < FILE_MAX_OPEN, BADARG);
 
@@ -877,6 +898,22 @@ fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
 
     FILE_WANTS[*fd] = FILEBookWant;
     *buf = slot;
+    done;
+}
+
+//  FILEBookFD owns the fd handed to it: on a successful book the fd stays
+//  open (the booking holds it; FILEBookClose closes it later), but on ANY
+//  internal failure the fd is closed exactly once here so callers that
+//  open-then-hand-in (FILEBook/RO/At/Create*) never leak it (MEM-037).
+fun ok64 FILEBookFD(u8bp *buf, int const *fd, size_t book_size, int mode) {
+    sane(buf != NULL && FILEok(*fd));
+    try(FILEBookFD_, buf, fd, book_size, mode);
+    nedo {
+        //  Plain call (not call()/try()) so FILEClose's own status does
+        //  not clobber `__`; we return the worker's failure code.
+        int dfd = *fd;
+        FILEClose(&dfd);
+    }
     done;
 }
 

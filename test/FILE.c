@@ -790,8 +790,72 @@ ok64 FILEErrTest() {
     done;
 }
 
+//  MEM-037 repro: a map/book that opens OK but fails the map must not
+//  leak the opened fd.  A zero-length file opens fine but mmap(NULL, 0)
+//  fails (EINVAL) inside FILEMapFD; FILEBookFD on the same file fails its
+//  internal checks too.  Loop N failing maps and assert the open-fd count
+//  is stable via a sentinel fd: open /dev/null, record its number, run the
+//  loop, then re-open /dev/null — the kernel hands out the lowest free fd,
+//  so a stable number proves no fds leaked.  An fd leak is invisible to
+//  LeakSanitizer (it tracks malloc, not fds), so this count check is the
+//  only guard.
+ok64 FILEFdLeakTest() {
+    sane(1);
+
+    //  A zero-length file: opens OK, but mmap(NULL, 0) fails (EINVAL)
+    //  inside FILEMapFD — exercises the map-failure error branch.
+    a_path(zpath, $cstr("/tmp"));
+    a_cstr(ztmpl, "FILEFdLeakMap_XXXXXX");
+    call(PATHu8bAddTmp, zpath, ztmpl);
+    int zfd = FILE_CLOSED;
+    call(FILECreate, &zfd, $path(zpath));
+    call(FILEClose, &zfd);  // leaves a 0-byte file on disk
+
+    //  A file LARGER than the requested book_size: opens OK, but
+    //  FILEBookFD's `map_size <= book_size` check fails — exercises the
+    //  book-failure error branch.
+    a_path(bpath, $cstr("/tmp"));
+    a_cstr(btmpl, "FILEFdLeakBook_XXXXXX");
+    call(PATHu8bAddTmp, bpath, btmpl);
+    int bfd = FILE_CLOSED;
+    call(FILECreate, &bfd, $path(bpath));
+    call(FILEResize, &bfd, 256 * KB);  // larger than the 64 KB book below
+    call(FILEClose, &bfd);
+
+    //  Sentinel: the next free fd number before the loop.
+    int sentinel = open("/dev/null", O_RDONLY);
+    test(sentinel >= 0, FILEFAIL);
+    close(sentinel);
+
+    //  Each iteration opens the file then fails the map/book; a leaked
+    //  fd would raise the lowest-free-fd number returned below.
+    for (int i = 0; i < 64; i++) {
+        u8bp buf = NULL;
+        ok64 r = FILEMapRO(&buf, $path(zpath));
+        test(r != OK, FILEFAIL);  // must fail (0-byte mmap)
+        test(buf == NULL, FILEFAIL);
+    }
+    for (int i = 0; i < 64; i++) {
+        u8bp buf = NULL;
+        ok64 r = FILEBook(&buf, $path(bpath), 64 * KB);
+        test(r != OK, FILEFAIL);  // must fail (file > book_size)
+        test(buf == NULL, FILEFAIL);
+    }
+
+    //  Re-check the lowest free fd.  Leaked fds shift this upward.
+    int after = open("/dev/null", O_RDONLY);
+    test(after >= 0, FILEFAIL);
+    close(after);
+    testeqv((long long)after, (long long)sentinel, "%lld");
+
+    call(FILEUnLink, $path(zpath));
+    call(FILEUnLink, $path(bpath));
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
+    call(FILEFdLeakTest);
     call(FILEErrTest);
     call(FILEExistsTest);
     call(FILEFlushStreamTest);
