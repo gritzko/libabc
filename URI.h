@@ -5,6 +5,10 @@
 
 con ok64 URIFAIL = 0x1e6d23ca495;
 con ok64 URIBAD	= 0x79b48b28d;
+// Serialized URI re-parses into different components (cross-component
+// injection): a reserved delimiter in a component would bleed across a
+// boundary.  URIutf8FeedSafe emits nothing and returns this instead.
+con ok64 URIUNSAFE = 0x1e6d279770a3ce;
 
 // URIs longer than this are likely a bug somewhere upstream.
 #define MAX_URI_LEN 1024
@@ -54,6 +58,17 @@ ok64 URIutf8Drain(u8cs from, urip u);
 
 // Serialize URI to string
 ok64 URIutf8Feed(u8s into, uricp u);
+
+// Serialize URI to `into` like URIutf8Feed, but GUARANTEE no
+// cross-component injection: parse the emitted text back into a scratch
+// `uri` and require every one of the 8 components to be byte-identical
+// to `u`'s.  On any mismatch (a reserved delimiter in a component bled
+// across a boundary and re-parsed into a different field) emit NOTHING
+// and return URIUNSAFE.  On success the serialized bytes are already in
+// `into` (its idle head advanced, exactly as URIutf8Feed leaves it).
+// Route URI construction from untrusted components (ref / host / branch
+// names) through this at trust boundaries.
+ok64 URIutf8FeedSafe(u8s into, uricp u);
 
 // Produce relative URI: parts of `specific` that differ from `base`
 // Result contains only the changed components

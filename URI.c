@@ -101,6 +101,41 @@ ok64 URIutf8Feed(u8s into, uricp u) {
     return OK;
 }
 
+//  Serialize `u`, then PROVE the text re-parses to the same 8
+//  components — else err out without touching the caller's `into`.
+//  We never want to hand back a URI that means something other than
+//  what the caller assembled, so the bytes go into BASS scratch first,
+//  get re-parsed and field-compared, and are copied into `into` only
+//  once every component matches.  Mismatch ⇒ URIUNSAFE, nothing emitted.
+ok64 URIutf8FeedSafe(u8s into, uricp u) {
+    sane($ok(into));
+    //  Serialize into private scratch (not the caller's buffer).
+    a_carve(u8, scratch, MAX_URI_LEN);
+    call(URIutf8Feed, u8bIdle(scratch), u);
+    a_dup(u8c, text, u8bDataC(scratch));
+
+    //  Re-parse the emitted bytes.  URIutf8Drain CONSUMES its input, so
+    //  hand it a copy of the slice (the underlying bytes stay in
+    //  scratch); `round.data` views into them.
+    uri round = {};
+    a_dup(u8c, parse_in, text);
+    call(URIutf8Drain, parse_in, &round);
+
+    //  Every one of the 8 components must be byte-identical.  $eq is
+    //  abc/S.md's slice equality (same content), matching the ticket's
+    //  per-field u8csEq compare; a foreign delimiter that bled across a
+    //  boundary lands in a DIFFERENT field, so some pair differs.
+    b8 same = $eq(round.scheme, u->scheme) && $eq(round.authority, u->authority) &&
+        $eq(round.user, u->user) && $eq(round.host, u->host) &&
+        $eq(round.port, u->port) && $eq(round.path, u->path) &&
+        $eq(round.query, u->query) && $eq(round.fragment, u->fragment);
+    test(same, URIUNSAFE);
+
+    //  Verified: copy the exact bytes into the caller's buffer.
+    call(u8sFeed, into, text);
+    done;
+}
+
 // Static buffer for relative path computation results
 static u8 URIRelPathBuf[4096];
 
@@ -387,9 +422,27 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel) {
     u8csDup(abs->port, base->port);
     u8csDup(abs->user, base->user);
 
-    // If relative has path, merge with base path
+    // If relative has path, merge with base path.
     if (!$empty(rel->path)) {
-        call(URIMergePath, abs->path, base->path, rel->path);
+        //  Round-trip identity for a path-noscheme reference (RFC 3986
+        //  §5.3 recompose): when `rel` is a VERBATIM relative reference
+        //  (no scheme, no authority, a rootless path) that still carries
+        //  its own source text (`rel->data` set — the signature of a ref
+        //  returned whole by URIRelative, as opposed to a path freshly
+        //  built in URIRelPathBuf by URIRelativePath, which leaves
+        //  `rel->data` empty), the reference IS the answer: preserve its
+        //  rootless path instead of prepending base's directory.  This
+        //  is what keeps `ht/h/p#abc` from gaining a spurious leading
+        //  `/`.  A relativized rel (data empty) still merges normally so
+        //  the table's `path2` → `/path2` resolution is unchanged.
+        b8 verbatim_relref = rel->data[0] != NULL && $empty(rel->scheme) &&
+            $empty(rel->authority) && $empty(rel->host) &&
+            rel->path[0][0] != '/';
+        if (verbatim_relref) {
+            u8csDup(abs->path, rel->path);
+        } else {
+            call(URIMergePath, abs->path, base->path, rel->path);
+        }
         u8csDup(abs->query, rel->query);
         u8csDup(abs->fragment, rel->fragment);
         done;

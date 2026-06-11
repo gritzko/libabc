@@ -458,6 +458,118 @@ ok64 URITestBareQuery() {
     done;
 }
 
+// URI-003: serialization safety.  For a component tuple, URIutf8FeedSafe
+// must EITHER emit a URI whose re-parse is byte-identical in all 8
+// fields (safe == OK), OR refuse with URIUNSAFE and emit NOTHING — it
+// must NEVER silently emit a URI that re-parses to different components.
+// The table sets one reserved/foreign delimiter into each component in
+// turn (path `a#b`/`a?b`, query `q#x`, fragment, host `h/p`, user, port)
+// alongside the legitimately-allowed-reserved cases that MUST stay safe
+// (query `q=v`, fragment `a/b?c`, user `u@x`, path `/a/b`).
+ok64 URITestFeedSafe() {
+    sane(1);
+
+    enum { SC, AU, HO, PO, US, PA, QU, FR, NCOMP };
+    static struct {
+        char const *comp[NCOMP];   // scheme,auth,host,port,user,path,query,fragment (NULL = absent)
+        b8          safe;          // YES => expect OK + identity; NO => expect URIUNSAFE
+    } cases[] = {
+        // --- foreign delimiter in a component => UNSAFE (would bleed).
+        //  URIutf8Feed emits the `authority` slice as a whole, so the
+        //  host-injection case lives in `authority`; FeedSafe's host
+        //  field then disagrees with the re-parse. ---
+        {{NULL,NULL,NULL,NULL,NULL,"a#b",NULL,NULL},                 NO},  // '#' -> fragment
+        {{NULL,NULL,NULL,NULL,NULL,"a?b",NULL,NULL},                 NO},  // '?' -> query
+        {{NULL,NULL,NULL,NULL,NULL,"/p","q#x",NULL},                 NO},  // '#' in query -> fragment
+        {{NULL,"//h/p","h",NULL,NULL,NULL,NULL,NULL},                NO},  // '/' in authority -> path
+        // --- legitimately-allowed reserved chars => SAFE (must round-trip) ---
+        {{NULL,NULL,NULL,NULL,NULL,"/a/b",NULL,NULL},                YES}, // '/' belongs to path
+        {{NULL,NULL,NULL,NULL,NULL,"/p","q=v",NULL},                 YES}, // '=' allowed in query
+        {{NULL,NULL,NULL,NULL,NULL,"/p",NULL,"a/b?c"},               YES}, // '/' '?' allowed in fragment
+        {{NULL,"//u@h","h",NULL,"u",NULL,NULL,NULL},                 YES}, // '@' splits userinfo/host
+        {{"http","//ex.com","ex.com",NULL,NULL,"/path","q","f"},     YES}, // full valid URI
+        {{NULL,NULL,NULL,NULL,NULL,"refs/heads/master",NULL,NULL},   YES}, // rootless multi-seg path
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        uri u = {};
+        char const **c = cases[i].comp;
+        if (c[SC]) { a_cstr(s, c[SC]); u8csDup(u.scheme, s); }
+        if (c[AU]) { a_cstr(s, c[AU]); u8csDup(u.authority, s); }
+        if (c[HO]) { a_cstr(s, c[HO]); u8csDup(u.host, s); }
+        if (c[PO]) { a_cstr(s, c[PO]); u8csDup(u.port, s); }
+        if (c[US]) { a_cstr(s, c[US]); u8csDup(u.user, s); }
+        if (c[PA]) { a_cstr(s, c[PA]); u8csDup(u.path, s); }
+        if (c[QU]) { a_cstr(s, c[QU]); u8csDup(u.query, s); }
+        if (c[FR]) { a_cstr(s, c[FR]); u8csDup(u.fragment, s); }
+
+        a_pad(u8, out, 256);
+        ok64 o = URIutf8FeedSafe(out_idle, &u);
+        size_t emitted = u8csLen(u8bDataC(out));
+
+        if (cases[i].safe) {
+            // Must succeed AND the bytes must re-parse to the same fields.
+            if (o != OK) {
+                fprintf(stderr, "FAIL FeedSafe[%zu]: expected OK got %s\n",
+                        i, o == URIUNSAFE ? "URIUNSAFE" : "OTHER");
+                return URIFAIL;
+            }
+            uri re = {};
+            a_dup(u8c, txt, u8bDataC(out));
+            call(URIutf8Drain, txt, &re);
+            if (!$eq(re.scheme, u.scheme) || !$eq(re.authority, u.authority) ||
+                !$eq(re.host, u.host) || !$eq(re.port, u.port) ||
+                !$eq(re.user, u.user) || !$eq(re.path, u.path) ||
+                !$eq(re.query, u.query) || !$eq(re.fragment, u.fragment)) {
+                fprintf(stderr, "FAIL FeedSafe[%zu]: emitted not identity\n", i);
+                return URIFAIL;
+            }
+        } else {
+            // Must refuse AND emit nothing (no ambiguous URI).
+            if (o != URIUNSAFE) {
+                fprintf(stderr, "FAIL FeedSafe[%zu]: expected URIUNSAFE got %s\n",
+                        i, o == OK ? "OK" : "OTHER");
+                return URIFAIL;
+            }
+            test(emitted == 0, URIFAIL);   // emitted nothing on reject
+        }
+    }
+
+    done;
+}
+
+// URI-003: the path-noscheme round-trip.  A relative reference with no
+// authority and a rootless path (`ht/h/p#abc`) must survive
+// parse -> URIRelative -> URIAbsolute with NO spurious leading `/`
+// (RFC 3986 §5.3 recompose).  This is the original URI-003 defect:
+// before the fix `resolved.path` came back as `/ht/h/p`.
+ok64 URITestNoschemeRoundTrip() {
+    sane(1);
+    a_cstr(in, "ht/h/p#abc");
+    uri spec = {};
+    call(URIutf8Drain, in, &spec);
+
+    a_cstr(base_str, "http://example.com/path");
+    uri base = {};
+    call(URIutf8Drain, base_str, &base);
+
+    uri rel = {};
+    call(URIRelative, &rel, &base, &spec);
+
+    uri resolved = {};
+    call(URIAbsolute, &resolved, &base, &rel);
+
+    // Path must be preserved verbatim — no leading slash injected.
+    a_cstr(want_path, "ht/h/p");
+    $testeq(resolved.path, want_path);
+    a_cstr(want_frag, "abc");
+    $testeq(resolved.fragment, want_frag);
+    // Sanity: leading byte is NOT '/'.
+    test(resolved.path[0][0] != '/', URIFAIL);
+
+    done;
+}
+
 ok64 URItest() {
     sane(1);
     call(URItest1);
@@ -470,6 +582,8 @@ ok64 URItest() {
     call(URITestEscape);
     call(URITestPathZero);
     call(URITestBareQuery);
+    call(URITestFeedSafe);
+    call(URITestNoschemeRoundTrip);
     done;
 }
 
