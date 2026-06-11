@@ -497,7 +497,7 @@ ok64 FILErmrf(path8s path) {
 }
 
 // System page size for mmap (may differ from PAGESIZE on Apple Silicon)
-fun size_t FILESysPage() {
+size_t FILESysPage(void) {
     static size_t p = 0;
     if (!p) p = sysconf(_SC_PAGESIZE);
     return p;

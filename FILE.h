@@ -336,6 +336,12 @@ ok64 FILEisdir(path8s path);
 
 ok64 FILEResize(int const *fd, size_t new_size);
 
+//  Kernel mmap page size (cached sysconf).  Use for any size that has
+//  to align to the actual page (FILEBookCreate / FILEResize round-ups)
+//  — the compile-time `PAGESIZE` macro is hardcoded to 4 KiB and
+//  diverges from the runtime page on e.g. Apple Silicon (16 KiB).
+size_t FILESysPage(void);
+
 ok64 FILERename(path8s oldname, path8s newname);
 
 //  Ignore SIGPIPE process-wide.  Without it, writing to a pipe/socket

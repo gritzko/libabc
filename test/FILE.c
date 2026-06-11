@@ -658,14 +658,21 @@ ok64 FILEFlushStreamTest() {
     a_cstr(tmpl, "FILEFlushStream_XXXXXX");
     call(PATHu8bAddTmp, path, tmpl);
 
+    //  Use the runtime page size rather than the compile-time PAGESIZE
+    //  macro (4 KiB): FILEBookCreate rounds the initial book up to the
+    //  kernel page, and macOS arm64 ships 16 KiB pages.  If we sized N
+    //  against 4 KiB but the file was ftruncate'd to 16 KiB, the post-
+    //  flush FILESize check would see the padded 16 KiB, not N.
+    size_t const sp_test = FILESysPage();
+
     // Booked write stream: 8MB reserved, 1 page initial -> FILE_WANT_BUFS slot
     u8bp buf = NULL;
-    call(FILEBookCreate, &buf, $path(path), 8 * MB, PAGESIZE);
+    call(FILEBookCreate, &buf, $path(path), 8 * MB, sp_test);
     int fd = FILEBookedFD(buf);
     test(fd >= 0, FILEFAIL);
 
-    // Feed a position-dependent pattern well past PAGESIZE so the flush fires.
-    size_t const N = 3 * PAGESIZE;
+    // Feed a position-dependent pattern well past one page so the flush fires.
+    size_t const N = 3 * sp_test;
     for (size_t i = 0; i < N; i++) {
         call(FILEBookEnsure, buf, 1);
         call(u8bFeed1, buf, (u8)(i & 0xFF));
@@ -692,7 +699,10 @@ ok64 FILEFlushStreamTest() {
     size_t fsize = 0;
     call(FILESize, &fsize, &rfd);
     testeqv((long long)(fsize), (long long)(N), "%lld");
-    aBpad2(u8, back, 3 * PAGESIZE);
+    //  Read-back buffer sized for the largest reasonable kernel page —
+    //  16 KiB on macOS arm64 — times 3.  Static stack budget for any
+    //  PAGESIZE we plausibly run on.
+    aBpad2(u8, back, 3 * 64 * 1024);
     call(FILEDrain, rfd, backidle);
     while (u8bDataLen(backbuf) < N && u8bHasRoom(backbuf)) {
         call(FILEDrain, rfd, backidle);
