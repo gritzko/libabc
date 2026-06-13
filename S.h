@@ -70,7 +70,10 @@
 #define a$head(T, n, s, l) \
     T *n[2] = {s[0], ((l) > $len(s) ? s[1] : (s[0] + l))};
 
-#define a$part(T, n, s, off, len) T *n[2] = {*s + off, *s + off + len};
+// a_part: len elements at offset off [start+off, start+off+len)
+#define a_part(T, n, s, off, len)                   \
+    T *n[2] = {*(s) + (off), *(s) + (off) + (len)}; \
+    assert(n[0] >= (s)[0] && n[1] <= (s)[1]);
 #define $set(a, b)   \
     {                \
         a[0] = b[0]; \

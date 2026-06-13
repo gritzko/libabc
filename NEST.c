@@ -126,7 +126,7 @@ ok64 NESTRenderTree(u8s into, u8bp ct, u32 ndx) {
         mark128* next = NESTmark(ct, n);
         while (next->var != 0) {
             u32 till = next->pos;
-            a$part(u8c, part, data, from, till - from);  // TODO
+            a_part(u8c, part, data, from, till - from);  // TODO
             call(u8sFeed, into, part);
             from = till;
             if (next->ins != 0) {
@@ -135,7 +135,7 @@ ok64 NESTRenderTree(u8s into, u8bp ct, u32 ndx) {
             next = NESTmark(ct, ++n);
         }
         u32 till = next->pos;
-        a$part(u8c, part, data, from, till - from);  // TODO
+        a_part(u8c, part, data, from, till - from);  // TODO
         call(u8sFeed, into, part);
         ndx = mark->ins;
     } while (ndx != 0);
