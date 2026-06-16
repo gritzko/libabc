@@ -44,7 +44,7 @@ fun ok64 utf8sDrain32(u32 *cp, utf8cs utf8) {
     return OK;
 }
 
-static u8 UTF8_LEN[16] = {1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4};
+static u8 UTF8_LEN[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4};
 
 // Count codepoints in a UTF-8 slice
 fun size_t utf8CPLen(utf8csc txt) {
