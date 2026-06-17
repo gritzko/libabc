@@ -1,3 +1,5 @@
+#ifndef ABC_UDP_H
+#define ABC_UDP_H
 #include "NET.h"
 
 con ok64 UDPFAIL = 0x1e3593ca495;
@@ -39,3 +41,4 @@ fun ok64 UDPClose(int fd) {
     int r = close(fd);
     return r == 0 ? OK : UDPFAIL;
 }
+#endif
