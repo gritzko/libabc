@@ -256,8 +256,11 @@ ok64 URITestTable() {
         call(URIutf8Drain, base_slice, &base);
         call(URIutf8Drain, specific_slice, &specific);
 
-        // Compute relative
-        call(URIRelative, &rel, &base, &specific);
+        // Compute relative.  PTR-009: caller owns the `out` slice that
+        // outlives `rel`; URIAbsolute below needs its OWN distinct region
+        // (resolve_scr) so resolving doesn't clobber `rel`'s live path.
+        a_pad(u8, rel_scr, MAX_URI_LEN);
+        call(URIRelative, &rel, &base, &specific, u8bIdle(rel_scr));
 
         // Serialize relative
         a_pad(u8, relbuf, 512);
@@ -278,7 +281,8 @@ ok64 URITestTable() {
 
         // Round-trip: resolve relative back to absolute
         uri resolved = {};
-        call(URIAbsolute, &resolved, &base, &rel);
+        a_pad(u8, resolve_scr, MAX_URI_LEN);
+        call(URIAbsolute, &resolved, &base, &rel, u8bIdle(resolve_scr));
 
         // Compare all components
         if (!$eq(resolved.scheme, specific.scheme) ||
@@ -554,10 +558,12 @@ ok64 URITestNoschemeRoundTrip() {
     call(URIutf8Drain, base_str, &base);
 
     uri rel = {};
-    call(URIRelative, &rel, &base, &spec);
+    a_pad(u8, rel_scr, MAX_URI_LEN);
+    call(URIRelative, &rel, &base, &spec, u8bIdle(rel_scr));
 
     uri resolved = {};
-    call(URIAbsolute, &resolved, &base, &rel);
+    a_pad(u8, resolve_scr, MAX_URI_LEN);
+    call(URIAbsolute, &resolved, &base, &rel, u8bIdle(resolve_scr));
 
     // Path must be preserved verbatim — no leading slash injected.
     a_cstr(want_path, "ht/h/p");
@@ -567,6 +573,51 @@ ok64 URITestNoschemeRoundTrip() {
     // Sanity: leading byte is NOT '/'.
     test(resolved.path[0][0] != '/', URIFAIL);
 
+    done;
+}
+
+// PTR-009: lock remove_dot_segments (RFC 3986 §5.2.4) after the rewrite
+// from the in/out cursor to a PATH segment-walk.  Drives URIAbsolute with
+// a DIRECTORY base (trailing '/') so the relative ref merges per §5.2.3,
+// then asserts the resolved path byte-for-byte against the RFC §5.4
+// reference examples (normal + abnormal).  `rel->data` is cleared so the
+// ref is treated as relativized (merge path, not verbatim).
+ok64 URITestDotSegments() {
+    sane(1);
+    static struct { char const *base, *rel, *want_path; } cases[] = {
+        {"http://a/b/c/d;p?q", "g",        "/b/c/g"},
+        {"http://a/b/c/d;p?q", "./g",      "/b/c/g"},
+        {"http://a/b/c/d;p?q", "g/",       "/b/c/g/"},
+        {"http://a/b/c/d;p?q", "../g",     "/b/g"},
+        {"http://a/b/c/d;p?q", "../..",    "/"},
+        {"http://a/b/c/d;p?q", "../../",   "/"},
+        {"http://a/b/c/d;p?q", "../../g",  "/g"},       // RFC §5.4.2
+        {"http://a/b/c/d;p?q", ".",        "/b/c/"},
+        {"http://a/b/c/d;p?q", "./",       "/b/c/"},
+        {"http://a/b/c/d;p?q", "g.",       "/b/c/g."},
+        {"http://a/b/c/d;p?q", ".g",       "/b/c/.g"},
+        {"http://a/b/c/d;p?q", "g..",      "/b/c/g.."},
+        {"http://a/b/c/d;p?q", "g/../h",   "/b/c/h"},
+    };
+    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+        a_cstr(bs, cases[i].base);
+        uri base = {};
+        call(URIutf8Drain, bs, &base);
+        a_cstr(rs, cases[i].rel);
+        uri rel = {};
+        call(URIutf8Drain, rs, &rel);
+        $null(rel.data);   // relativized ref: merge, don't keep verbatim
+        uri abs = {};
+        a_pad(u8, scr, MAX_URI_LEN);
+        call(URIAbsolute, &abs, &base, &rel, u8bIdle(scr));
+        a_cstr(want, cases[i].want_path);
+        if (!$eq(abs.path, want)) {
+            fprintf(stderr, "FAIL dotseg[%zu]: base=%s rel=%s want='%s' got='%.*s'\n",
+                    i, cases[i].base, cases[i].rel, cases[i].want_path,
+                    (int)$len(abs.path), *abs.path);
+            return URIFAIL;
+        }
+    }
     done;
 }
 
@@ -584,6 +635,7 @@ ok64 URItest() {
     call(URITestBareQuery);
     call(URITestFeedSafe);
     call(URITestNoschemeRoundTrip);
+    call(URITestDotSegments);
     done;
 }
 

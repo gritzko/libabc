@@ -136,9 +136,6 @@ ok64 URIutf8FeedSafe(u8s into, uricp u) {
     done;
 }
 
-// Static buffer for relative path computation results
-static u8 URIRelPathBuf[4096];
-
 // Split path into its non-empty segments, storing each (a view into
 // `path`) in the `segs` buffer.  Walks the path on demand via abc/PATH
 // (URI-004): no hand-rolled '/'-splitting, no parse-time segments
@@ -157,10 +154,15 @@ static ok64 URISplitPath(u8csbp segs, u8csc path) {
     done;
 }
 
-// Compute relative path from base to specific using segments
-// Writes result to URIRelPathBuf, returns slice of written data
-static ok64 URIRelativePath(u8csp result, u8cscs base_segs, u8cscs spec_segs) {
-    sane(result);
+// PTR-009: compute relative path from base to specific.  The `../`-climb
+// + tail is fed into the CALLER-OWNED writable slice `out` (no static
+// buf) via a gauge; `result` views the WRITTEN PREFIX (gauge left),
+// which the caller keeps live.  Typed slice feeds only — zero ptr math.
+static ok64 URIRelativePath(u8csp result, u8s out, u8cscs base_segs,
+                            u8cscs spec_segs) {
+    sane(result && $ok(out));
+    u8g g;
+    u8gOf(g, out);
     size_t base_n = u8cscsLen(base_segs);
     size_t spec_n = u8cscsLen(spec_segs);
 
@@ -172,49 +174,36 @@ static ok64 URIRelativePath(u8csp result, u8cscs base_segs, u8cscs spec_segs) {
     while (common < base_dir_n && common < spec_n) {
         u8cs const *bs = u8cscsAtP(base_segs, common);
         u8cs const *ss = u8cscsAtP(spec_segs, common);
-        size_t blen = u8csLen(*bs);
-        size_t slen = u8csLen(*ss);
-        if (blen != slen || 0 != memcmp((*bs)[0], (*ss)[0], blen)) break;
+        if (!u8csEq(*bs, *ss)) break;
         common++;
     }
 
-    // Build result in static buffer
-    u8p out = URIRelPathBuf;
-    u8cp endp = URIRelPathBuf + sizeof(URIRelPathBuf);
+    a_cstr(dotdot, "..");
 
     // Generate ".." for each segment to climb from base dir
     size_t up = base_dir_n - common;
     for (size_t i = 0; i < up; i++) {
-        if (i > 0) {
-            test(out < endp, URIFAIL);
-            *out++ = '/';
-        }
-        test(out + 2 <= endp, URIFAIL);
-        *out++ = '.';
-        *out++ = '.';
+        if (i > 0) call(u8gFeed1, g, '/');
+        call(u8gFeed, g, dotdot);
     }
 
     // Append remaining specific segments
     for (size_t i = common; i < spec_n; i++) {
-        if (up > 0 || i > common) {
-            test(out < endp, URIFAIL);
-            *out++ = '/';
-        }
+        if (up > 0 || i > common) call(u8gFeed1, g, '/');
         u8cs const *seg = u8cscsAtP(spec_segs, i);
-        size_t len = u8csLen(*seg);
-        test(out + len <= endp, URIFAIL);
-        memcpy(out, (*seg)[0], len);
-        out += len;
+        call(u8gFeed, g, *seg);
     }
 
-    result[0] = URIRelPathBuf;
-    result[1] = out;
+    u8csMv(result, u8gLeftC(g));
     done;
 }
 
-// Produce relative URI: parts of `specific` that differ from `base`
-ok64 URIRelative(urip rel, uricp base, uricp specific) {
-    sane(rel && base && specific);
+// Produce relative URI: parts of `specific` that differ from `base`.
+// PTR-009: `out` is a caller-owned writable slice for the computed
+// relative path; `rel->path` may view its written prefix, so `out` must
+// outlive `rel`.
+ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
+    sane(rel && base && specific && $ok(out));
     zerop(rel);
 
     // If schemes differ, return full specific URI
@@ -250,7 +239,7 @@ ok64 URIRelative(urip rel, uricp base, uricp specific) {
         u8cscsDup(spec_segs, u8csbDataC(spec_segs_arr));
 
         // Compute relative path
-        call(URIRelativePath, rel->path, base_segs, spec_segs);
+        call(URIRelativePath, rel->path, out, base_segs, spec_segs);
         // Copy query/fragment (or mark explicitly empty)
         if (*specific->query) {
             u8csDup(rel->query, specific->query);
@@ -297,102 +286,92 @@ ok64 URIRelative(urip rel, uricp base, uricp specific) {
     done;
 }
 
-// Static buffer for merged path computation
-static u8 URIMergePathBuf[4096];
+// PTR-009: RFC 3986 §5.2.4 remove_dot_segments as a PATH segment-walk
+// (no in/out cursor): push each segment, drop ".", pop the last segment
+// on "..", then rebuild into the caller-owned slice `out` via a gauge;
+// `result` views the written prefix.  `is_abs`/`trail` carry the
+// absolute-prefix and dot-induced trailing slash so the result is
+// byte-identical to the old cursor code.
+static ok64 URIRemoveDots(u8csp result, u8s out, u8csc merged) {
+    sane(result && $ok(out));
+    b8 is_abs = !u8csEmpty(merged) && merged[0][0] == '/';
+    // Output ends with '/' iff merged does, OR the final token is a
+    // "."/".." (a directory ref, per RFC).  `ends_slash` is the fixed
+    // property; `last_dot` tracks whether the LAST token was a dot-seg.
+    b8 ends_slash = !u8csEmpty(merged) && merged[1][-1] == '/';
+    b8 last_dot = NO;
 
-// Merge relative path with base path per RFC 3986 Section 5.2.3
-// Then resolve . and .. segments per Section 5.2.4
-static ok64 URIMergePath(u8csp result, u8csc base_path, u8csc rel_path) {
-    sane(result);
-
-    // If relative path starts with '/', it's absolute - use as-is
-    if (!u8csEmpty(rel_path) && rel_path[0][0] == '/') {
-        size_t len = u8csLen(rel_path);
-        test(len <= sizeof(URIMergePathBuf), URIFAIL);
-        memcpy(URIMergePathBuf, rel_path[0], len);
-        result[0] = URIMergePathBuf;
-        result[1] = URIMergePathBuf + len;
-        done;
+    a_pad(u8cs, segs, 256);
+    a_dup(u8c, cursor, merged);
+    u8cs seg = {};
+    while (PATHu8sDrain(cursor, seg) == OK) {
+        if (u8csEmpty(seg)) continue;
+        b8 dot = u8csLen(seg) == 1 && seg[0][0] == '.';
+        b8 dotdot = u8csLen(seg) == 2 && seg[0][0] == '.' && seg[0][1] == '.';
+        last_dot = dot || dotdot;
+        if (dot) continue;
+        if (dotdot) {
+            if (u8cssLen(u8csbData(segs)) > 0) u8cssShed(u8csbData(segs), 1);
+            continue;
+        }
+        call(u8cssFeed1, u8csbIdle(segs), seg);
     }
+    b8 trail = ends_slash || last_dot;
 
-    // Find last '/' in base path (directory portion)
-    u8cp base_dir_end = base_path[0];
-    for (u8cp p = base_path[0]; p < base_path[1]; p++) {
-        if (*p == '/') base_dir_end = p + 1;
+    u8g g;
+    u8gOf(g, out);
+    if (is_abs) call(u8gFeed1, g, '/');
+    size_t n = u8cssLen(u8csbData(segs));
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0) call(u8gFeed1, g, '/');
+        u8cs const *s = u8cssAtP(u8csbData(segs), i);
+        call(u8gFeed, g, *s);
     }
-
-    // Build merged path: base_dir + rel_path
-    size_t dir_len = base_dir_end - base_path[0];
-    size_t rel_len = u8csLen(rel_path);
-    test(dir_len + rel_len <= sizeof(URIMergePathBuf), URIFAIL);
-    memcpy(URIMergePathBuf, base_path[0], dir_len);
-    memcpy(URIMergePathBuf + dir_len, rel_path[0], rel_len);
-
-    // Now resolve . and .. segments (RFC 5.2.4 remove_dot_segments)
-    u8p in = URIMergePathBuf;
-    u8p in_end = URIMergePathBuf + dir_len + rel_len;
-    u8p out = URIMergePathBuf;
-
-    while (in < in_end) {
-        // A: If input starts with "../" or "./" remove that prefix
-        if (in + 3 <= in_end && in[0] == '.' && in[1] == '.' && in[2] == '/') {
-            in += 3;
-            continue;
-        }
-        if (in + 2 <= in_end && in[0] == '.' && in[1] == '/') {
-            in += 2;
-            continue;
-        }
-
-        // B: If input starts with "/./" or "/." at end, replace with "/"
-        if (in + 3 <= in_end && in[0] == '/' && in[1] == '.' && in[2] == '/') {
-            in += 2;
-            continue;
-        }
-        if (in + 2 == in_end && in[0] == '/' && in[1] == '.') {
-            *out++ = '/';
-            break;
-        }
-
-        // C: If input starts with "/../" or "/.." at end, replace with "/" and remove last output segment
-        if (in + 4 <= in_end && in[0] == '/' && in[1] == '.' && in[2] == '.' && in[3] == '/') {
-            in += 3;  // skip "/.." leaving "/" for next iteration
-            // Remove last segment and its preceding "/" from output
-            while (out > URIMergePathBuf && out[-1] != '/') out--;
-            if (out > URIMergePathBuf) out--;
-            continue;
-        }
-        if (in + 3 == in_end && in[0] == '/' && in[1] == '.' && in[2] == '.') {
-            // At end - remove last segment
-            while (out > URIMergePathBuf && out[-1] != '/') out--;
-            if (out > URIMergePathBuf) out--;
-            *out++ = '/';  // add final slash per RFC
-            break;
-        }
-
-        // D: If input is "." or "..", remove it
-        if ((in + 1 == in_end && in[0] == '.') ||
-            (in + 2 == in_end && in[0] == '.' && in[1] == '.')) {
-            break;
-        }
-
-        // E: Copy first path segment (including initial "/" if any) to output
-        if (in[0] == '/') {
-            *out++ = *in++;
-        }
-        while (in < in_end && in[0] != '/') {
-            *out++ = *in++;
-        }
-    }
-
-    result[0] = URIMergePathBuf;
-    result[1] = out;
+    if (trail && n > 0) call(u8gFeed1, g, '/');
+    u8csMv(result, u8gLeftC(g));
     done;
 }
 
-// Resolve relative URI against base to produce absolute URI
-ok64 URIAbsolute(urip abs, uricp base, uricp rel) {
-    sane(abs && base && rel);
+// PTR-009: merge relative path with base path (RFC 3986 §5.2.3) then
+// remove dot-segments, feeding the result into the CALLER-OWNED writable
+// slice `out`; `result` views its written prefix, which the caller keeps
+// live.  No static buffer, no pointer cursor — abc/PATH segment-walk only.
+static ok64 URIMergePath(u8csp result, u8s out, u8csc base_path,
+                         u8csc rel_path) {
+    sane(result && $ok(out));
+
+    // Relative path starts with '/': it's absolute, use it verbatim.
+    if (!u8csEmpty(rel_path) && rel_path[0][0] == '/') {
+        u8g g;
+        u8gOf(g, out);
+        call(u8gFeed, g, rel_path);
+        u8csMv(result, u8gLeftC(g));
+        done;
+    }
+
+    // Merge base "directory" (through and including the last '/') with
+    // the relative path into BASS scratch, then remove dot-segments into
+    // caller storage.  base_dir = base_path up to its last '/' (RFC
+    // §5.2.3); empty when base has no '/'.
+    a_carve(u8, merged, MAX_URI_LEN);
+    u8cs base_dir = {base_path[0], base_path[0]};
+    a_dup(u8c, scan, base_path);
+    $for(u8c, c, scan) {
+        if (*c == '/') base_dir[1] = c + 1;
+    }
+    if (!u8csEmpty(base_dir)) call(u8bFeed, merged, base_dir);
+    call(u8bFeed, merged, rel_path);
+
+    call(URIRemoveDots, result, out, u8bDataC(merged));
+    done;
+}
+
+// Resolve relative URI against base to produce absolute URI.  PTR-009:
+// the merged path is fed into the CALLER-OWNED writable slice `out`;
+// `abs->path` may view its written prefix, so `out` must outlive every
+// use of `abs`.
+ok64 URIAbsolute(urip abs, uricp base, uricp rel, u8s out) {
+    sane(abs && base && rel && $ok(out));
     zerop(abs);
 
     // If relative has scheme, it's already absolute
@@ -429,7 +408,7 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel) {
         //  (no scheme, no authority, a rootless path) that still carries
         //  its own source text (`rel->data` set — the signature of a ref
         //  returned whole by URIRelative, as opposed to a path freshly
-        //  built in URIRelPathBuf by URIRelativePath, which leaves
+        //  built into caller scratch by URIRelativePath, which leaves
         //  `rel->data` empty), the reference IS the answer: preserve its
         //  rootless path instead of prepending base's directory.  This
         //  is what keeps `ht/h/p#abc` from gaining a spurious leading
@@ -441,7 +420,7 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel) {
         if (verbatim_relref) {
             u8csDup(abs->path, rel->path);
         } else {
-            call(URIMergePath, abs->path, base->path, rel->path);
+            call(URIMergePath, abs->path, out, base->path, rel->path);
         }
         u8csDup(abs->query, rel->query);
         u8csDup(abs->fragment, rel->fragment);

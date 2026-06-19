@@ -70,12 +70,20 @@ ok64 URIutf8Feed(u8s into, uricp u);
 // names) through this at trust boundaries.
 ok64 URIutf8FeedSafe(u8s into, uricp u);
 
-// Produce relative URI: parts of `specific` that differ from `base`
-// Result contains only the changed components
-ok64 URIRelative(urip relative, uricp base, uricp specific);
+// Produce relative URI: parts of `specific` that differ from `base`.
+// Result contains only the changed components.  PTR-009: the computed
+// relative path is written into the CALLER-OWNED writable slice `out`
+// and `relative->path` views its written prefix — `out` must outlive
+// every use of `relative`.  Pass a fresh `out` region per result you
+// keep live (e.g. a `u8s` view over an `a_pad(u8, buf, MAX_URI_LEN)`).
+ok64 URIRelative(urip relative, uricp base, uricp specific, u8s out);
 
-// Resolve relative URI against base to produce absolute URI
-ok64 URIAbsolute(urip absolute, uricp base, uricp relative);
+// Resolve relative URI against base to produce absolute URI.  PTR-009:
+// the merged path is written into the CALLER-OWNED writable slice `out`
+// and `absolute->path` may view its written prefix — `out` must outlive
+// every use of `absolute`.  Pass a fresh `out` region per result you
+// keep live (e.g. a `u8s` view over an `a_pad(u8, buf, MAX_URI_LEN)`).
+ok64 URIAbsolute(urip absolute, uricp base, uricp relative, u8s out);
 
 // Percent-encode: all non-unreserved chars → %XX
 // Unreserved: A-Za-z0-9 -._~
