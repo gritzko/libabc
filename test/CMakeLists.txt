@@ -49,6 +49,12 @@ target_compile_options(INTtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(INTtest abc)
 add_test(NAME INTtest COMMAND INTtest)
 
+add_executable(BITtest BIT.c)
+target_link_options(BITtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(BITtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(BITtest abc)
+add_test(NAME BITtest COMMAND BITtest)
+
 add_executable(PROtest PRO.c)
 target_link_libraries(PROtest abc)
 add_test(NAME PROtest COMMAND PROtest)

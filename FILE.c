@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "01.h"
+#include "BIT.h"
 #include "BUF.h"
 #include "LSM.h"
 #include "PATH.h"
@@ -504,6 +505,14 @@ size_t FILESysPage(void) {
 }
 
 u8 *FILE_RW[4] = {};
+
+//  ABC-004: u1 bitmap view over FILE_RW (the per-fd read/write flag map).
+//  Replaces BitSet/BitUnset/BitAt; the old BitUnset `|= ~(1<<bit)` bug is
+//  gone with u1sClr.  FILE_RW is u64-word-aligned, FILE_MAX_OPEN bits.
+fun u1s FILErwBits(void) {
+    u1s s = {(u8 *)FILE_RW[0], (u32)FILE_MAX_OPEN};
+    return s;
+}
 u8p *FILE_BOOK[4] = {};  // Booked VA range ends
 Bu8 *FILE_WANT_BUFS = NULL;
 u8bwantf FILE_WANTS[FILE_MAX_OPEN] = {};
@@ -624,7 +633,7 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
 ok64 FILENoteMap(int const *fd, u8bp buf, b8 rw) {
     sane(*fd > FILE_CLOSED && u8bOK(buf));
     call(FILEInit);
-    rw ? BitSet(FILE_RW, *fd) : BitUnset(FILE_RW, *fd);
+    rw ? u1sSet(FILErwBits(), (u32)*fd) : u1sClr(FILErwBits(), (u32)*fd);
     done;
 }
 
@@ -657,7 +666,7 @@ ok64 FILETrimMap(u8bp buf) {
 ok64 FILEDropMap(int *fd, u8bp buf) {
     sane(u8bOK(buf));
     call(FILEFindMap, fd, buf);
-    BitUnset(FILE_RW, *fd);
+    u1sClr(FILErwBits(), (u32)*fd);
     done;
 }
 
@@ -751,7 +760,7 @@ ok64 FILEReMap(u8bp buf, size_t new_size) {
     sane(Bok(buf));
     int fd = FILEBookedFD(buf);
     test(fd >= 0, NONE);
-    b8 rw = BitAt(FILE_RW, fd);
+    b8 rw = u1At(u1sConst(FILErwBits()), (u32)fd);
     int prot = PROT_READ;
     if (rw) prot |= PROT_WRITE;
     // Unmap old
@@ -775,7 +784,7 @@ ok64 FILEUnMapFD(u8b buf, int const *fd) {
     sane(Bok(buf));
     u8c **b = (u8c **)buf;
     FILETestC(-1 != munmap(buf[0], Blen(b)));
-    BitUnset(FILE_RW, *fd);
+    u1sClr(FILErwBits(), (u32)*fd);
     b[0] = b[1] = b[2] = b[3] = NULL;
     done;
 }
@@ -1060,7 +1069,7 @@ ok64 FILEUnBook(u8bp buf) {
 
     // Clear tracking
     *u8pbAtP(FILE_BOOK, fd) = NULL;
-    BitUnset(FILE_RW, fd);
+    u1sClr(FILErwBits(), (u32)fd);
 
     // Shrink FILE_BOOK tracking array if possible
     u8psp data = u8pbData(FILE_BOOK);

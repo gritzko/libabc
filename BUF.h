@@ -137,12 +137,9 @@ fun void BitSet(u8b buf, size_t ndx) {
     Bat(buf, thebyte) |= 1 << thebit;
 }
 
-fun void BitUnset(u8b buf, size_t ndx) {
-    size_t thebyte = ndx >> 3;
-    size_t thebit = ndx & 7;
-    assert(thebyte < Bsize(buf));
-    Bat(buf, thebyte) |= ~(1 << thebit);
-}
+//  ABC-004: BitUnset removed — its `|= ~(1<<bit)` SET every other bit
+//  instead of clearing the target.  Use abc/BIT.h u1sClr for correct
+//  bit clearing; the lone remaining BitAt/BitSet callers stay.
 
 #define a$$pad(n, l, ll)                                \
     u8 _##n[(l)];                                       \

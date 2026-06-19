@@ -197,6 +197,16 @@ A heap of sorted runs presenting a single merged, deduplicated stream; seekable.
  -  `MSETStart`/`MSETStartZ`/`MSETNext`/`MSETMerge` — initialize the merge over a stack of runs, step it.
  -  `MSETSeek`/`MSETSeekZ`/`MSETTopZ`/`MSETAdvZ` — seek to a key and advance past the current equal-tops group.
 
+###  BIT.h — `u1` bitmap (offset-0 bit set)
+
+A bit VALUE (`u1`, carried as a b8 0/1; no addressable `u1*`), an offset-0 bit-slice (`u1s`/`u1cs`, a bespoke `{u8* base; u32 nbits}` — NOT an Sx.h/Bx.h instance), and an owned bit buffer (`u1b`, u64-word backed, DATA cursor in BITS). Bit order is LSB-first within LE u64 words (matches the old `BitAt`); ops run 64 bits at a time and mask the partial tail word so junk bits never count. Replaces the ad-hoc `BitAt`/`BitSet`/`BitUnset` (BUF.h) — the broken `BitUnset` is gone.
+
+ -  `u1At`/`u1sSet`/`u1sClr`/`u1sPut`/`u1sLen`/`u1sConst` — element get/set/clear/put, length (bits), const view.
+ -  `u1bMap`/`u1bAllocate`/`u1bAcquire`/`u1bFree`/`u1bUnMap` — bit-buffer creation and release (capacity in bits, rounded to whole words).
+ -  `u1bFeed1`/`u1bReset`/`u1bData`/`u1bDataC`/`u1bDataLen`/`u1bLen`/`u1bIdle` — append a bit, clear DATA, slice views, lengths.
+ -  `u1sOr`/`u1sAnd`/`u1sAndNot`/`u1sXor` — word-parallel equal-length set algebra (`BITLEN` on length mismatch).
+ -  `u1sCount`/`u1sNext`/`u1sEq`/`u1sAny` + `u1$for(i, set)` — popcount/rank, next-set-bit, equality, non-empty, set-bit iterator.
+
 ##  Algorithms
 
 ###  QSORTx.h, SORT.h — sorting
