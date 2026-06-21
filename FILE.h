@@ -2,6 +2,7 @@
 #define LIBRDX_FILE_H
 
 #include "01.h"
+#include "BIT.h"
 #include "BUF.h"
 #include "OK.h"
 #include "PATH.h"
@@ -85,7 +86,7 @@ ok64 FILEErr(ok64 def);
         if (!(cond)) return FILEErr(FILEFAIL); \
     } while (0)
 
-extern u8 *FILE_RW[4];
+extern u64 *FILE_RW[4];   // per-fd read-write flag bitmap (u1b)
 extern u8p *FILE_BOOK[4];       // Booked VA range ends
 extern Bu8 *FILE_WANT_BUFS;   // Per-fd booked buffer slots [FILE_MAX_OPEN]
 
@@ -679,7 +680,7 @@ ok64 FILEBookInit();
 
 fun ok64 FILEInit() {
     if (*FILE_RW != NULL) return OK;
-    ok64 o = u8bAllocate(FILE_RW, roundup2(FILE_MAX_OPEN >> 3, 64));
+    ok64 o = u1bAllocate(FILE_RW, (u32)FILE_MAX_OPEN);
     if (o == OK) o = u8pbAllocate(FILE_BOOK, FILE_MAX_OPEN);
     if (o == OK) o = FILEBookInit();
     return o;
