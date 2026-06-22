@@ -410,6 +410,21 @@ static ron60 ron60_of_timespec(struct timespec tsp) {
     return r;
 }
 
+//  Inverse of ron60_of_timespec: ron60 → localtime split → time_t (sniff
+//  AT.c's at_ts_of_ron60).  tm_isdst=-1 lets mktime auto-detect DST so the
+//  ron60↔timespec round-trip holds across the DST boundary; an undecodable
+//  ron60 yields the zero timespec (UTIME-clamped by the caller's check).
+static struct timespec timespec_of_ron60(ron60 r) {
+    struct tm tm = {};
+    u32 ms = 0;
+    struct timespec ts = {};
+    if (RONToTime(r, &tm, &ms) != OK) return ts;
+    tm.tm_isdst = -1;
+    ts.tv_sec  = mktime(&tm);
+    ts.tv_nsec = (long)ms * 1000000L;
+    return ts;
+}
+
 static void filestat_from_stat(filestat *out, struct stat const *sb) {
     out->mtime = ron60_of_timespec(FILE_STAT_MTIM(*sb));
     out->atime = ron60_of_timespec(FILE_STAT_ATIM(*sb));
@@ -453,6 +468,16 @@ ok64 FILEBumpTimes(path8s path, i64 delta_sec) {
     };
     int uc = utimes((char const *)*path, tv);
     FILETestC(uc == 0);
+    done;
+}
+
+ok64 FILESetMtime(path8s path, ron60 ts) {
+    sane($ok(path) && !$empty(path));
+    struct timespec tv = timespec_of_ron60(ts);
+    struct timespec times[2] = { tv, tv };   // [0] atime, [1] mtime
+    int rc = utimensat(AT_FDCWD, (char const *)*path, times,
+                       AT_SYMLINK_NOFOLLOW);
+    FILETestC(rc == 0);
     done;
 }
 

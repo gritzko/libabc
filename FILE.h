@@ -514,6 +514,12 @@ ok64 FILEReadLink(u8bp out, path8s linkpath);
 // Set file permission bits.
 ok64 FILEChmod(path8s path, u32 mode);
 
+// Set a path's atime AND mtime to the instant `ts` (a ron60: ms-resolution,
+// 2000-2099).  Wraps utimensat(AT_FDCWD,…,AT_SYMLINK_NOFOLLOW) — a symlink
+// stamps the LINK, not its target.  The ron60→timespec split is the inverse
+// of FILEStat's read, so it round-trips through FILELStat exactly.
+ok64 FILESetMtime(path8s path, ron60 ts);
+
 // Read getcwd into a path buffer. NUL-terminates and feeds DATA.
 ok64 FILEGetCwd(path8b out);
 
