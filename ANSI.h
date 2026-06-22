@@ -20,12 +20,22 @@ con ok64 ANSIBAD = 0xa5dc48b28d;
 
 #define CSI_MAX_PARAMS 8
 
+//  `private` is a C++ keyword; the field stays `private` for every C caller
+//  (and the ragel-generated parser), but a C++ TU including this header for
+//  the terminal-control API (js/tty.cpp) only needs the struct to be a valid
+//  type — it never touches the field — so alias it just here, then undefine.
+#ifdef __cplusplus
+#define private private_
+#endif
 typedef struct {
     u8  private;                  // private prefix byte, or 0
     u8  final;                    // final byte
     u8  nparams;                  // count of decoded params
     u32 params[CSI_MAX_PARAMS];   // decoded decimal values
 } csi;
+#ifdef __cplusplus
+#undef private
+#endif
 
 typedef csi *csip;
 typedef csi const *csicp;
@@ -201,5 +211,39 @@ con ok64 ANSINOREPLY = 0xa5dc49761b399562;    // OSC 11 query timed out or unpar
 // Returns ANSINOTTY if /dev/tty can't be opened, ANSINOREPLY if the
 // terminal stayed silent or returned garbage.
 ok64 ANSIBgColor(ansi64 *bg);
+
+// --- terminal control (JS-053) ---
+//
+// POSIX raw-mode + winsize wrappers for an interactive pager (bro/BRO.c),
+// sharing the raw-mode flag dance with ANSIBgColor above.  STATELESS:
+// ANSIRaw RETURNS the saved termios in `saved` (caller-owned bytes,
+// ANSITtyTermiosSize() long); ANSICook takes that buffer back to restore.
+// No per-fd C-side table — the JS leaf (tty.*) owns the saved state.
+
+// Opaque saved-termios buffer size, so callers (incl. the JS leaf) can size
+// a byte buffer without seeing `struct termios`.
+size_t ANSITtyTermiosSize(void);
+
+// Put `fd` into raw mode (clears ECHO|ICANON|ISIG|IEXTEN, IXON|ICRNL|
+// BRKINT|INPCK|ISTRIP, OPOST; VMIN=0 VTIME=1 — same flags ANSIBgColor uses).
+// First copies the CURRENT termios into `saved` (must hold
+// ANSITtyTermiosSize() bytes) for a later ANSICook.  Returns ANSINOTTY if
+// fd is not a tty.
+ok64 ANSIRaw(int fd, u8s saved);
+
+// Restore `fd`'s termios from the bytes `saved` produced by ANSIRaw
+// (tcsetattr TCSAFLUSH).  `saved` must be exactly ANSITtyTermiosSize() bytes.
+ok64 ANSICook(int fd, u8cs saved);
+
+// Read the terminal window size of `fd` via ioctl(TIOCGWINSZ).
+ok64 ANSITtySize(int fd, u16 *rows, u16 *cols);
+
+// Open a fresh pseudo-terminal pair (test support).  *master gets the ptmx
+// master fd; *slave gets the unlocked slave (pts) fd, opened O_RDWR|O_NOCTTY.
+// Pure POSIX (posix_openpt/grantpt/unlockpt/ptsname), no libutil link.
+ok64 ANSIOpenPty(int *master, int *slave);
+
+// Set the window size of `fd` (test support; ioctl TIOCSWINSZ).
+ok64 ANSISetSize(int fd, u16 rows, u16 cols);
 
 #endif

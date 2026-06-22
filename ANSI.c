@@ -7,6 +7,8 @@
 
 #include <fcntl.h>
 #include <poll.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -157,6 +159,31 @@ static int ansi_parse_hex16(u8c **pp, u8c *end) {
     return (int)((v >> 8) & 0xFF);
 }
 
+//  . . . . . . . . terminal control (JS-053) . . . . . . . .
+//
+//  Raw-mode + winsize wrappers for an interactive pager (bro/BRO.c) and
+//  the bg-color probe above.  STATELESS: ANSIRaw RETURNS the saved termios
+//  in `saved` (caller-owned bytes, ANSITtyTermiosSize() long); ANSICook
+//  takes that buffer back to restore.  No per-fd C-side table — the JS
+//  leaf (tty.*) owns the saved state.
+
+//  The shared raw-mode dance: read `fd`'s current termios into *old (for a
+//  later restore), then apply the full raw flag set and install it with
+//  `how` (TCSANOW for the brief bg-color probe, TCSAFLUSH for the pager).
+//  Returns 0 on success, -1 if tcgetattr fails (fd not a tty).  ONE copy of
+//  the flag logic, shared by ANSIBgColor and ANSIRaw (CLAUDE.md §13).
+static int ansi_tty_raw(int fd, struct termios *old, int how) {
+    if (tcgetattr(fd, old) != 0) return -1;
+    struct termios raw = *old;
+    raw.c_lflag &= (tcflag_t)~(ECHO | ICANON | ISIG | IEXTEN);
+    raw.c_iflag &= (tcflag_t)~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
+    raw.c_oflag &= (tcflag_t)~(OPOST);
+    raw.c_cc[VMIN]  = 0;
+    raw.c_cc[VTIME] = 1;  //  100ms read timeout
+    (void)tcsetattr(fd, how, &raw);
+    return 0;
+}
+
 ok64 ANSIBgColor(ansi64 *bg) {
     sane(bg != NULL);
     if (ansi_bg_state != 0) {
@@ -174,18 +201,13 @@ ok64 ANSIBgColor(ansi64 *bg) {
         fail(ANSINOTTY);
     }
 
-    struct termios old_tio, raw_tio;
-    if (tcgetattr(fd, &old_tio) != 0) {
+    struct termios old_tio;
+    if (ansi_tty_raw(fd, &old_tio, TCSANOW) != 0) {
         close(fd);
         ansi_bg_cached_err = ANSINOTTY;
         *bg = ANSI_DEFAULT;
         fail(ANSINOTTY);
     }
-    raw_tio = old_tio;
-    raw_tio.c_lflag &= ~(ICANON | ECHO);
-    raw_tio.c_cc[VMIN]  = 0;
-    raw_tio.c_cc[VTIME] = 0;
-    (void)tcsetattr(fd, TCSANOW, &raw_tio);
 
     static u8c const QUERY[] = "\033]11;?\007";
     ssize_t wn = write(fd, QUERY, sizeof(QUERY) - 1);
@@ -241,5 +263,71 @@ ok64 ANSIBgColor(ansi64 *bg) {
     ansi_bg_cached_err = OK;
     ansi_bg_state = 2;
     *bg = packed;
+    done;
+}
+
+size_t ANSITtyTermiosSize(void) { return sizeof(struct termios); }
+
+ok64 ANSIRaw(int fd, u8s saved) {
+    sane(fd >= 0 && $len(saved) == (ssize_t)sizeof(struct termios));
+    struct termios orig;
+    //  Reuse the shared raw-mode dance (also driving ANSIBgColor); TCSAFLUSH
+    //  drops any pending input so the pager starts from a clean state.
+    if (ansi_tty_raw(fd, &orig, TCSAFLUSH) != 0) fail(ANSINOTTY);
+    //  Hand the original termios back to the caller (the only saved state).
+    u8csc src = {(u8 const *)&orig, (u8 const *)(&orig + 1)};
+    u8sc dst = {saved[0], saved[1]};
+    u8sCopy(dst, src);
+    done;
+}
+
+ok64 ANSICook(int fd, u8cs saved) {
+    sane(fd >= 0 && $len(saved) == (ssize_t)sizeof(struct termios));
+    struct termios orig;
+    u8sc dst = {(u8 *)&orig, (u8 *)(&orig + 1)};
+    u8csc src = {saved[0], saved[1]};
+    u8sCopy(dst, src);
+    if (tcsetattr(fd, TCSAFLUSH, &orig) != 0) fail(ANSINOTTY);
+    done;
+}
+
+ok64 ANSITtySize(int fd, u16 *rows, u16 *cols) {
+    sane(fd >= 0 && rows && cols);
+    struct winsize ws;
+    if (ioctl(fd, TIOCGWINSZ, &ws) != 0) fail(ANSINOTTY);
+    *rows = ws.ws_row;
+    *cols = ws.ws_col;
+    done;
+}
+
+ok64 ANSIOpenPty(int *master, int *slave) {
+    sane(master && slave);
+    int m = posix_openpt(O_RDWR | O_NOCTTY);
+    if (m < 0) fail(ANSINOTTY);
+    if (grantpt(m) != 0 || unlockpt(m) != 0) {
+        close(m);
+        fail(ANSINOTTY);
+    }
+    char const *name = ptsname(m);
+    if (name == NULL) {
+        close(m);
+        fail(ANSINOTTY);
+    }
+    int s = open(name, O_RDWR | O_NOCTTY);
+    if (s < 0) {
+        close(m);
+        fail(ANSINOTTY);
+    }
+    *master = m;
+    *slave = s;
+    done;
+}
+
+ok64 ANSISetSize(int fd, u16 rows, u16 cols) {
+    sane(fd >= 0);
+    struct winsize ws = {};
+    ws.ws_row = rows;
+    ws.ws_col = cols;
+    if (ioctl(fd, TIOCSWINSZ, &ws) != 0) fail(ANSINOTTY);
     done;
 }

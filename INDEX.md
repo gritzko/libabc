@@ -354,6 +354,8 @@ Codepoint encode/decode and validation over slices.
 ANSI CSI parsing (`ANSI`) and styled-output rendering with RGB/256/basic colour, padding and trimming (`TTY`).
 
  -  `ANSIu8sDrainCSI` (`csip`) — parse one ANSI CSI escape sequence from input into a structured `csi`.
+ -  `ANSIIsTTY`/`ANSISetTTY`/`ANSIBgColor` — cached `isatty(stdout)`; OSC 11 background-colour probe over `/dev/tty` (briefly raw).
+ -  `ANSIRaw`/`ANSICook`/`ANSITtySize` — terminal control (JS-053): stateless raw-mode enter (returns the saved termios bytes) / restore / `TIOCGWINSZ`, sharing the raw-mode dance with `ANSIBgColor`; `ANSIOpenPty`/`ANSISetSize` are pty test support.
  -  `tty64`/`TTYutf8sFeed` — a packed style word + the renderer emitting styled UTF-8 text (colour, attributes, pad/trim).
  -  `TTYansifeed`/`TTYrgbfeed`/`TTYresetfeed` — emit basic-colour, RGB, and reset escape sequences.
 
