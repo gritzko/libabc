@@ -205,6 +205,71 @@ ok64 RONTestNowMonotone() {
     done;
 }
 
+//  Recover the Unix-epoch seconds a ron60 stamp encodes the same way
+//  sniff's at_ts_of_ron60 does (localtime-written ron60 → mktime).  Used
+//  only by the SOURCE_DATE_EPOCH test to prove the override is tz-stable.
+static long long _epoch_of_ron(ron60 r) {
+    struct tm tm = {};
+    u32 ms = 0;
+    if (RONToTime(r, &tm, &ms) != OK) return -1;
+    tm.tm_isdst = -1;
+    return (long long)mktime(&tm);
+}
+
+//  DIS-051: RONNow honours SOURCE_DATE_EPOCH (reproducible-build clock).
+//  When set, two calls yield the SAME ron60 whose recovered epoch equals
+//  the env value, tz-independently; unset restores the wall clock.
+ok64 RONTestSourceDateEpoch() {
+    sane(1);
+    char *saved = getenv("SOURCE_DATE_EPOCH");
+    char saved_buf[64] = {};
+    if (saved) { strncpy(saved_buf, saved, sizeof(saved_buf) - 1); saved = saved_buf; }
+    char *saved_tz = getenv("TZ");
+    char tz_buf[64] = {};
+    if (saved_tz) { strncpy(tz_buf, saved_tz, sizeof(tz_buf) - 1); saved_tz = tz_buf; }
+
+    //  A few epochs across DST boundaries; each tested under several zones
+    //  to prove the localtime→mktime round-trip cancels the tz offset.
+    con long long epochs[] = {
+        946684800LL,   // 2000-01-01 00:00:00 UTC (ron60 domain floor)
+        1262304000LL,  // 2010-01-01 (winter)
+        1467331200LL,  // 2016-07-01 (summer / DST)
+        1700000000LL,  // 2023-11-14
+    };
+    con char *zones[] = { "UTC", "America/New_York", "Asia/Kolkata" };
+    u8 ne = sizeof(epochs) / sizeof(epochs[0]);
+    u8 nz = sizeof(zones) / sizeof(zones[0]);
+    for (u8 z = 0; z < nz; z++) {
+        setenv("TZ", zones[z], 1);
+        tzset();
+        for (u8 i = 0; i < ne; i++) {
+            char ebuf[32] = {};
+            snprintf(ebuf, sizeof(ebuf), "%lld", epochs[i]);
+            setenv("SOURCE_DATE_EPOCH", ebuf, 1);
+            ron60 a = RONNow();
+            POLSleep(2 * POLNanosPerMSec);   // ensure not just "same ms"
+            ron60 b = RONNow();
+            //  Deterministic: pinned, so two calls agree exactly.
+            testeqv((long long)a, (long long)b, "%lld");
+            //  tz-stable: recovered epoch equals the env value in every zone.
+            testeqv(_epoch_of_ron(a), epochs[i], "%lld");
+        }
+    }
+
+    //  Unset → wall clock again (not pinned to the last epoch).
+    unsetenv("SOURCE_DATE_EPOCH");
+    setenv("TZ", "UTC", 1); tzset();
+    ron60 wall = RONNow();
+    want(_epoch_of_ron(wall) != epochs[0]);
+
+    //  Restore the inherited environment.
+    if (saved) setenv("SOURCE_DATE_EPOCH", saved, 1);
+    else unsetenv("SOURCE_DATE_EPOCH");
+    if (saved_tz) setenv("TZ", saved_tz, 1); else unsetenv("TZ");
+    tzset();
+    done;
+}
+
 ok64 RONTestFeedPad() {
     sane(1);
     con char* cases[][3] = {
@@ -319,6 +384,7 @@ ok64 RONtest() {
     call(RONTestNormInk);
     call(RONTestInk);
     call(RONTestNowMonotone);
+    call(RONTestSourceDateEpoch);
     call(RONTestFeedPad);
     call(RONTestSpliceBase);
     call(RONTestSpliceKeyOrder);
