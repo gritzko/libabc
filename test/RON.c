@@ -28,38 +28,53 @@ ok64 RONTestFromTm() {
     done;
 }
 
-ok64 RONTestInvalid() {
+//  RON-001: RONToTime is decode-tolerant; out-of-range calendar slots clamp
+//  to the nearest valid value and return OK (was BADARG).
+ok64 RONTestClamp() {
     sane(1);
     struct tm t = {};
-    // Invalid month (14 in RON = 13 in tm_mon after -1)
-    ron60 bad_month = 0;
-    bad_month |= ((u64)2 << (9 * 6));   // year tens
-    bad_month |= ((u64)6 << (8 * 6));   // year ones
-    bad_month |= ((u64)14 << (7 * 6));  // month 14 (invalid)
-    bad_month |= ((u64)0 << (6 * 6));   // day tens
-    bad_month |= ((u64)1 << (5 * 6));   // day ones
-    want(RONToTime(bad_month, &t, NULL) == BADARG);
 
-    // Invalid hour (25)
-    ron60 bad_hour = 0;
-    bad_hour |= ((u64)2 << (9 * 6));
-    bad_hour |= ((u64)6 << (8 * 6));
-    bad_hour |= ((u64)1 << (7 * 6));   // month 1
-    bad_hour |= ((u64)0 << (6 * 6));   // day tens
-    bad_hour |= ((u64)1 << (5 * 6));   // day ones
-    bad_hour |= ((u64)25 << (4 * 6));  // hour 25 (invalid)
-    want(RONToTime(bad_hour, &t, NULL) == BADARG);
+    // Overflowed month (14) clamps to 12, hour (25) to 23, minute (60) to 59.
+    ron60 over = 0;
+    over |= ((u64)2 << (9 * 6));
+    over |= ((u64)6 << (8 * 6));
+    over |= ((u64)14 << (7 * 6));  // month 14 -> 12
+    over |= ((u64)0 << (6 * 6));
+    over |= ((u64)1 << (5 * 6));   // day 1
+    over |= ((u64)25 << (4 * 6));  // hour 25 -> 23
+    over |= ((u64)60 << (3 * 6));  // min 60 -> 59
+    want(RONToTime(over, &t, NULL) == OK);
+    testeqv((long long)t.tm_mon, (long long)11, "%lld");
+    testeqv((long long)t.tm_hour, (long long)23, "%lld");
+    testeqv((long long)t.tm_min, (long long)59, "%lld");
 
-    // Invalid minute (60)
-    ron60 bad_min = 0;
-    bad_min |= ((u64)2 << (9 * 6));
-    bad_min |= ((u64)6 << (8 * 6));
-    bad_min |= ((u64)1 << (7 * 6));
-    bad_min |= ((u64)0 << (6 * 6));
-    bad_min |= ((u64)1 << (5 * 6));
-    bad_min |= ((u64)0 << (4 * 6));
-    bad_min |= ((u64)60 << (3 * 6));  // min 60 (invalid)
-    want(RONToTime(bad_min, &t, NULL) == BADARG);
+    // ms overflow: a valid ron60 (ms=0) + 1000 sets the ms field to 1000
+    // (< 4096, so no carry into seconds); clamps to 999, time is unchanged.
+    struct tm base = {
+        .tm_year = 126,  // 2026
+        .tm_mon = 0,
+        .tm_mday = 9,
+        .tm_hour = 10,
+        .tm_min = 0,
+        .tm_sec = 0,
+    };
+    ron60 valid = 0;
+    call(RONOfTime, &valid, &base, 0);
+    ron60 bad_ms = valid + 1000;
+    struct tm tm2 = {};
+    u32 ms2 = 0;
+    want(RONToTime(bad_ms, &tm2, &ms2) == OK);
+    testeqv((long long)tm2.tm_hour, (long long)10, "%lld");
+    testeqv((long long)tm2.tm_min, (long long)0, "%lld");
+    testeqv((long long)tm2.tm_sec, (long long)0, "%lld");
+    testeqv((long long)ms2, (long long)999, "%lld");
+
+    // seconds overflow: sec field 60 (60 << 12) clamps to 59, returns OK.
+    ron60 bad_sec = valid + (60ull << 12);
+    struct tm tm3 = {};
+    want(RONToTime(bad_sec, &tm3, NULL) == OK);
+    testeqv((long long)tm3.tm_sec, (long long)59, "%lld");
+    testeqv((long long)tm3.tm_hour, (long long)10, "%lld");
 
     done;
 }
@@ -377,7 +392,7 @@ ok64 RONTestSpliceIsolation() {
 ok64 RONtest() {
     sane(1);
     call(RONTestFromTm);
-    call(RONTestInvalid);
+    call(RONTestClamp);
     call(RONTestRoundTrip);
     call(RONTestNormInc);
     call(RONTestInc);

@@ -100,15 +100,20 @@ ok64 RONToTime(ron60 r, struct tm* t, u32 *ms) {
     u64 sec  = (r >> (2 * 6)) & 63;
     u64 l1   = (r >> (1 * 6)) & 63;
     u64 l0   = (r >> (0 * 6)) & 63;
-    if (y1 >= 10 || y0 >= 10) return BADARG;
-    if (mon < 1 || mon > 12) return BADARG;
+    //  RON-001: decode-tolerant; clamp out-of-range slots to nearest valid
+    //  value (e.g. same-second +1 ms overflow) instead of rejecting.
+    if (y1 > 9) y1 = 9;
+    if (y0 > 9) y0 = 9;
+    if (mon < 1) mon = 1; else if (mon > 12) mon = 12;
+    if (d0 > 9) d0 = 9;
+    if (d1 > 3) d1 = 3;
     u64 mday = d1 * 10 + d0;
-    if (d0 >= 10 || d1 >= 4 || mday < 1 || mday > 31) return BADARG;
-    if (hour >= 24) return BADARG;
-    if (min >= 60) return BADARG;
-    if (sec >= 60) return BADARG;
+    if (mday < 1) mday = 1; else if (mday > 31) mday = 31;
+    if (hour > 23) hour = 23;
+    if (min  > 59) min  = 59;
+    if (sec  > 59) sec  = 59;
     u64 msv = l1 * 64 + l0;
-    if (msv >= 1000) return BADARG;
+    if (msv > 999) msv = 999;
     t->tm_year = 100 + y1 * 10 + y0;
     t->tm_mon = mon - 1;
     t->tm_mday = mday;
