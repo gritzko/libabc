@@ -14,7 +14,7 @@ unreserved  = alpha | digit | "-" | "." | "_" | "~";
 
 delims      = "<" | ">" | "%" |  "#" | '"';
 
-unwise      = " " | "{" | "}" | "|" | "\\" | "^" | "[" | "]" | "`";
+unwise      = "{" | "}" | "|" | "\\" | "^" | "[" | "]" | "`";
 
 pchar = unreserved | pct_encoded | sub_delims | ":" | "@" | delims | unwise;
 
@@ -46,7 +46,7 @@ Host        = IP_literal | IPv4address | reg_name ;
 Port        = (pchar - ("/" | "?" | "#")){1,5} ;
 Authority   = "//" ( ( User "@" )? Host ( ":" Port )? ) ;
 
-Fragment = ( pchar | "/" | "?" )* ;
+Fragment = ( " " | pchar | "/" | "?" )* ;
 
 Query = ( ( pchar | "/" | "?" ) - "#" )* ;
 
