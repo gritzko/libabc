@@ -1046,8 +1046,11 @@ ok64 FILETrimBook(u8bp buf) {
     sane(Bok(buf));
     int fd = FILEBookedFD(buf);
     test(fd >= 0, FILENOBOOK);
-    call(FILEResize, &fd, u8bDataLen(buf));
+    //  ULOG-002: trim to PAST+DATA (b[2]-b[0]), the real on-disk content end,
+    //  dropping only IDLE (the page-aligned zero pad [b[2],b[3])).
     u8c **b = (u8c **)buf;
+    size_t busy = (size_t)(b[2] - b[0]);
+    call(FILEResize, &fd, busy);
     b[3] = b[2];
     done;
 }
