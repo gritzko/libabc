@@ -1,3 +1,6 @@
+//  glibc gates posix_openpt/grantpt/unlockpt/ptsname (and cfmakeraw)
+//  behind feature-test macros; musl exposes them by default.
+#define _GNU_SOURCE
 //  ANSI SGR delta emitter.  Header has the inline accessors and the
 //  short ANSIu8sFeedReset; the per-cell delta speller lives here so
 //  PRO.h's sane()/done can guard the slice and the function bodies
