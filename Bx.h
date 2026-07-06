@@ -445,12 +445,12 @@ fun ok64 X(, bSplice)(X(, bp) buf, size_t off, size_t cut, X(, csc) paste) {
 // IDLE is the free space.  Padding for T-alignment lands in PAST.
 
 // bAlign(arena) -> T##gp
-//   Collapse any pending DATA into PAST, align IDLE up to _Alignof(T),
+//   Collapse any pending DATA into PAST, align IDLE up to alignof(T),
 //   return a typed gauge over the aligned IDLE.  Cannot fail; if IDLE
 //   is exhausted the returned gauge is empty.
 fun X(, gp) X(, bAlign)(u8 *const *arena) {
-    uintptr_t al = ((uintptr_t)arena[2] + _Alignof(T) - 1)
-                 & ~((uintptr_t)_Alignof(T) - 1);
+    uintptr_t al = ((uintptr_t)arena[2] + alignof(T) - 1)
+                 & ~((uintptr_t)alignof(T) - 1);
     u8 *base = (u8 *)al;
     if (base > arena[3]) base = arena[3];
     ((u8 **)arena)[1] = base;
@@ -480,8 +480,8 @@ fun b8 X(, bContains)(X(, b) buf, void const *p) {
 fun ok64 X(, bAren)(u8 *const *arena, X(, csp) ren, X(, csc) orig) {
     size_t count = (size_t)(orig[1] - orig[0]);
     size_t need  = count * sizeof(T);
-    uintptr_t al = ((uintptr_t)arena[2] + _Alignof(T) - 1)
-                 & ~((uintptr_t)_Alignof(T) - 1);
+    uintptr_t al = ((uintptr_t)arena[2] + alignof(T) - 1)
+                 & ~((uintptr_t)alignof(T) - 1);
     u8 *base = (u8 *)al;
     if (base + need > arena[3]) return BNOROOM;
     if (need) memcpy(base, orig[0], need);

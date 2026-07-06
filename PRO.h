@@ -37,7 +37,7 @@ extern uint8_t _pro_depth;
 #define ABC_BASS_BYTES (1UL << 30)
 #endif
 
-extern _Thread_local u8 *ABC_BASS[4];
+extern thread_local u8 *ABC_BASS[4];
 
 con char *_pro_indent =
     "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
@@ -364,7 +364,7 @@ fun ok64 PROStderrToFile(char const *name) {
 #define MAIN(f)                                                          \
     uint8_t _pro_depth = 0;                                              \
     u8cs *STD_ARGS[4] = {};                                              \
-    _Thread_local u8 *ABC_BASS[4] = {};                                  \
+    thread_local u8 *ABC_BASS[4] = {};                                  \
     int main(int argn, char **args) {                                    \
         _PRO_TRACE_INIT(args[0]);                                        \
         if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {                    \
