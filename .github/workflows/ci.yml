@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install ninja-build clang \
+          libsodium-dev libcurl4-gnutls-dev liblz4-dev
+
+    - name: Configure
+      run: >
+        cmake -B build -GNinja
+        -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
+
+    - name: Build
+      run: ninja -C build
+
+    - name: Test
+      working-directory: build
+      run: ctest --output-on-failure --parallel 4 --no-tests=error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: brew install ninja libsodium lz4
+
+    - name: Configure
+      run: >
+        cmake -B build -GNinja
+        -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      run: ninja -C build
+
+    - name: Test
+      working-directory: build
+      run: ctest --output-on-failure --parallel 4 --no-tests=error

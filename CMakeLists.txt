@@ -5,6 +5,8 @@ set(CMAKE_C_STANDARD 23)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 
+enable_testing()
+
 option(WITH_ASAN "build with ASAN" OFF)
 if (WITH_ASAN)
     set(ASAN_FLAGS "-g -O1 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
