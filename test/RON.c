@@ -246,7 +246,7 @@ ok64 RONTestSourceDateEpoch() {
     //  A few epochs across DST boundaries; each tested under several zones
     //  to prove the localtime→mktime round-trip cancels the tz offset.
     con long long epochs[] = {
-        946684800LL,   // 2000-01-01 00:00:00 UTC (ron60 domain floor)
+        946771200LL,   // 2000-01-02 00:00:00 UTC (inside the domain in ALL zones)
         1262304000LL,  // 2010-01-01 (winter)
         1467331200LL,  // 2016-07-01 (summer / DST)
         1700000000LL,  // 2023-11-14
