@@ -1,0 +1,14 @@
+# editor junk
+*.swp
+*~
+
+# CMake build trees (each project builds in its own; never in-source)
+build/
+build-*/
+
+# beagle worktree store artifacts (local, machine-specific anchors)
+.be
+..be.idx
+
+# the hive: nested worktree cells, not part of the meta-project (BE-031)
+work/

@@ -135,6 +135,81 @@ ok64 u8sPrintf_test() {
     done;
 }
 
+ok64 u8sPop_test() {
+    sane(1);
+    // ABC-005 repro: Pop must return the TAIL bytes and shed them;
+    // it used to copy from the head while shedding the tail
+    u8 src[6] = {'a', 'b', 'c', 'd', 'e', 'f'};
+    u8cs s = {src, src + 6};
+    u8 out[3];
+    u8s into = {out, out + 3};
+    call(u8sPop, s, into);
+    a$str(exp, "def");
+    u8cs got = {out, out + 3};
+    want($eq(got, exp));
+    a$str(rem, "abc");
+    want($eq(s, rem));
+    // round-trip: pop the rest in two goes, mimic u8sPop1/u8sPop32 order
+    u8 out2[2];
+    u8s into2 = {out2, out2 + 2};
+    call(u8sPop, s, into2);
+    a$str(exp2, "bc");
+    u8cs got2 = {out2, out2 + 2};
+    want($eq(got2, exp2));
+    u8 last = 0;
+    call(u8sPop1, s, &last);
+    want(last == 'a');
+    want($empty(s));
+    // underflow must stay SNODATA
+    u8 out3[4];
+    u8s into3 = {out3, out3 + 4};
+    want(SNODATA == u8sPop(s, into3));
+    done;
+}
+
+ok64 $$feedf_trunc_test() {
+    sane(1);
+    // ABC-005 repro: a failed feed of the LAST template substitution
+    // used to leave the cursor advanced, so truncation returned OK
+    u8cs argv[1] = {u8slit("bcd")};
+    u8css args = {argv, argv + 1};
+    a$str(t1, "a$1");
+    u8 buf[2];
+    u8s into = {buf, buf + 2};
+    want(BNOROOM == $$feedf(into, t1, args));
+
+    // ABC-005 repro: same for the last literal template byte
+    a$str(t2, "ab");
+    u8css noargs = {argv, argv};
+    u8 buf2[1];
+    u8s into2 = {buf2, buf2 + 1};
+    want(BNOROOM == $$feedf(into2, t2, noargs));
+
+    // exact fit must still succeed
+    a$str(t3, "a$1");
+    u8 buf3[4];
+    u8s into3 = {buf3, buf3 + 4};
+    want(OK == $$feedf(into3, t3, args));
+    a$str(exp, "abcd");
+    u8cs got = {buf3, into3[0]};
+    want($eq(got, exp));
+    done;
+}
+
+ok64 gFed_test() {
+    sane(1);
+    // ABC-005 repro: huge len used to wrap the rest pointer (UB) and
+    // report OK; must be a plain NOROOM with the gauge untouched
+    u8 pad[8];
+    u8g g = {pad, pad, pad + 8};
+    want(NOROOM == u8gFed(g, (size_t)-1));
+    want(g[1] == pad);
+    call(u8gFed, g, 8);
+    want(g[1] == pad + 8);
+    want(NOROOM == u8gFed1(g));
+    done;
+}
+
 ok64 Btest() {
     sane(1);
     call(Bmap_test);
@@ -144,6 +219,9 @@ ok64 Btest() {
     call(B$test);
     call(BBtest);
     call(u8sPrintf_test);
+    call(u8sPop_test);
+    call($$feedf_trunc_test);
+    call(gFed_test);
     done;
 }
 

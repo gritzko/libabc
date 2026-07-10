@@ -192,12 +192,145 @@ ok64 findStest() {
     done;
 }
 
+// ABC-005 repro: purge predicate for the table-driven purge test
+fun b8 i32is2(i32 const* p) { return *p == 2; }
+
+ok64 purgetest() {
+    sane(1);
+    // ABC-005 repro: a matching element swapped in from the tail
+    // must be re-tested, not skipped (it used to survive the purge)
+    struct {
+        i32 in[8];
+        size_t n;
+        i32 out[8];  // expected survivors, sorted
+        size_t m;
+    } tt[] = {
+        {{2, 5, 2}, 3, {5}, 1},
+        {{2, 2, 2}, 3, {0}, 0},
+        {{1, 2, 3, 2, 2, 4}, 6, {1, 3, 4}, 3},
+        {{1, 3}, 2, {1, 3}, 2},
+        {{2}, 1, {0}, 0},
+        {{5, 2}, 2, {5}, 1},
+    };
+    for (size_t t = 0; t < sizeof(tt) / sizeof(tt[0]); ++t) {
+        i32 pad[8];
+        memcpy(pad, tt[t].in, sizeof(pad));
+        i32s s = {pad, pad + tt[t].n};
+        i32s_purge(s, &i32is2);
+        want($len(s) == (long)tt[t].m);
+        i32sSort(s);
+        i32cs exp = {tt[t].out, tt[t].out + tt[t].m};
+        want($eq(s, exp));
+    }
+    done;
+}
+
+ok64 rmtest() {
+    sane(1);
+    // ABC-005 repro: $rm must move the whole tail, not just len elements
+    i32 pad[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    i32s s = {pad, pad + 8};
+    $rm(s, 1, 2);
+    i32c exp[6] = {0, 3, 4, 5, 6, 7};
+    i32cs e = {exp, exp + 6};
+    want($len(s) == 6);
+    want($eq(s, e));
+
+    // ABC-005 repro: off+2*len > $len used to read past term (ASAN)
+    i32 pad2[6] = {0, 1, 2, 3, 4, 5};
+    i32s s2 = {pad2, pad2 + 6};
+    $rm(s2, 3, 3);
+    i32c exp2[3] = {0, 1, 2};
+    i32cs e2 = {exp2, exp2 + 3};
+    want($len(s2) == 3);
+    want($eq(s2, e2));
+
+    // ABC-005 repro: $rm1 must move the whole tail, not one element
+    i32 pad3[4] = {0, 1, 2, 3};
+    i32s s3 = {pad3, pad3 + 4};
+    $rm1(s3, 1);
+    i32c exp3[3] = {0, 2, 3};
+    i32cs e3 = {exp3, exp3 + 3};
+    want($len(s3) == 3);
+    want($eq(s3, e3));
+
+    // ABC-005: $tailshift is the reference tail memmove; it did not even
+    // compile before (must() arity) — exercise it the same way as $rm
+    i32 pad4[5] = {0, 1, 2, 3, 4};
+    i32s s4 = {pad4, pad4 + 5};
+    $tailshift(s4, 1, 2);
+    s4[1] -= 2;
+    i32c exp4[3] = {0, 3, 4};
+    i32cs e4 = {exp4, exp4 + 3};
+    want($eq(s4, e4));
+    done;
+}
+
+ok64 draintest() {
+    sane(1);
+    // ABC-005 repro: Drain contract — write what fits, advance BOTH
+    // sides; the old code was all-or-nothing and never advanced `from`
+    i32 src[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    i32cs from = {src, src + 8};
+    i32 got[8];
+    i32s out = {got, got + 8};
+    int rounds = 0;
+    while (!$empty(from) && rounds < 16) {
+        i32 chunk[3];
+        i32s into = {chunk, chunk + 3};
+        call(i32sDrain, into, from);
+        i32cs part = {chunk, into[0]};
+        want(!$empty(part));
+        call($i32feed, out, part);
+        ++rounds;
+    }
+    want(rounds == 3);
+    want($empty(from));
+    want(out[0] == got + 8);
+    i32cs all = {src, src + 8};
+    i32cs copied = {got, got + 8};
+    want($eq(copied, all));
+    done;
+}
+
+ok64 feedftest() {
+    sane(1);
+    // ABC-005 repro: truncated feed of the LAST template item used to
+    // advance the cursor and return OK on truncated output
+    a$str(world, "world");
+    u8 buf[3];
+    u8s into = {buf, buf + 3};
+    a$str(t1, "x$s");
+    want(SNOROOM == $feedf(into, t1, world));
+
+    // ABC-005 repro: $u truncation counted the snprintf NUL as payload
+    u8 buf2[4];
+    u8s into2 = {buf2, buf2 + 4};
+    a$str(t2, "$u");
+    want(SNOROOM == $feedf(into2, t2, (u64)12345));
+    want(into2[0] - buf2 <= 3);
+
+    // exact-fitting template must still succeed
+    u8 buf3[16];
+    u8s into3 = {buf3, buf3 + 16};
+    a$str(t3, "n=$u;$s");
+    want(OK == $feedf(into3, t3, (u64)42, world));
+    u8cs got = {buf3, into3[0]};
+    a$str(exp, "n=42;world");
+    want($eq(got, exp));
+    done;
+}
+
 ok64 $test() {
     sane(1);
     call($test1);
     call($test2);
     call(findtest);
     call(findStest);
+    call(purgetest);
+    call(rmtest);
+    call(draintest);
+    call(feedftest);
     done;
 }
 

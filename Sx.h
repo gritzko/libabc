@@ -105,7 +105,9 @@ fun size_t X(, cgRestLen)(X(, cg) g) { return g[2] - g[1]; }
 fun b8 X(, cgOK)(X(, cg) g) { return g && g[2] >= g[1] && g[1] >= g[0]; }
 fun b8 X(, cgEmpty)(X(, cg) g) { return g[1] == g[0]; }
 fun ok64 X(, gFed)(X(, g) g, size_t len) {
-    if (g[1] + len > g[2]) return NOROOM;
+    // ABC-005: compare lengths, not g[1]+len — the pointer form
+    // overflows (UB) for huge len; same pattern as sFed
+    if (len > X(, gRestLen)(g)) return NOROOM;
     g[1] += len;
     return OK;
 }
@@ -521,10 +523,16 @@ fun u64 X(, cs_len)(X(, cs) s) {
 
 fun u64 X(, s_len)(X(, s) s) { return X(, cs_len)((X(, csp))s); }
 
+// ABC-005: Drain contract (see $drain / sDrain1) — write what fits
+// and advance both sides; was all-or-nothing and never advanced from
 fun ok64 X(, sDrain)(X(, s) into, X(, cs) from) {
-    if (unlikely(X(, cs_len)(from) > X(, s_len)(into))) return SNOROOM;
-    memcpy((void *)*into, (void *)*from, $size(from));
-    *into += $len(from);
+    size_t len = X(, cs_len)(from);
+    size_t room = X(, s_len)(into);
+    if (len > room) len = room;
+    if (len == 0) return OK;
+    memcpy((void *)*into, (void *)*from, len * sizeof(T));
+    *into += len;
+    *from += len;
     return OK;
 }
 /*
@@ -792,11 +800,15 @@ fun ok64 X(, sSwap)(X(, s) s, size_t a, size_t b) {
 */
 
 fun void X(, s_purge)(X($, ) s, X(, isfn) f) {
-    for (int i = 0; i < $len(s); ++i) {
+    // ABC-005: after a swap the tail element lands at i and must be
+    // re-tested, so only advance i when nothing was swapped in
+    for (size_t i = 0; i < (size_t)$len(s);) {
         T *p = X(, sAtP)(s, i);
         if (f(p)) {
             X(, Swap)(p, $last(s));
             --$term(s);
+        } else {
+            ++i;
         }
     }
 }

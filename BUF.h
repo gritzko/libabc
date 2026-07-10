@@ -178,7 +178,9 @@ fun ok64 $$feedf($u8 into, u8cs tmpl, u8css args) {
         if (n >= $len(args)) return BNODATA;
         o = u8sFeed(into, $at(args, n));
     }
-    return $empty(t) ? OK : BNOROOM;
+    // ABC-005: a failed feed of the LAST item exits with t exhausted;
+    // check o too so truncated output is BNOROOM, not OK
+    return (o == OK && $empty(t)) ? OK : BNOROOM;
 }
 
 __attribute__((format(printf, 2, 3)))
@@ -249,8 +251,10 @@ fun ok64 u8sPop1(u8cs s, u8p last) {
 fun ok64 u8sPop(u8cs s, u8sc into) {
     size_t len = $len(into);
     if (unlikely(len > $len(s))) return SNODATA;
-    memcpy(*into, *s, len * sizeof(u8));
+    // ABC-005: pop reads the shed TAIL (like u8sPop1/u8sPop32);
+    // it used to copy the head while shedding the tail
     s[1] -= len;
+    memcpy(*into, s[1], len * sizeof(u8));
     return OK;
 }
 

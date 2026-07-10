@@ -144,10 +144,15 @@ typedef int (*$cmpfn)($cc a, $cc b);
 
 #define $eq(a, b) ($size(a) == $size(b) && 0 == memcmp(*a, *b, $size(a)))
 
-#define $printf(into, fmt, ...)                                         \
-    {                                                                   \
-        int l = snprintf((char *)*into, $size(into), fmt, __VA_ARGS__); \
-        *into += $size(into) < l ? $size(into) : l;                     \
+// ABC-005: on snprintf truncation only room-1 payload bytes land (the
+// last byte is the NUL); never count the NUL, never advance past it
+#define $printf(into, fmt, ...)                                       \
+    {                                                                  \
+        size_t _room = $size(into);                                    \
+        int l = snprintf((char *)*into, _room, fmt, __VA_ARGS__);      \
+        *into += (l < 0) ? 0                                           \
+                 : ((size_t)l < _room ? (size_t)l                      \
+                                      : (_room ? _room - 1 : 0));      \
     }
 
 // Expand a slice as the (length, pointer) pair printf("%.*s", ...) wants.
@@ -192,17 +197,38 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
         switch (**p) {
             case 's':
                 sarg = va_arg(ap, u8 const **);
+                // ABC-005: a short feed truncates the output; report
+                // SNOROOM instead of advancing past the '$s'
+                if ($size(sarg) > $size(into)) {
+                    $feed(into, sarg);
+                    va_end(ap);
+                    return SNOROOM;
+                }
                 $feed(into, sarg);
                 ++*p;
                 break;
             case 'u':
-                $printf(into, FMTu64, va_arg(ap, u64));
+            case 'f': {
+                size_t room = $size(into);
+                int n = (**p == 'u') ? snprintf((char *)*into, room, FMTu64,
+                                                va_arg(ap, u64))
+                                     : snprintf((char *)*into, room, "%lf",
+                                                va_arg(ap, double));
+                if (n < 0) {
+                    va_end(ap);
+                    return SBADARG;
+                }
+                // ABC-005: snprintf truncation is SNOROOM; its NUL is
+                // not payload, only room-1 bytes actually landed
+                if ((size_t)n >= room) {
+                    *into += room ? room - 1 : 0;
+                    va_end(ap);
+                    return SNOROOM;
+                }
+                *into += n;
                 ++*p;
                 break;
-            case 'f':
-                $printf(into, "%lf", va_arg(ap, double));
-                ++*p;
-                break;
+            }
             case '$':
                 if ($len(into) < 2) return SNOROOM;
                 **into = '$';
@@ -219,11 +245,12 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
     return $empty(p) ? OK : SNOROOM;
 }
 
-#define $tailshift(s, off, rm)                             \
-    {                                                      \
-        must($len(s) >= (off) + (rm));                     \
-        memmove(*(s) + (off), *(s) + (off) + (rm),         \
-                ($len(s) - (off) - (rm)) * sizeof(**(s))); \
+// ABC-005: must() takes (cond, msg); the one-arg form broke compilation
+#define $tailshift(s, off, rm)                                \
+    {                                                         \
+        must($len(s) >= (off) + (rm), "tailshift range");     \
+        memmove(*(s) + (off), *(s) + (off) + (rm),            \
+                ($len(s) - (off) - (rm)) * sizeof(**(s)));    \
     }
 
 #define zero(s) memset((void *)&(s), 0, sizeof(s))
@@ -240,16 +267,21 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
         while (p < s[1] && !(cond)) ++p; \
     }
 
-#define $rm(s, off, len)                                                  \
-    {                                                                     \
-        memmove(s[0] + (off), s[0] + (off) + (len), (len) * sizeof(**s)); \
-        s[1] -= len;                                                      \
+// ABC-005: move the whole tail ($len-off-len), not len elements;
+// the old form corrupted the tail and read OOB past term
+#define $rm(s, off, len)                                    \
+    {                                                       \
+        memmove(s[0] + (off), s[0] + (off) + (len),         \
+                ($len(s) - (off) - (len)) * sizeof(**s));   \
+        s[1] -= len;                                        \
     }
 
-#define $rm1(s, off)                                          \
-    {                                                         \
-        memmove(s[0] + (off), s[0] + (off) + 1, sizeof(**s)); \
-        s[1] -= 1;                                            \
+// ABC-005: same tail-length fix as $rm ($tailshift is the reference)
+#define $rm1(s, off)                                    \
+    {                                                   \
+        memmove(s[0] + (off), s[0] + (off) + 1,         \
+                ($len(s) - (off) - 1) * sizeof(**s));   \
+        s[1] -= 1;                                      \
     }
 
 #define $rm1p(s, p)                                          \
