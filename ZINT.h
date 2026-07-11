@@ -42,19 +42,7 @@ fun u32 ZINT128len(u64 big, u64 lil) {
     }
 }
 
-fun ok64 ZINTu64feed($u8 into, u64 n) {
-    if ($len(into) < 8) return ZINTNOROOM;
-    if (n <= B1) {
-        if (n != 0) u8sFeed8(into, (u8*)&n);
-    } else if (n <= B2) {
-        u8sFeed16(into, (u16*)&n);
-    } else if (n <= B4) {
-        u8sFeed32(into, (u32*)&n);
-    } else {
-        u8sFeed64(into, &n);
-    }
-    return OK;
-}
+ok64 ZINTu64feed($u8 into, u64 n);
 
 fun ok64 ZINTu64drain(u64* n, $cu8c zip) {
     *n = 0;
@@ -118,18 +106,27 @@ fun ok64 ZINTu8sDrainInt(i64* n, $cu8c zip) {
     return o;
 }
 
-fun u64 ZINTf64bits(f64 val) { return *(u64*)&val; }
+// ABC-008: memcpy instead of pointer punning (strict-aliasing UB)
+fun u64 ZINTf64bits(f64 val) {
+    u64 bits;
+    memcpy(&bits, &val, sizeof(bits));
+    return bits;
+}
 
-fun f64 ZINTf64from(u64 bits) { return *(f64*)&bits; }
+fun f64 ZINTf64from(u64 bits) {
+    f64 val;
+    memcpy(&val, &bits, sizeof(val));
+    return val;
+}
 
 fun ok64 ZINTu8sFeedFloat($u8 into, f64cp n) {
-    u64 bits = flip64(*(u64 const*)n);
+    u64 bits = flip64(ZINTf64bits(*n));
     return ZINTu64feed(into, bits);
 }
 fun ok64 ZINTu8sDrainFloat(f64* n, $cu8c from) {
     u64 bits = 0;
     ok64 o = ZINTu64drain(&bits, from);
-    if (o == OK) *(u64*)n = flip64(bits);
+    if (o == OK) *n = ZINTf64from(flip64(bits));
     return o;
 }
 

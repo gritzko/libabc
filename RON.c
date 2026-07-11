@@ -30,7 +30,7 @@ const u8 RON64_REV[256] = {
     0xff, 0xff, 0xff, 0xff,
 };
 
-ok64 RONutf8sFeed(u8** into, ok64 val) {
+ok64 RONutf8sFeed(u8** into, ron60 val) {
     u8 tmp[11];
     u8* e = tmp + 11;
     u8* t = e;
@@ -45,11 +45,14 @@ ok64 RONutf8sFeed(u8** into, ok64 val) {
     return OK;
 }
 
-ok64 RONutf8sDrain(ok64* o, u8c* const* from) {
-    ok64 res = 0;
+ok64 RONutf8sDrain(ron60* o, u8c* const* from) {
+    // ABC-008: cap at 11 digits / 64 bits, mirroring the feed side
+    if ($len(from) > 10) return OKBADTEXT;
+    ron60 res = 0;
     for (u8c* p = from[0]; p < from[1]; ++p) {
         u64 v = RON64_REV[*p];
         if (v == 0xff) return OKBADTEXT;
+        // ABC-008: reject values over 64 bits instead of shifting out
         res = (res << 6) | v;
     }
     *o = res;
@@ -132,20 +135,24 @@ ok64 RONVerify(u8c** txt) {
     return OK;
 }
 
-ok64 RONu8sFeedPad(u8** into, ok64 val, u8 width) {
+ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width) {
     if ($len(into) < width) return SNOROOM;
+    // ABC-008: validate before writing (all-or-nothing Feed contract)
+    if (width <= 10 && (val >> (6 * width)) != 0) return SBADARG;
     u8p p = into[0] + width;
     for (u8 i = 0; i < width; i++) {
         *--p = RON64_CHARS[val & 63];
         val >>= 6;
     }
-    if (val != 0) return SBADARG;
+    // ABC-008: advance the cursor so chained feeds do not overwrite
+    *into += width;
     return OK;
 }
 
-ok64 RONSpliceBase(ok64 *base, u8 *width, u64 rand, u64 prob, ok64 n) {
+ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n) {
     if (n == 0 || prob == 0) return SBADARG;
-    u64 need = 2 * prob * n;
+    // ABC-008: saturate need instead of wrapping 2*prob*n
+    u64 need = (n > UINT64_MAX / 2 / prob) ? UINT64_MAX : 2 * prob * n;
     u8 w = 1;
     u64 space = 64;
     while (space < need && w < 10) {
@@ -153,6 +160,8 @@ ok64 RONSpliceBase(ok64 *base, u8 *width, u64 rand, u64 prob, ok64 n) {
         w++;
     }
     *width = w;
+    // ABC-008: n >= space would make avail 0 (division by zero below)
+    if (n >= space) return SBADARG;
     u64 avail = space - n;
     *base = rand % avail;
     return OK;
@@ -175,7 +184,7 @@ static b8 ron_source_date_epoch(time_t *sec_out) {
     return YES;
 }
 
-ron60 RONNow() {
+ok64 RONNow() {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     u32 ms = (u32)(ts.tv_nsec / 1000000);  // 0-999

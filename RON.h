@@ -35,10 +35,10 @@ typedef enum {
 fun u8 ok64Lit(ok64 o, u8 ndx) { return (o >> (ndx * 6)) & 63; }
 
 // Encode u64 to RON base64 string
-ok64 RONutf8sFeed(u8** into, ok64 val);
+ok64 RONutf8sFeed(u8** into, ron60 val);
 
 // Decode RON base64 string to u64
-ok64 RONutf8sDrain(ok64* o, u8c* const* from);
+ok64 RONutf8sDrain(ron60* o, u8c* const* from);
 
 // Convert struct tm (+ milliseconds 0-999) to RON60 timestamp.
 // Layout: YYMDDhmsll (10 RON64 digits). Months are 1-based in RON60.
@@ -53,43 +53,43 @@ ok64 RONToTime(ron60 r, struct tm* t, u32 *ms);
 ok64 RONVerify(u8c** txt);
 
 // Fixed-width zero-padded RON64 encoding (big-endian, left-padded with '0')
-ok64 RONu8sFeedPad(u8** into, ok64 val, u8 width);
+ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width);
 
 // Compute random base offset and key width for a splice of n elements
-ok64 RONSpliceBase(ok64 *base, u8 *width, u64 rand, u64 prob, ok64 n);
+ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n);
 
 // Left-align a short ron60 to fill the 60-bit space.
 // ron60Z(0x25_01) = 0x25_01_00_00_00_00_00_00_00  ("a1" -> "a100000000")
-fun ron60 ron60Norm(ron60 r) {
+fun ok64 ron60Norm(ron60 r) {
     u8 digits = (64 - clz64(r|1) + 5) / 6;
     return r << ((10 - digits) * 6);
 }
 
 // Right-align a normalized ron60, stripping trailing zero digits.
 // ron60DeNorm("a100000000") = "a1"
-fun ron60 ron60DeNorm(ron60 r) {
+fun ok64 ron60DeNorm(ron60 r) {
     if (r == 0) return 0;
     u8 tail = ctz64(r) / 6;
     return r >> (tail * 6);
 }
 
-fun ron60 ron60NormInc(ron60 r) {
+fun ok64 ron60NormInc(ron60 r) {
    ron60 shift = (r >> 54) >> 3;
    return r + (1UL<<(shift*6));
 }
 
-fun ron60 ron60Inc(ron60 r) {
+fun ok64 ron60Inc(ron60 r) {
   ron60 norm = ron60Norm(r);
   norm = ron60NormInc(norm);
   return ron60DeNorm(norm);
 }
 
-fun ron60 ron60NormInk(ron60 r) {
+fun ok64 ron60NormInk(ron60 r) {
    ron60 shift = (r >> 54) >> 3;
    return r + (1UL << ((9 - shift) * 6));
 }
 
-fun ron60 ron60Ink(ron60 r) {
+fun ok64 ron60Ink(ron60 r) {
   ron60 norm = ron60Norm(r);
   norm = ron60NormInk(norm);
   return ron60DeNorm(norm);
@@ -101,6 +101,6 @@ fun b8 ron60Z(ron60cp a, ron60cp b) {
     return aa < bb;
 }
 
-ron60 RONNow();
+ok64 RONNow();
 
 #endif

@@ -136,6 +136,19 @@ target_link_options(SHAtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(SHAtest PRIVATE ${TEST_CXX_FLAGS})
 add_test(NAME SHAtest COMMAND SHAtest)
 
+# ABC-008: HEX and OK codec regression tests
+add_executable(HEXtest HEX.c)
+target_link_options(HEXtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(HEXtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(HEXtest abc)
+add_test(NAME HEXtest COMMAND HEXtest)
+
+add_executable(OKtest OK.c)
+target_link_options(OKtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(OKtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(OKtest abc)
+add_test(NAME OKtest COMMAND OKtest)
+
 add_executable(ZINTtest ZINT.c)
 target_link_options(ZINTtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(ZINTtest PRIVATE ${TEST_CXX_FLAGS})

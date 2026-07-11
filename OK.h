@@ -43,7 +43,9 @@ fun ok64 RONValid(u8c **data) {
 
 fun ok64 OKscan(ok64 *o, uint8_t const **from) {
     ok64 oo = RONutf8sDrain(o, from);
-    if (oo == OK && *o == 0x518) *o = 0;
+    // ABC-008: success prints as "OK", so compare against RON("OK");
+    // the old literal 0x518 was RON("KO")
+    if (oo == OK && *o == ok64sub(RON_O, RON_K)) *o = 0;
     return oo;
 }
 

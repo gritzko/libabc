@@ -225,6 +225,45 @@ ok64 ZINTTestDelta() {
     done;
 }
 
+// ABC-008: repro: a short slice must yield an error, not a silent
+// partial (corrupt) 128 encoding; nothing may be written on error.
+ok64 ZINTTestFeed128Short() {
+    sane(1);
+    a_pad(u8, buf, 3);
+    want(ZINTu8sFeed128(buf_idle, 0xffff, 0xffff) != OK);
+    want(u8bDataLen(buf) == 0);
+    a_pad(u8, buf2, 4);
+    call(ZINTu8sFeed128, buf2_idle, 0xffff, 0xffff);
+    u64 big = 0, lil = 0;
+    call(ZINTu8sDrain128, buf2_datac, &big, &lil);
+    testeqv((long long)(big), (long long)(0xffff), "%lld");
+    testeqv((long long)(lil), (long long)(0xffff), "%lld");
+    done;
+}
+
+// ABC-008: repro: undelta must detect u64 wrap instead of silently
+// decoding corrupt input.
+ok64 ZINTTestUndeltaWrap() {
+    sane(1);
+    u64 vals[] = {UINT64_MAX, 5};
+    a$(u64, s, vals);
+    testeqv((long long)(ZINTu64sUndelta(s, 1)), (long long)(ZINTBAD), "%lld");
+    done;
+}
+
+// ABC-008: repro: a 1-byte encoding must fit a 1-byte slice
+// (no spurious 8-idle-bytes NOROOM near the buffer end).
+ok64 ZINTTestFeedTight() {
+    sane(1);
+    a_pad(u8, buf, 1);
+    call(ZINTu64feed, buf_idle, 5);
+    testeqv((long long)(u8bDataLen(buf)), (long long)(1), "%lld");
+    u64 back = 0;
+    call(ZINTu64drain, &back, buf_datac);
+    testeqv((long long)(back), (long long)(5), "%lld");
+    done;
+}
+
 ok64 ZINTTest() {
     sane(1);
     call(ZINTTest1);
@@ -232,6 +271,9 @@ ok64 ZINTTest() {
     call(ZINTTest3);
     call(ZINTTest4);
     call(ZINTTestDelta);
+    call(ZINTTestFeed128Short);
+    call(ZINTTestUndeltaWrap);
+    call(ZINTTestFeedTight);
     done;
 }
 

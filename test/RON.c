@@ -389,6 +389,55 @@ ok64 RONTestSpliceIsolation() {
     done;
 }
 
+// ABC-008: repro: chained pads must advance the cursor and be
+// all-or-nothing (no partial garbage on SBADARG).
+ok64 RONTestFeedPadChained() {
+    sane(1);
+    u8 buf[16] = {};
+    u8s into = {buf, buf + sizeof(buf)};
+    call(RONu8sFeedPad, into, _r60("1"), 2);
+    call(RONu8sFeedPad, into, _r60("2"), 2);
+    a$str(exp, "0102");
+    u8c* got[2] = {buf, buf + 4};
+    want($cmp(got, exp) == 0);
+    want(into[0] == buf + 4);
+    u8 buf2[4] = {'#', '#', '#', '#'};
+    u8s into2 = {buf2, buf2 + sizeof(buf2)};
+    want(RONu8sFeedPad(into2, 64, 1) != OK);
+    want(into2[0] == buf2 && buf2[0] == '#');
+    done;
+}
+
+// ABC-008: repro: drain must cap input like the feed side caps
+// output; 64-bit values must still round-trip.
+ok64 RONTestDrainCap() {
+    sane(1);
+    ok64 v = 0;
+    a$str(long12, "010000000000");
+    want(RONutf8sDrain(&v, long12) != OK);
+    a$str(over11, "G0000000000");
+    want(RONutf8sDrain(&v, over11) != OK);
+    u8 buf[16];
+    u8s into = {buf, buf + sizeof(buf)};
+    call(RONutf8sFeed, into, ron60Max);
+    u8c* from[2] = {buf, into[0]};
+    call(RONutf8sDrain, &v, from);
+    want(v == ron60Max);
+    done;
+}
+
+// ABC-008: repro: splice sizing must not wrap 2*prob*n or divide
+// by zero when the space is exhausted.
+ok64 RONTestSpliceBaseOverflow() {
+    sane(1);
+    ok64 base = 0;
+    u8 width = 0;
+    call(RONSpliceBase, &base, &width, 5, 1UL << 57, 64);
+    want(width == 10);
+    want(RONSpliceBase(&base, &width, 5, 1, 1UL << 60) != OK);
+    done;
+}
+
 ok64 RONtest() {
     sane(1);
     call(RONTestFromTm);
@@ -401,7 +450,10 @@ ok64 RONtest() {
     call(RONTestNowMonotone);
     call(RONTestSourceDateEpoch);
     call(RONTestFeedPad);
+    call(RONTestFeedPadChained);
+    call(RONTestDrainCap);
     call(RONTestSpliceBase);
+    call(RONTestSpliceBaseOverflow);
     call(RONTestSpliceKeyOrder);
     call(RONTestSpliceIsolation);
     done;

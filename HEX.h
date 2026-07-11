@@ -77,7 +77,8 @@ fun ok64 HEXu8sDrainSome(u8s bin, u8cs hex) {
         if (unlikely(u == 0xff)) return HEXBAD;
         ++*hex;
         u8 l = BASE16rev[**hex];
-        if (unlikely(u == 0xff)) return HEXBAD;
+        // ABC-008: validate the low nibble too (was checking u twice)
+        if (unlikely(l == 0xff)) return HEXBAD;
         ++*hex;
         **bin = (u << 4) | l;
         ++*bin;

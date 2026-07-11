@@ -1,6 +1,21 @@
 #include "ZINT.h"
 
 #include "01.h"
+#include "PRO.h"
+
+ok64 ZINTu64feed($u8 into, u64 n) {
+    sane(into);
+    if (n <= B1) {
+        if (n != 0) call(u8sFeed8, into, (u8*)&n);
+    } else if (n <= B2) {
+        call(u8sFeed16, into, (u16*)&n);
+    } else if (n <= B4) {
+        call(u8sFeed32, into, (u32*)&n);
+    } else {
+        call(u8sFeed64, into, &n);
+    }
+    done;
+}
 
 ok64 ZINTu8sFeedBlocked(u8s into, u64cs ints) {
     if (!into || !ints) return BADARG;
@@ -80,6 +95,8 @@ ok64 ZINTu64sUndelta(u64s ints, u64 start) {
     u64 c = start;
     $for(u64, i, ints) {
         u64 s = *i + c;
+        // ABC-008: a u64 wrap means corrupt input; Delta never emits it
+        if (s < c) return ZINTBAD;
         *i = s;
         c = s;
     }
@@ -87,6 +104,9 @@ ok64 ZINTu64sUndelta(u64s ints, u64 start) {
 }
 
 ok64 ZINTu8sFeed128(u8s into, u64 big, u64 lil) {
+    // ABC-008: all-or-nothing Feed contract: room-check the whole
+    // encoding upfront so a short slice never gets a partial write
+    if ($len(into) < ZINT128len(big, lil)) return ZINTNOROOM;
     if (lil <= B1) {
         if (big <= B1) {
             if (big != 0 || lil != 0) u8sFeed8(into, (u8*)&big);
