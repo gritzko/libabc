@@ -14,7 +14,9 @@ fun ok64 _X(next)($u8 into, u8css lsm) {
     do {
         o = _X(x)(next, **lsm);
         if (o != OK) return o;
-        u8cssFeedP(inidle, &next);
+        // ABC-007: a dropped FeedP status silently lost ties past the pad
+        o = u8cssFeedP(inidle, &next);
+        if (o != OK) return o;
         if ($empty(**lsm)) {
             u8csSwap($head(lsm), $last(lsm));
             --$term(lsm);
@@ -35,8 +37,8 @@ fun b8 _$u8cempty(u8cs const* s) { return $empty(*s); }
 
 fun ok64 _X(sort)(u8css lsm) {
     u8css_purge(lsm, &_$u8cempty);
-    $sort(lsm, _X(z));
-    return OK;  // ?
+    // ABC-007: heapify via z; qsort through a cast b8 less-than is UB
+    return u8cssHeapZ(lsm, _X(z));
 }
 
 fun ok64 _X(merge)($u8 into, u8css lsm) {

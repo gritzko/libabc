@@ -188,12 +188,50 @@ ok64 LSMu64() {
     done;
 }
 
+// ABC-007 repro: LSMMore onto a full run stack must reject the run
+// (no OOB write past the pad) and the pushed run must sift up.
+ok64 LSMmorefull() {
+    sane(1);
+    u64 va = 5, vb = 3, vc = 7;
+    u8cs a = {(u8c *)&va, (u8c *)(&va + 1)};
+    u8cs b = {(u8c *)&vb, (u8c *)(&vb + 1)};
+    u8cs c = {(u8c *)&vc, (u8c *)(&vc + 1)};
+    aBpad2(u8cs, lsm, 2);
+    call(LSMMore, lsmbuf, a, u64less);
+    call(LSMMore, lsmbuf, b, u64less);
+    ok64 o = LSMMore(lsmbuf, c, u64less);
+    want(o != OK);
+    want($len(lsmdata) == 2);
+    want(*(u64 const *)(*$head(lsmdata))[0] == vb);
+    done;
+}
+
+// ABC-007 repro: roughly-ordered input (descending 64-block, ascending
+// tail) makes pass two see one sorted run; data must not strand in tmp.
+ok64 LSMrough() {
+    sane(1);
+#define RN 100
+    u64 nums[RN];
+    for (u64 i = 0; i < 64; ++i) nums[i] = 64 - i;
+    for (u64 i = 64; i < RN; ++i) nums[i] = i + 1;
+    $u8 data = {(u8 *)nums, (u8 *)(nums + RN)};
+    u8 tmpbuf[RN * sizeof(u64)];
+    $u8 tmp = {tmpbuf, tmpbuf + sizeof(tmpbuf)};
+    call(LSMSort, data, u64drain, u64less, u64copy, tmp);
+    want($len(data) == RN * sizeof(u64));
+    for (u64 i = 0; i < RN; ++i) want(nums[i] == i + 1);
+#undef RN
+    done;
+}
+
 ok64 LSMtest() {
     sane(1);
     call(LSM0);
     call(LSM1);
     call(LSM1000000);
     call(LSMu64);
+    call(LSMmorefull);
+    call(LSMrough);
     done;
 }
 

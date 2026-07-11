@@ -267,6 +267,12 @@ target_compile_options(LSMtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(LSMtest abc)
 add_test(NAME LSMtest COMMAND LSMtest)
 
+add_executable(Ytest Y.c)
+target_link_options(Ytest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(Ytest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(Ytest abc)
+add_test(NAME Ytest COMMAND Ytest)
+
 add_executable(NACLtest NACL.c)
 target_link_options(NACLtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(NACLtest PRIVATE ${TEST_CXX_FLAGS})

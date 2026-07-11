@@ -1,7 +1,16 @@
 #include "LSM.h"
 
 #include "OK.h"
+#include "PRO.h"
 #include "S.h"
+
+ok64 LSMMore(u8csb lsm, u8cs x, u8csz z) {
+    sane(Bok(lsm) && $ok(x) && z);
+    // ABC-007: checked feed + real sift-up (was an unchecked memcpy
+    // past a full pad, and a sift-up over the buffer's PAST cells)
+    call(HEAPu8csPushZ, lsm, (u8csc *)x, z);
+    done;
+}
 
 ok64 LSMNext(u8s into, u8css lsm, u8xs x, u8csz z, u8ys y) {
     sane(u8sOK(into) && u8cssOK(lsm) && x && z && y);
@@ -81,6 +90,14 @@ ok64 LSMSort(u8s data, u8xs x, u8csz z, u8ys y, u8s tmp) {
             return OK;
         }
         call(LSMSort1, &runs, out2, in2, x, z, y);
+        // ABC-007: a single-run second pass writes nothing to out2;
+        // copy the sorted content back from tmp into the caller's slice
+        if (runs == 0) {
+            u8cs sorted = {tmp[0], in2[1]};
+            $mv(data, out2);
+            u8sCopy(data, sorted);
+            return OK;
+        }
         data[1] = out2[0];
     } while (runs > 1);
     done;

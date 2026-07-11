@@ -2,7 +2,6 @@
 #define ABC_LSM_H
 #include "BUF.h"
 #include "OK.h"
-#include "PRO.h"
 
 #define LSM_MAX_INPUTS 64
 
@@ -17,14 +16,9 @@ con ok64 LSMNOROOM = 0x157165d86d8616;
 
 typedef u8csb LSM;
 
-fun ok64 LSMMore(u8csb lsm, u8cs x, u8csz z) {
-    sane(Bok(lsm) && $ok(x) && z);
-    // call(u8cssFeed1, u8csbIdle(lsm), x);
-    memcpy(lsm[2], x, sizeof(u8cs));
-    u8csbIdle(lsm)[0]++;
-    u8cssUpZ(lsm, z);
-    done;
-}
+// ABC-007: defined in LSM.c — checked heap push; PRO.h flow
+// macros must not leak into headers.
+ok64 LSMMore(u8csb lsm, u8cs x, u8csz z);
 
 ok64 LSMNext(u8s into, u8css lsm, u8xs x, u8csz z, u8ys y);
 
