@@ -8,6 +8,15 @@
 #include "PRO.h"
 #include "TEST.h"
 
+// ABC-006: instantiate Bx.h with mremap masked out, so the portable
+// bReMap fallback path is compiled and tested on every platform.
+typedef u8 x8;
+fun b8 x8Z(u8c *a, u8c *b) { return *a < *b; }
+#undef MREMAP_MAYMOVE
+#define X(M, name) M##x8##name
+#include "Bx.h"
+#undef X
+
 ok64 fail_test() {
     sane(1);
     fail(BADARG);
@@ -210,9 +219,78 @@ ok64 gFed_test() {
     done;
 }
 
+// ABC-006 repro: bSplice offsets/lengths are ELEMENT counts; a 4-byte
+// T mid-buffer splice must move whole elements, not bytes.
+ok64 Bsplice_test() {
+    sane(1);
+    // u8 baseline: replace "cd" with "XYZ" (behavior-preserving check)
+    a_pad(u8, sb, 16);
+    u8cs six = $u8str("abcdef");
+    call(u8bFeed, sb, six);
+    u8cs xyz = $u8str("XYZ");
+    call(u8bSplice, sb, 2, 2, xyz);
+    a$str(exp, "abXYZef");
+    $testeq(exp, sb_datac);
+    // u32: same splice, element-wise
+    aBpad(u32, wb, 16);
+    for (u32 i = 0; i < 6; ++i) call(u32bFeed1, wb, 100 + i);
+    u32c pastev[] = {7, 8, 9};
+    a_u32cs(paste, pastev);
+    call(u32bSplice, wb, 2, 2, paste);
+    u32c expv[] = {100, 101, 7, 8, 9, 104, 105};
+    testeqv((long long)(u32bDataLen(wb)), (long long)(7), "%lld");
+    for (size_t i = 0; i < 7; ++i)
+        testeqv((long long)(u32bAt(wb, i)), (long long)(expv[i]), "%lld");
+    done;
+}
+
+// ABC-006 repro: non-mremap bReMap fallback must clamp the copy to
+// min(old,new) — a shrink used to memmove old_size into a new_size map.
+ok64 BReMapShrink_test() {
+    sane(1);
+    Bx8 buf = {};
+    call(x8bMap, buf, 64 * 4096);
+    for (u8 i = 0; i < 16; ++i) call(x8bFeed1, buf, i);
+    call(x8bReMap, buf, 4096);
+    testeqv((long long)(x8bLen(buf)), (long long)(4096), "%lld");
+    testeqv((long long)(x8bDataLen(buf)), (long long)(16), "%lld");
+    for (size_t i = 0; i < 16; ++i)
+        testeqv((long long)(x8bAt(buf, i)), (long long)(i), "%lld");
+    // grow through the same fallback path keeps data too
+    call(x8bReMap, buf, 8 * 4096);
+    testeqv((long long)(x8bLen(buf)), (long long)(8 * 4096), "%lld");
+    for (size_t i = 0; i < 16; ++i)
+        testeqv((long long)(x8bAt(buf, i)), (long long)(i), "%lld");
+    call(x8bUnMap, buf);
+    done;
+}
+
+// ABC-006 repro: cap*sizeof(T) used to wrap, so a huge cap/len passed
+// the room checks and claimed cap elements over a few bytes.
+ok64 Boverflow_test() {
+    sane(1);
+    size_t huge = SIZE_MAX / sizeof(u64) + 2;  // *8 wraps to 8 bytes
+    Bu8 arena = {};
+    call(u8bMap, arena, 4096);
+    Bu64 child = {};
+    ok64 o = u64bAcquire(arena, child, huge);
+    testeqv((long long)(o), (long long)(BNOROOM), "%llx");
+    call(u8bUnMap, arena);
+    Bu64 hbuf = {};
+    o = u64bAllocate(hbuf, huge);
+    testeqv((long long)(o), (long long)(BALLOCFAIL), "%llx");
+    Bu64 mbuf = {};
+    o = u64bMap(mbuf, huge);
+    testeqv((long long)(o), (long long)(MMAPFAIL), "%llx");
+    done;
+}
+
 ok64 Btest() {
     sane(1);
     call(Bmap_test);
+    call(Bsplice_test);
+    call(BReMapShrink_test);
+    call(Boverflow_test);
     call(B$_test);
     call(Bndx_test);
     call(Breserve_test);

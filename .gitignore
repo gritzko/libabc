@@ -10,5 +10,7 @@ build-*/
 .be
 ..be.idx
 
+.cache/
+
 # the hive: nested worktree cells, not part of the meta-project (BE-031)
 work/

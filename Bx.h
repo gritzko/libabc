@@ -199,6 +199,8 @@ fun T *X(, bLast)(X(, b) buf) {
 }*/
 
 fun ok64 X(, bAllocate)(X(, bp) buf, size_t len) {
+    // ABC-006: refuse len*sizeof(T) wraparound instead of allocating a sliver
+    if (len > SIZE_MAX / sizeof(T)) return BALLOCFAIL;
     size_t sz = len * sizeof(T);
     ok64 o = Balloc((void **)buf, sz);
     if (o != OK) return o;
@@ -366,6 +368,8 @@ fun ok64 X(, bPop)(X(, b) buf) {
 #endif
 
 fun ok64 X(, bMap)(X(, b) buf, size_t len) {
+    // ABC-006: refuse len*sizeof(T) wraparound instead of mapping a sliver
+    if (len > SIZE_MAX / sizeof(T)) return MMAPFAIL;
     size_t size = len * sizeof(T);
     T *map = (T *)mmap(NULL, size, PROT_READ | PROT_WRITE,
                        MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
@@ -386,9 +390,11 @@ fun ok64 X(, bReMap)(X(, bp) buf, size_t new_len) {
     if (new_mem == MAP_FAILED) return MMAPFAIL;
 #else
     void *new_mem = mmap(NULL, new_size, PROT_READ | PROT_WRITE,
-                         MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+                         MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
     if (new_mem == MAP_FAILED) return MMAPFAIL;
-    memmove(new_mem, (void *)buf[0], old_size);
+    // ABC-006: on shrink copy only what fits — old_size overran the new map
+    memmove(new_mem, (void *)buf[0],
+            old_size < new_size ? old_size : new_size);
     int rc = munmap((void *)buf[0], old_size);
     if (rc != 0) return MMAPFAIL;
 #endif
@@ -432,10 +438,12 @@ fun ok64 X(, bSplice)(X(, bp) buf, size_t off, size_t cut, X(, csc) paste) {
     if (X(, bDataLen)(buf) < off + cut ||
         X(, bIdleLen)(buf) + cut < X(, csLen)(paste))
         return BMISS;
-    u8 *b = ((u8 **)buf)[1];
-    memmove(b + off + $len(paste), b + off + cut,
-            X(, bDataLen)(buf) - off - cut);
-    memmove(b + off, paste[0], $len(paste));
+    // ABC-006: off/cut/paste are ELEMENT counts — move T-scaled, not bytes
+    T *b = ((T **)buf)[1];
+    memmove((void *)(b + off + $len(paste)), (void *)(b + off + cut),
+            (X(, bDataLen)(buf) - off - cut) * sizeof(T));
+    memmove((void *)(b + off), (void const *)paste[0],
+            $len(paste) * sizeof(T));
     ((T **)buf)[2] = buf[2] + $len(paste) - cut;
     return OK;
 }
@@ -504,10 +512,17 @@ fun ok64 X(, bAren)(u8 *const *arena, X(, csp) ren, X(, csc) orig) {
 // arena scope.  Release happens via u8aRewind / u8aReset on the
 // arena (see abc/B.h).
 fun ok64 X(, bAcquire)(u8a arena, X(, b) child, size_t cap) {
-    uintptr_t al = ((uintptr_t)arena[2] + sizeof(T) - 1) & ~(sizeof(T) - 1);
-    u8 *base = (u8 *)al;
+    // ABC-006: align by alignof(T) as bAlign/bAren do (sizeof may not be 2^n)
+    uintptr_t al = ((uintptr_t)arena[2] + _Alignof(T) - 1)
+                 & ~((uintptr_t)_Alignof(T) - 1);
+    // ABC-006: refuse cap*sizeof(T) wraparound; compare in size_t space,
+    // never base+sz vs arena[3] (pointer overflow is UB)
+    if (cap > SIZE_MAX / sizeof(T)) return BNOROOM;
     size_t sz = cap * sizeof(T);
-    if (base + sz > arena[3]) return BNOROOM;
+    size_t room = (size_t)(arena[3] - arena[2]);
+    size_t pad = (size_t)(al - (uintptr_t)arena[2]);
+    if (pad > room || sz > room - pad) return BNOROOM;
+    u8 *base = (u8 *)al;
     T **c = (T **)child;
     c[0] = c[1] = c[2] = (T *)base;
     c[3] = (T *)(base + sz);
