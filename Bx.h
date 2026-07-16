@@ -513,8 +513,10 @@ fun ok64 X(, bAren)(u8 *const *arena, X(, csp) ren, X(, csc) orig) {
 // arena (see abc/B.h).
 fun ok64 X(, bAcquire)(u8a arena, X(, b) child, size_t cap) {
     // ABC-006: align by alignof(T) as bAlign/bAren do (sizeof may not be 2^n)
-    uintptr_t al = ((uintptr_t)arena[2] + _Alignof(T) - 1)
-                 & ~((uintptr_t)_Alignof(T) - 1);
+    // JAB-008: alignof, not _Alignof — this header compiles as C++ too
+    // (g++ has no _Alignof); matches bAlign/bAren above
+    uintptr_t al = ((uintptr_t)arena[2] + alignof(T) - 1)
+                 & ~((uintptr_t)alignof(T) - 1);
     // ABC-006: refuse cap*sizeof(T) wraparound; compare in size_t space,
     // never base+sz vs arena[3] (pointer overflow is UB)
     if (cap > SIZE_MAX / sizeof(T)) return BNOROOM;
