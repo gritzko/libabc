@@ -38,7 +38,10 @@ ok64 HTTPonRoot(u8cs tok, HTTPstate* state) { return OK; }
 
 ok64 HTTPutf8Drain(u8cs from, HTTPstate* http) {
     u8csMv(http->data, from);
-    return HTTPLexer(http);
+    ok64 o = HTTPLexer(http);
+    // ABC-011: honor the Drain contract, consume the parsed bytes
+    if (o == OK) u8csMv(from, http->data);
+    return o;
 }
 
 ok64 HTTPutf8Feed(u8s into, HTTPstate const* http) {
@@ -72,25 +75,26 @@ ok64 HTTPutf8Feed(u8s into, HTTPstate const* http) {
         o = u8sFeed2(into, '\r', '\n');
         if (o != OK) return o;
     }
-    // Headers
-    u8css hdrs = {http->headers[0], *http->headers};
-    while ($len(hdrs) >= 2) {
-        o = u8sFeed(into, hdrs[0][0]);
+    // Headers; ABC-011: {headers[0], *headers} was {p, p}, a dead loop
+    a_dup(u8cs, hdrs, http->headers);
+    while (u8cssLen(hdrs) >= 2) {
+        o = u8sFeed(into, $at(hdrs, 0));
         if (o != OK) return o;
         o = u8sFeed2(into, ':', ' ');
         if (o != OK) return o;
-        o = u8sFeed(into, hdrs[0][1]);
+        o = u8sFeed(into, $at(hdrs, 1));
         if (o != OK) return o;
         o = u8sFeed2(into, '\r', '\n');
         if (o != OK) return o;
-        hdrs[0] += 2;
+        o = u8cssUsed(hdrs, 2);
+        if (o != OK) return o;
     }
     // End of headers
     o = u8sFeed2(into, '\r', '\n');
     return o;
 }
 
-ok64 HTTPfind(u8cs *value, u8cs key, u8css headers) {
+ok64 HTTPfind(u8cs *value, u8csc key, u8css headers) {
     for (size_t i = 0; i + 1 < $len(headers); i += 2) {
         if ($eq($at(headers, i), key)) {
             u8csMv(*value, $at(headers, i + 1));

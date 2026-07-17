@@ -188,11 +188,54 @@ ok64 HTTPtest3() {
     done;
 }
 
+// ABC-011 repro: headers must survive a parse -> Feed round trip
+ok64 HTTPtest4() {
+    sane(1);
+    a$str(req,
+          "GET / HTTP/1.1\r\n"
+          "Host: ya.ru\r\n"
+          "Connection: keep-alive\r\n\r\n");
+    a$str(expected,
+          "GET / HTTP/1.1\r\n"
+          "Host: ya.ru\r\n"
+          "Connection: keep-alive\r\n\r\n");
+
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 8);
+    state.headers = hdrsidle;
+    call(HTTPutf8Drain, req, &state);
+    // ABC-011: Drain must consume the caller's slice
+    want(u8csEmpty(req));
+
+    state.headers = hdrsdata;
+    a_pad(u8, out, 256);
+    call(HTTPutf8Feed, out_idle, &state);
+    u8cs result = {out[1], *out_idle};
+    $testeq(result, expected);
+    done;
+}
+
+// ABC-011 repro: RFC 7230 allows an empty reason-phrase
+ok64 HTTPtest5() {
+    sane(1);
+    a$str(res, "HTTP/1.1 200 \r\n\r\n");
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 8);
+    state.headers = hdrsidle;
+    call(HTTPutf8Drain, res, &state);
+    a$str(code, "200");
+    $testeq(state.status_code, code);
+    want(u8csEmpty(state.reason));
+    done;
+}
+
 ok64 HTTPtest() {
     sane(1);
     call(HTTPtest1);
     call(HTTPtest2);
     call(HTTPtest3);
+    call(HTTPtest4);
+    call(HTTPtest5);
     done;
 }
 

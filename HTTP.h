@@ -31,6 +31,6 @@ ok64 HTTPutf8Drain(u8cs from, HTTPstate *http);
 
 ok64 HTTPutf8Feed(u8s into, HTTPstate const *http);
 
-ok64 HTTPfind(u8cs *value, u8cs key, u8css headers);
+ok64 HTTPfind(u8cs *value, u8csc key, u8css headers);
 
 #endif
