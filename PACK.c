@@ -1,5 +1,6 @@
 #include "PACK.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -45,7 +46,8 @@ ok64 PACKCreate(packp p, const char *path, u64 maxlen) {
 
     // Open file for writing.  PAGE + index mmap are now owned by p, so
     // release both via PACKClose if open() fails (MEM-015).
-    p->fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    //  ABC-013: O_CLOEXEC — pack fds must not leak into spawned children.
+    p->fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     testsafe(p->fd >= 0, PACKFAIL, __ = PACKAbort(p, __));
 
     p->datalen = 0;
@@ -66,8 +68,9 @@ fun ok64 PACKWritePage(packp p, u8cp data, size_t len) {
                                     (int)len, PACK_MAX_COMPRESSED);
     test(clen > 0, PACKFAIL);
 
-    // Write compressed data
-    ssize_t w = write(p->fd, compressed, clen);
+    // Write compressed data.  ABC-013: EINTR-retry (FILEFeed convention).
+    ssize_t w;
+    do { w = write(p->fd, compressed, clen); } while (w < 0 && errno == EINTR);
     test(w == clen, PACKFAIL);
 
     // Update index
@@ -136,12 +139,15 @@ fun ok64 PACKCloseWrite(packp p) {
     u64 npages = (p->datalen + PAGESIZE - 1) / PAGESIZE;
     u64 nblocks = PACKIdxBlocks(npages);
     u64 idxsize = nblocks * PACK_BLOCK_SIZE;
-    ssize_t w = write(p->fd, p->idx[0], idxsize);
+    ssize_t w;  // ABC-013: EINTR-retry on the index/trailer writes too
+    do { w = write(p->fd, p->idx[0], idxsize);
+    } while (w < 0 && errno == EINTR);
     test(w == (ssize_t)idxsize, PACKFAIL);
 
     // Write trailer: uncompressed length (u64) + index size (u64)
     u64 trailer[2] = {p->datalen, idxsize};
-    w = write(p->fd, trailer, sizeof(trailer));
+    do { w = write(p->fd, trailer, sizeof(trailer));
+    } while (w < 0 && errno == EINTR);
     test(w == sizeof(trailer), PACKFAIL);
 
     done;
@@ -181,8 +187,8 @@ ok64 PACKOpen(packp p, const char *path) {
     memset(p, 0, sizeof(pack));
     p->fd = -1;  // -1, not memset's 0, so PACKAbort/PACKClose never close(0)
 
-    // Open file for reading
-    p->fd = open(path, O_RDONLY);
+    // Open file for reading (ABC-013: O_CLOEXEC, see PACKCreate)
+    p->fd = open(path, O_RDONLY | O_CLOEXEC);
     test(p->fd >= 0, PACKFAIL);
     // From here on p owns the fd (and, below, the index mmap + PAGE);
     // every failure path releases via PACKAbort so a failed PACKOpen
@@ -196,7 +202,9 @@ ok64 PACKOpen(packp p, const char *path) {
     u64 trailer[2];
     testsafe(lseek(p->fd, fsize - 16, SEEK_SET) >= 0, PACKFAIL,
              __ = PACKAbort(p, __));
-    testsafe(read(p->fd, trailer, 16) == 16, PACKFAIL, __ = PACKAbort(p, __));
+    ssize_t r;  // ABC-013: EINTR-retry (FILEDrain convention)
+    do { r = read(p->fd, trailer, 16); } while (r < 0 && errno == EINTR);
+    testsafe(r == 16, PACKFAIL, __ = PACKAbort(p, __));
 
     p->datalen = trailer[0];
     u64 idxsize = trailer[1];
@@ -227,8 +235,8 @@ ok64 PACKOpen(packp p, const char *path) {
     off_t idxoff = fsize - 16 - idxsize;
     testsafe(lseek(p->fd, idxoff, SEEK_SET) >= 0, PACKFAIL,
              __ = PACKAbort(p, __));
-    testsafe(read(p->fd, p->idx[0], idxsize) == (ssize_t)idxsize, PACKFAIL,
-             __ = PACKAbort(p, __));
+    do { r = read(p->fd, p->idx[0], idxsize); } while (r < 0 && errno == EINTR);
+    testsafe(r == (ssize_t)idxsize, PACKFAIL, __ = PACKAbort(p, __));
 
     // Create PAGE for decompressed data, set buf[2] to actual data length
     callsafe(PAGECreate(&p->pg, npages * PAGESIZE, PACKEnsure, p),
@@ -267,9 +275,12 @@ ok64 PACKEnsure(pagep pg, b8 rw, u64 pos, size_t len) {
 
         test(clen > 0 && clen <= PACK_MAX_COMPRESSED, PACKCORRUPT);
 
-        // Read compressed data
+        // Read compressed data.  ABC-013: EINTR-retry.
         test(lseek(p->fd, off, SEEK_SET) >= 0, PACKFAIL);
-        test(read(p->fd, compressed, clen) == clen, PACKFAIL);
+        ssize_t r;
+        do { r = read(p->fd, compressed, clen);
+        } while (r < 0 && errno == EINTR);
+        test(r == clen, PACKFAIL);
 
         // Decompress into page buffer
         u8p dst = p->pg->buf[0] + pg * PAGESIZE;

@@ -25,3 +25,8 @@ FSWClose(wfd);              // close watcher and all watches
 
 The callback path may be empty on kqueue — use it as a wake-up
 signal and rescan the directory to find actual changes.
+
+Watches cannot be removed individually (no per-watch bookkeeping);
+they live for the watcher's lifetime.  On kqueue each watch pins an
+open dir fd that stays open until process exit — FSWClose only
+closes the kqueue fd itself.

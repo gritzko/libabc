@@ -120,7 +120,8 @@ ok64 FILERmDir(path8s path, bool recursive) {
             }
             // Restore path to original length
             *u8bIdle(work) = saved_end;
-            call(PATHu8bTerm, work);
+            //  ABC-013: no call() here — an early return leaks the DIR.
+            o = PATHu8bTerm(work);
         }
 
         closedir(dir);
@@ -351,7 +352,9 @@ ok64 FILEClose(int *fd) {
 
 ok64 FILECreate(int *fd, path8s path) {
     sane(fd != NULL && $ok(path) && !$empty(path));
-    *fd = open((char const *)*path, O_CREAT | O_RDWR | O_TRUNC,
+    //  ABC-013: O_CLOEXEC on every open — fds must not leak into
+    //  FILESpawn children (their stdio goes via dup2, which clears it).
+    *fd = open((char const *)*path, O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC,
                S_IRUSR | S_IWUSR);
     if (*fd < 0) fail(FILEErr(FILENOOPEN));
     done;
@@ -359,8 +362,8 @@ ok64 FILECreate(int *fd, path8s path) {
 
 ok64 FILECreateAt(int *fd, int dir, path8s path) {
     sane(fd != NULL && $ok(path) && !$empty(path));
-    *fd = openat(dir, (char const *)*path, O_CREAT | O_RDWR | O_TRUNC,
-                 S_IRUSR | S_IWUSR);
+    *fd = openat(dir, (char const *)*path,
+                 O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, S_IRUSR | S_IWUSR);
     if (*fd < 0) fail(FILEErr(FILENOOPEN));
     done;
 }
@@ -376,14 +379,14 @@ ok64 FILEExists(path8s path) {
 
 ok64 FILEOpen(int *fd, path8s path, int flags) {
     sane(fd != NULL && $ok(path) && !$empty(path));
-    *fd = open((char const *)*path, flags);
+    *fd = open((char const *)*path, flags | O_CLOEXEC);
     if (*fd < 0) fail(FILEErr(FILENOOPEN));
     done;
 }
 
 ok64 FILEOpenAt(int *fd, int const dirfd, path8s path, int flags) {
     sane(fd != NULL && $ok(path) && !$empty(path) && FILEok(dirfd));
-    *fd = openat(dirfd, (char const *)*path, flags);
+    *fd = openat(dirfd, (char const *)*path, flags | O_CLOEXEC);
     if (*fd < 0) fail(FILEErr(FILENOOPEN));
     done;
 }
@@ -576,7 +579,10 @@ ok64 FILEFlush(int const *fd) {
     sane(fd && *fd >= 0 && *fd < FILE_MAX_OPEN && FILE_WANT_BUFS);
     u8bp buf = FILE_WANT_BUFS[*fd];
     if (u8bDataLen(buf) >= PAGESIZE) {
-        int r = write(*fd, *u8bDataC(buf), u8bDataLen(buf));
+        //  ABC-013: EINTR-retry, matching FILEFeed/FILEDrain.
+        ssize_t r;
+        do { r = write(*fd, *u8bDataC(buf), u8bDataLen(buf));
+        } while (r < 0 && errno == EINTR);
         if (r < 0) fail(FILEERROR);  // todo
         if (r == 0) done;  // nothing written: avoid a no-op flush loop
         // Consume the written prefix (advance PAST->DATA boundary buf[1]);
@@ -594,9 +600,12 @@ ok64 FILEFlushAll(int const *fd) {
     test(buf[0] != NULL, BADARG);
     u8csp data = u8bDataC(buf);
     while (u8bDataLen(buf)) {
-        int r = write(*fd, *data, u8csLen(data));
+        //  ABC-013: EINTR-retry; ssize_t so write() is not int-truncated.
+        ssize_t r;
+        do { r = write(*fd, *data, u8csLen(data));
+        } while (r < 0 && errno == EINTR);
         if (r < 0) fail(FILEERROR);  // todo
-        u8csFed(data, r);
+        u8csFed(data, (size_t)r);
     }
     Breset(buf);
     done;
@@ -607,9 +616,13 @@ ok64 FILEFlushAll(int const *fd) {
 ok64 FILEFlushThreshold(int fd, u8b buf, size_t threshold) {
     sane(fd >= 0 && Bok(buf));
     if (u8bDataLen(buf) >= threshold) {
-        ssize_t written = write(fd, *u8bData(buf), u8bDataLen(buf));
+        ssize_t written;
+        do { written = write(fd, *u8bData(buf), u8bDataLen(buf));
+        } while (written < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (written < 0) return FILEERROR;  // TODO vocabulary
-        Bate(buf);                          // Move data -> past
+        //  ABC-013: consume only the written prefix (cf. FILEFlush) — a
+        //  partial write must not lose the DATA tail.
+        call(u8bUsed, buf, (size_t)written);
     }
     done;
 }
@@ -620,7 +633,9 @@ ok64 FILEEnsureSoft(int fd, u8b buf, size_t needed) {
         u8bShift(buf, 0);
     }
     while (u8bDataLen(buf) < needed && u8bIdleLen(buf) > 0) {
-        ssize_t n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
+        ssize_t n;
+        do { n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
+        } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (n < 0) return FILEERROR;
         if (n == 0) break;  // EOF
         u8bFed(buf, n);
@@ -642,7 +657,9 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
     // Read until we have enough
     while (u8bDataLen(buf) < needed) {
         test(u8bIdleLen(buf) > 0, NOROOM);
-        ssize_t n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
+        ssize_t n;
+        do { n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
+        } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (n < 0) return FILEERROR;
         test(n > 0, FILEEND);  // EOF before getting needed bytes
         Bump(buf, n);
@@ -677,7 +694,9 @@ ok64 FILETrimMap(u8bp buf) {
     sane(u8bOK(buf));
     int fd = FILE_CLOSED;
     call(FILEFindMap, &fd, buf);
-    call(FILEResize, &fd, u8bDataLen(buf));
+    //  ABC-013: trim to PAST+DATA (b[2]-b[0]) like FILETrimBook — DATA
+    //  alone shortened the file and SIGBUSed still-mapped consumed pages.
+    call(FILEResize, &fd, u8bBusyLen(buf));
     u8c **b = (u8c **)buf;
     b[3] = b[2];
     done;
@@ -851,7 +870,9 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
     b8 ro_empty = NO;
     if (ro && actual_size > 0) {
         u8 probe = 0;
-        ssize_t pr = pread(*fd, &probe, 1, 0);
+        ssize_t pr;
+        do { pr = pread(*fd, &probe, 1, 0);
+        } while (pr < 0 && errno == EINTR);  // ABC-013: no false "empty"
         if (pr != 1 || probe == 0) ro_empty = YES;
     }
 
@@ -922,7 +943,13 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
 
     // Store booked end in FILE_BOOK
     size_t fdlen = u8pbDataLen(FILE_BOOK);
-    if (*fd >= (int)fdlen) u8psFed(u8pbIdle(FILE_BOOK), *fd - fdlen + 1);
+    if (*fd >= (int)fdlen) {
+        u8psFed(u8pbIdle(FILE_BOOK), *fd - fdlen + 1);
+        //  ABC-013: sFed grows DATA without writing — NULL the gap so no
+        //  stale entry ever passes the FILENOBOOK sentinel checks.
+        for (size_t i = fdlen; i < (size_t)*fd; i++)
+            *u8pbAtP(FILE_BOOK, i) = NULL;
+    }
     *u8pbAtP(FILE_BOOK, *fd) = base + book_size;
 
     FILE_WANTS[*fd] = FILEBookWant;
@@ -1121,7 +1148,10 @@ fun u8 FILEresolveDType(DIR *dir, char const *name, u8 dtype) {
 }
 
 fun ok64 FILEScanRecurse(fileitp it, path8bp path, FILE_SCAN mode, path8f f,
-                          void0p arg) {
+                          void0p arg, u32 depth) {
+    //  ABC-013: cap recursion like FILErmrf's nftw(...,64,...) — a looped
+    //  or runaway tree must not blow the stack.
+    if (depth >= 64) return FILELOOP;
     ok64 o;
     while ((o = FILENext(it)) == OK) {
         b8 hit = (it->type == DT_REG && (mode & FILE_SCAN_FILES)) ||
@@ -1135,7 +1165,7 @@ fun ok64 FILEScanRecurse(fileitp it, path8bp path, FILE_SCAN mode, path8f f,
             fileit child = {};
             ok64 io = FILEInto(&child, it);
             if (io != OK) return io;
-            ok64 r = FILEScanRecurse(&child, path, mode, f, arg);
+            ok64 r = FILEScanRecurse(&child, path, mode, f, arg, depth + 1);
             FILEOuto(&child, it);
             if (r != OK) return r;
         }
@@ -1147,7 +1177,7 @@ ok64 FILEScan(path8bp path, FILE_SCAN mode, path8f f, void0p arg) {
     sane(path && PATHu8bSane(path) && f);
     fileit it = {};
     call(FILEIterOpen, &it, path);
-    ok64 o = FILEScanRecurse(&it, path, mode, f, arg);
+    ok64 o = FILEScanRecurse(&it, path, mode, f, arg, 0);
     FILEIterClose(&it);
     return o;
 }
@@ -1157,7 +1187,7 @@ ok64 FILEScanSorted(path8bp path, FILE_SCAN mode, u8bp buf, u8csz z,
     sane(path && PATHu8bSane(path) && f && Bok(buf) && z);
     fileit it = {};
     call(FILEIterOpenSorted, &it, path, buf, z);
-    ok64 o = FILEScanRecurse(&it, path, mode, f, arg);
+    ok64 o = FILEScanRecurse(&it, path, mode, f, arg, 0);
     FILEIterClose(&it);
     return o;
 }

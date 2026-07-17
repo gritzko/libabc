@@ -863,12 +863,143 @@ ok64 FILEFdLeakTest() {
     done;
 }
 
+//  ABC-013 repro: a partial write in FILEFlushThreshold must consume only
+//  the written prefix (cf. FILEFlush); Bate() dropped the unwritten tail.
+ok64 FILEFlushThresholdPipeTest() {
+    sane(1);
+    size_t const CHUNK = 4096, TAIL = 512;
+    int pfd[2] = {FILE_CLOSED, FILE_CLOSED};
+    test(0 == pipe(pfd), FILEFAIL);
+    test(0 <= fcntl(pfd[1], F_SETFL, O_NONBLOCK), FILEFAIL);
+
+    //  Fill the pipe to capacity with junk (atomic 4 KiB chunks), then
+    //  drain one chunk back: exactly one page of room remains.
+    a_pad(u8, junk, 4096);
+    memset(junk[0], 0xEE, CHUNK);
+    size_t filled = 0;
+    for (;;) {
+        ssize_t j = write(pfd[1], junk[0], CHUNK);
+        if (j < 0) break;  // EAGAIN: pipe full
+        filled += (size_t)j;
+    }
+    test(filled >= CHUNK, FILEFAIL);
+    a_pad(u8, sink, 4096);
+    test(CHUNK == (size_t)read(pfd[0], sink[0], CHUNK), FILEFAIL);
+    filled -= CHUNK;  // junk bytes still queued ahead of the pattern
+
+    //  DATA = one page + a tail; the nonblocking write accepts one page.
+    aBpad2(u8, out, 8192);
+    for (size_t i = 0; i < CHUNK + TAIL; i++)
+        call(u8bFeed1, outbuf, (u8)(i & 0xFF));
+    call(FILEFlushThreshold, pfd[1], outbuf, 1);
+    //  FIX: written page consumed, tail kept.  BUG: tail silently lost.
+    testeqv((long long)u8bDataLen(outbuf), (long long)TAIL, "%lld");
+    testeqv((long long)u8bPastLen(outbuf), (long long)CHUNK, "%lld");
+
+    //  Drain the junk, then verify every pattern byte arrives, gap-free.
+    while (filled > 0) {
+        ssize_t j = read(pfd[0], sink[0], filled < CHUNK ? filled : CHUNK);
+        test(j > 0, FILEFAIL);
+        filled -= (size_t)j;
+    }
+    a_pad(u8, got, 4096 + 512);
+    size_t recvd = 0;
+    while (recvd < CHUNK) {
+        ssize_t r = read(pfd[0], got[0] + recvd, CHUNK - recvd);
+        test(r > 0, FILEFAIL);
+        recvd += (size_t)r;
+    }
+    call(FILEFlushThreshold, pfd[1], outbuf, 1);  // room is back: send tail
+    testeqv((long long)u8bDataLen(outbuf), (long long)0, "%lld");
+    testeqv((long long)u8bPastLen(outbuf), (long long)(CHUNK + TAIL), "%lld");
+    while (recvd < CHUNK + TAIL) {
+        ssize_t r = read(pfd[0], got[0] + recvd, CHUNK + TAIL - recvd);
+        test(r > 0, FILEFAIL);
+        recvd += (size_t)r;
+    }
+    for (size_t i = 0; i < CHUNK + TAIL; i++)
+        testeqv((long long)got[0][i], (long long)(u8)(i & 0xFF), "%lld");
+    close(pfd[0]);
+    close(pfd[1]);
+    done;
+}
+
+//  ABC-013 repro: FILETrimMap must trim to PAST+DATA (b[2]-b[0]) like
+//  FILETrimBook; trimming to DATA alone SIGBUSes still-mapped pages.
+ok64 FILETrimMapPastTest() {
+    sane(1);
+    a_path(path, $cstr("/tmp"));
+    a_cstr(tmpl, "FILETrimMapPast_XXXXXX");
+    call(PATHu8bAddTmp, path, tmpl);
+    size_t const sp = FILESysPage();
+    u8bp buf = NULL;
+    call(FILEMapCreate, &buf, $path(path), 2 * sp);
+    u8bReset(buf);
+    for (size_t i = 0; i < sp + 100; i++) call(u8bFeed1, buf, (u8)(i & 0xFF));
+    call(u8bUsed, buf, sp);  // consume page 0: PAST=sp, DATA=100
+    call(FILETrimMap, buf);
+    //  BUG: file truncated to 100 -> page 1 unbacked -> this read SIGBUSes.
+    testeqv((long long)Bat(buf, sp), (long long)(u8)(sp & 0xFF), "%lld");
+    call(FILEUnMap, buf);
+    filestat s = {};
+    call(FILEStat, &s, $path(path));
+    testeqv((long long)s.size, (long long)(sp + 100), "%lld");
+    call(FILEUnLink, $path(path));
+    done;
+}
+
+//  ABC-013 repro: FILE_BOOK gap entries (grown by u8psFed, never written)
+//  must read as NULL so un-booked fds fail FILENOBOOK, not mmap garbage.
+ok64 FILEBookGapTest() {
+    sane(1);
+    //  Push the next free fd high so booking feeds a wide FILE_BOOK gap.
+    int pads[40];
+    int npads = 0;
+    for (; npads < 40; npads++) {
+        pads[npads] = open("/dev/null", O_RDONLY);
+        test(pads[npads] >= 0, FILEFAIL);
+    }
+    a_path(bpath, $cstr("/tmp"));
+    a_cstr(btmpl, "FILEBookGapB_XXXXXX");
+    call(PATHu8bAddTmp, bpath, btmpl);
+    u8bp book = NULL;
+    call(FILEBookCreate, &book, $path(bpath), 64 * KB, 4 * KB);
+    int bookfd = FILEBookedFD(book);
+    test(bookfd > pads[npads - 1], FILEFAIL);
+    //  Free the pads: the next opens land inside the just-fed gap.
+    for (int i = 0; i < npads; i++) close(pads[i]);
+    //  A plain mapped file whose fd falls in the gap: FILEBookExtend must
+    //  see a NULL gap entry and fail FILENOBOOK, not mmap over random VA.
+    a_path(mpath, $cstr("/tmp"));
+    a_cstr(mtmpl, "FILEBookGapM_XXXXXX");
+    call(PATHu8bAddTmp, mpath, mtmpl);
+    u8bp map = NULL;
+    call(FILEMapCreate, &map, $path(mpath), 4 * KB);
+    int mapfd = FILEBookedFD(map);
+    test(mapfd >= 0 && mapfd < bookfd, FILEFAIL);
+    testeqv((unsigned long long)FILEBookExtend(map, 8 * KB),
+            (unsigned long long)FILENOBOOK, "0x%llx");
+    //  Book/UnBook churn must leave no stale non-NULL entries behind.
+    call(FILEUnBook, book);
+    call(FILEBookCreate, &book, $path(bpath), 64 * KB, 4 * KB);
+    call(FILEUnBook, book);
+    testeqv((unsigned long long)FILEBookExtend(map, 8 * KB),
+            (unsigned long long)FILENOBOOK, "0x%llx");
+    call(FILEUnMap, map);
+    call(FILEUnLink, $path(mpath));
+    call(FILEUnLink, $path(bpath));
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
     call(FILEFdLeakTest);
     call(FILEErrTest);
     call(FILEExistsTest);
     call(FILEFlushStreamTest);
+    call(FILEFlushThresholdPipeTest);
+    call(FILETrimMapPastTest);
+    call(FILEBookGapTest);
     call(FILEtest1);
     call(FILEtest2);
     call(FILE3);

@@ -41,12 +41,6 @@ ok64 FSWDir(int wfd, u8csc path) {
     done;
 }
 
-ok64 FSWUndir(int wfd, u8csc path) {
-    sane(wfd >= 0);
-    (void)path;
-    done;
-}
-
 ok64 FSWPoll(int wfd, int timeout_ms) {
     sane(wfd >= 0);
     struct pollfd pfd = {.fd = wfd, .events = POLLIN};
@@ -105,7 +99,8 @@ ok64 FSWDir(int wfd, u8csc path) {
     a_path(p);
     call(PATHu8bFeed, p, path);
 
-    int fd = open((char *)u8bDataHead(p), O_RDONLY | O_DIRECTORY);
+    //  ABC-013: O_CLOEXEC — watch fds must not leak into spawned children.
+    int fd = open((char *)u8bDataHead(p), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) return FSWFAIL;
 
     struct kevent ev;
@@ -116,13 +111,8 @@ ok64 FSWDir(int wfd, u8csc path) {
         close(fd);
         return FSWFAIL;
     }
-    // fd stays open — kqueue needs it alive
-    done;
-}
-
-ok64 FSWUndir(int wfd, u8csc path) {
-    sane(wfd >= 0);
-    (void)path;
+    //  fd stays open — kqueue needs it alive.  ABC-013: no per-watch
+    //  bookkeeping — the dir fd lives until process exit, FSWClose included.
     done;
 }
 

@@ -30,8 +30,8 @@ ok64 FSWInit(int *wfd);
 // path: null-terminated or u8cs. Non-recursive — watch one dir level.
 ok64 FSWDir(int wfd, u8csc path);
 
-// Remove a directory watch.
-ok64 FSWUndir(int wfd, u8csc path);
+//  ABC-013: FSWUndir was a no-op lie on both platforms — deleted.  Watches
+//  live for the watcher's lifetime; on kqueue each watch pins a dir fd.
 
 // Block until a change event occurs or timeout_ms expires.
 // timeout_ms < 0: block forever. 0: non-blocking check.
