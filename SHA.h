@@ -10,7 +10,7 @@ typedef struct {
 
 fun b8 sha256empty(sha256 const* sha) {
     // ABC-016: data is 1-aligned (mmapped records); u64 loads were UB
-    static sha256 const zero;
+    static sha256 const zero = {};   // C++ includers need the explicit init
     return memcmp(sha->data, zero.data, sizeof(zero.data)) == 0;
 }
 

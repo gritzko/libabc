@@ -176,6 +176,9 @@ static int ansi_parse_hex16(u8c **pp, u8c *end) {
 //  Returns 0 on success, -1 if tcgetattr fails (fd not a tty).  ONE copy of
 //  the flag logic, shared by ANSIBgColor and ANSIRaw (CLAUDE.md §13).
 static int ansi_tty_raw(int fd, struct termios *old, int how) {
+    //  JAB-009: musl tcgetattr fills only the kernel's 36-byte prefix — zero
+    //  the tail or saved-termios byte-compares see stack garbage (JABCtty).
+    zerop(old);
     if (tcgetattr(fd, old) != 0) return -1;
     struct termios raw = *old;
     raw.c_lflag &= (tcflag_t)~(ECHO | ICANON | ISIG | IEXTEN);
