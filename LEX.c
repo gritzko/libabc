@@ -19,13 +19,15 @@
 
 const u8c *LEX_TEMPL[LEX_TEMPL_LANG_LEN][LEX_TEMPL_LEN][2] = {
     {
+        // ABC-017: goto _out, NOT fbreak — fbreak is {p++; goto _out;},
+        // over-consuming on callback failure (p=pe+1 in EOF actions)
         $u8str("action $mod${act}0 { mark0[$mod$act] = p - data[0]; }\n"
                "action $mod${act}1 {\n"
                "    tok[0] = data[0] + mark0[$mod$act];\n"
                "    tok[1] = p;\n"
                "    o = ${mod}on$act(tok, state); \n"
                "    if (o!=OK) {\n"
-               "        fbreak;\n"
+               "        goto _out;\n"
                "    }\n"
                "}\n"),
         $u8str("\t$mod$act = ${mod}enum+$actno,\n"),
@@ -33,8 +35,9 @@ const u8c *LEX_TEMPL[LEX_TEMPL_LANG_LEN][LEX_TEMPL_LEN][2] = {
         $u8str("$mod$act = ( "),
         $u8str(" )  >$mod${act}0 %$mod${act}1;\n"),
         $u8str(" ); # no $act callback\n"),
-        $u8str("#include \"abc/INT.h\"\n"
-               "#include \"abc/PRO.h\"\n"
+        // ABC-017: bare includes, matching the committed *.c.rl outputs
+        $u8str("#include \"INT.h\"\n"
+               "#include \"PRO.h\"\n"
                "#include \"$mod.h\"\n"
                "\n"
                "// action indices for the parser\n"
@@ -205,6 +208,8 @@ ok64 LEXonRuleName($cu8c tok, LEXstate *state) {
     sane($ok(tok) && state != NULL);
     $set(state->cur, tok);
     state->ruleno++;
+    // ABC-017: generated `u64 mark0[64]` is indexed by ruleno; cap it
+    if (state->ruleno >= 64) fail(LEXNOROOM);
 
     if (**tok < 'A' || **tok > 'Z') done;
 
@@ -258,15 +263,17 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
     sane($ok(mod));
 
     a_pad(u8, name, KB);
-    a_pad(u8, lex, KB << 8);
+    // ABC-017: the big scratch (256K+1M+1M) comes off BASS via a_carve,
+    // not the stack — a_pad here overflowed non-main threads
+    a_carve(u8, lex, KB << 8);
     u8cs $namet = $u8str("$s.lex");
     $feedf(name_idle, $namet, mod);
     int fd;
     call(FILEOpen, &fd, $path(name), O_RDONLY);
-    call(FILEdrainall, lex_idle, fd);
+    call(FILEdrainall, u8bIdle(lex), fd);
     call(FILEClose, &fd);
 
-    a_pad(u8, ct, MB);
+    a_carve(u8, ct, MB);
     NESTreset(ct);
     int nlang = 0;
     if (!$empty(lang)) {
@@ -282,13 +289,13 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
         .ct = (u8bp)ct,
         .mod = mod,
     };
-    $mv(state.data, lex_data);
+    $mv(state.data, u8bData(lex));
 
     call(NESTFeed, ct, LEX_TEMPL[nlang][LEX_TEMPL_FILE]);
 
-    a_pad(u8, rl, MB);
+    a_carve(u8, rl, MB);
     call(LEXLexer, &state);
-    call(NESTRender, rl_idle, ct);
+    call(NESTRender, u8bIdle(rl), ct);
 
     a_pad(u8, rlname, KB);
     u8cs $rnamet = $u8str("$s.$s.rl");
@@ -296,7 +303,7 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
     PATHu8bTerm(rlname);
     int rfd;
     call(FILECreate, &rfd, $path(rlname));
-    call(FILEFeedAll, rfd, rl_datac);
+    call(FILEFeedAll, rfd, u8bDataC(rl));
     call(FILEClose, &rfd);
 
     done;

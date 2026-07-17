@@ -1090,7 +1090,7 @@ _match:
     tok[1] = p;
     o = URIonSegment(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1105,7 +1105,7 @@ _match:
     tok[1] = p;
     o = URIonSegment_nz(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1120,7 +1120,7 @@ _match:
     tok[1] = p;
     o = URIonPath(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1135,7 +1135,7 @@ _match:
     tok[1] = p;
     o = URIonPathNoscheme(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1150,7 +1150,7 @@ _match:
     tok[1] = p;
     o = URIonScheme(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1165,7 +1165,7 @@ _match:
     tok[1] = p;
     o = URIonIPv4address(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1180,7 +1180,7 @@ _match:
     tok[1] = p;
     o = URIonIPvFuture(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1195,7 +1195,7 @@ _match:
     tok[1] = p;
     o = URIonIPv6address(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1210,7 +1210,7 @@ _match:
     tok[1] = p;
     o = URIonIP_literal(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1225,7 +1225,7 @@ _match:
     tok[1] = p;
     o = URIonUser(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1240,7 +1240,7 @@ _match:
     tok[1] = p;
     o = URIonHost(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1255,7 +1255,7 @@ _match:
     tok[1] = p;
     o = URIonPort(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1270,7 +1270,7 @@ _match:
     tok[1] = p;
     o = URIonAuthority(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1289,7 +1289,7 @@ _match:
     tok[1] = p;
     o = URIonQuery(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1304,7 +1304,7 @@ _match:
     tok[1] = p;
     o = URIonPathRootless(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1343,7 +1343,7 @@ _again:
     tok[1] = p;
     o = URIonSegment(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1354,7 +1354,7 @@ _again:
     tok[1] = p;
     o = URIonSegment_nz(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1365,7 +1365,7 @@ _again:
     tok[1] = p;
     o = URIonPath(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1376,7 +1376,7 @@ _again:
     tok[1] = p;
     o = URIonPathNoscheme(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1387,7 +1387,7 @@ _again:
     tok[1] = p;
     o = URIonScheme(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1398,7 +1398,7 @@ _again:
     tok[1] = p;
     o = URIonIPv4address(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1409,7 +1409,7 @@ _again:
     tok[1] = p;
     o = URIonIP_literal(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1424,7 +1424,7 @@ _again:
     tok[1] = p;
     o = URIonHost(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1435,7 +1435,7 @@ _again:
     tok[1] = p;
     o = URIonPort(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1446,7 +1446,7 @@ _again:
     tok[1] = p;
     o = URIonAuthority(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1461,7 +1461,7 @@ _again:
     tok[1] = p;
     o = URIonFragment(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1476,7 +1476,7 @@ _again:
     tok[1] = p;
     o = URIonQuery(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1487,7 +1487,7 @@ _again:
     tok[1] = p;
     o = URIonPathRootless(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1502,7 +1502,7 @@ _again:
     tok[1] = p;
     o = URIonURI(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;
@@ -1517,7 +1517,7 @@ _again:
     tok[1] = p;
     o = URIonRoot(tok, state); 
     if (o!=OK) {
-        {p++; goto _out; }
+        goto _out;
     }
 }
 	break;

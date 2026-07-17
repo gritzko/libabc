@@ -15,7 +15,7 @@ extern "C" {
 #undef X
 }
 
-static bool init = false;
+
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
     Bkv32 hashbuf = {};

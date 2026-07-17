@@ -107,7 +107,7 @@ fun void X(HIT, AdvanceTops)(X(, css) heap, size_t ntops) {
         ++(*$atp(heap, i))[0];
         if ($empty(*$atp(heap, i))) {
             X(HIT, Eject)(heap, i);
-            if (i < $len(heap)) X(HIT, Down)(heap, i);
+            if ((i64)i < $len(heap)) X(HIT, Down)(heap, i);
         } else {
             X(HIT, Down)(heap, i);
         }
@@ -349,12 +349,12 @@ fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     if (n < 2) return OK;
     size_t m = 1;
     size_t total = $len(stack[0][n - 1]);
-    while (m < n && total * 8 > $len(stack[0][n - 1 - m])) {
+    while (m < n && (i64)(total * 8) > $len(stack[0][n - 1 - m])) {
         total += $len(stack[0][n - 1 - m]);
         m++;
     }
     if (m < 2) return OK;
-    if ($len(into) < total) return OKNOROOM;
+    if ($len(into) < (i64)total) return OKNOROOM;
     HIT_T *base = *into;
     X(, css) sub = {stack[0] + (n - m), stack[0] + n};
     X(HIT, Start)(sub);

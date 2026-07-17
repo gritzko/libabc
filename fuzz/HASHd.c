@@ -12,7 +12,7 @@
 #undef X
 
 fun void Play($u32 dict, u8 *ins, size_t Size) {
-    for (int i = 0; i < Size; ++i) {
+    for (size_t i = 0; i < Size; ++i) {
         if (ins[i] == 0 || ins[i] == 128) break;
         if (ins[i] < 128) {
             u32 rec = ins[i];

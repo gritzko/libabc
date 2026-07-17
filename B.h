@@ -96,18 +96,20 @@ fun void u8aReset(u8a arena) {
     T _##n[(l)] = {0}; \
     B##T n = {_##n, _##n, _##n, _##n + (l)};
 
-#define aBpad2(T, n, l)                           \
-    T _##n[(l)] = {0};                            \
-    B##T n##buf = {_##n, _##n, _##n, _##n + (l)}; \
-    T##$ n##idle = T##bIdle(n##buf);              \
-    T##$ n##data = T##bData(n##buf);
+// ABC-017: aux views are macro API; tag unused so -Wall stays clean
+#define aBpad2(T, n, l)                                        \
+    T _##n[(l)] = {0};                                         \
+    B##T n##buf = {_##n, _##n, _##n, _##n + (l)};              \
+    T##$ n##idle __attribute__((unused)) = T##bIdle(n##buf);   \
+    T##$ n##data __attribute__((unused)) = T##bData(n##buf);
 
-#define a_pad(T, n, l)                       \
-    T _##n[(l)];                             \
-    T##b n = {_##n, _##n, _##n, _##n + (l)}; \
-    T##sp n##_idle = T##bIdle(n);            \
-    T##sp n##_data = T##bData(n);            \
-    T##csp n##_datac = T##cbData((T const **)n);
+#define a_pad(T, n, l)                                         \
+    T _##n[(l)];                                               \
+    T##b n = {_##n, _##n, _##n, _##n + (l)};                   \
+    T##sp n##_idle __attribute__((unused)) = T##bIdle(n);      \
+    T##sp n##_data __attribute__((unused)) = T##bData(n);      \
+    T##csp n##_datac __attribute__((unused)) =                 \
+        T##cbData((T const **)n);
 
 #define a_pad0(T, n, l) \
     a_pad(T, n, l);     \
@@ -137,17 +139,18 @@ fun void u8aReset(u8a arena) {
     static T _##n[(l)];                             \
     static T *n[4] = {_##n, _##n, _##n, _##n + (l)}
 
-#define aBcpad(T, n, l)                           \
-    T _##n[(l)];                                  \
-    B##T n##buf = {_##n, _##n, _##n, _##n + (l)}; \
-    T##$ n##idle = T##bIdle(n##buf);              \
-    T##c##$ n##data = T##bDataC(n##buf);
+#define aBcpad(T, n, l)                                        \
+    T _##n[(l)];                                               \
+    B##T n##buf = {_##n, _##n, _##n, _##n + (l)};              \
+    T##$ n##idle __attribute__((unused)) = T##bIdle(n##buf);   \
+    T##c##$ n##data __attribute__((unused)) = T##bDataC(n##buf);
 
-#define aB(T, name)                                    \
-    T *name##buf[4] = {};                              \
-    T **name##data = name##buf + 1;                    \
-    T const **name##cdata = (T const **)name##buf + 1; \
-    T **name##idle = name##buf + 2;
+#define aB(T, name)                                            \
+    T *name##buf[4] = {};                                      \
+    T **name##data __attribute__((unused)) = name##buf + 1;    \
+    T const **name##cdata __attribute__((unused)) =            \
+        (T const **)name##buf + 1;                             \
+    T **name##idle __attribute__((unused)) = name##buf + 2;
 
 #define aBusy(T, name, buf) T *name[2] = {buf[0], buf[2]};
 

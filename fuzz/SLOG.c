@@ -58,7 +58,7 @@ FUZZ(u64, SLOGfuzz) {
 
     // Limit input size
     size_t maxn = 256;
-    if ($len(input) > maxn) input[1] = input[0] + maxn;
+    if ($len(input) > (i64)maxn) input[1] = input[0] + maxn;
     size_t n = $len(input);
     if (n == 0) done;
 

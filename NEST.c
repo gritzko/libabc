@@ -18,12 +18,10 @@ fun mark128* NESTmark(u8bp ct, u32 ndx) {
     return log[1] - ndx;
 }
 
-fun u32 NESTloglen(u8bp ct) { return $len(NESTlog(ct)); }
-
 fun ok64 NESTaddmark(u8bp ct, mark128 const* rec) {
     mark128** log = NESTlog(ct);
     u8$ idle = NESTidle(ct);
-    if ($size(idle) < sizeof(u128)) return NESTNOROOM;
+    if ($size(idle) < (i64)sizeof(u128)) return NESTNOROOM;
     --log[0];
     // ABC-014: marks are 16B-strided down from an unaligned u8 buffer end;
     // memcpy avoids a misaligned mark128/u64 store (UBSan/strict-align trap).
@@ -100,7 +98,6 @@ ok64 NESTscanvar(ok64* var, u8cs input) {
 ok64 NESTFeed(u8bp ct, u8cs insert) {
     sane(Bok(ct) && $ok(insert));
     u8$ idle = NESTidle(ct);
-    u8c$ data = NESTdata(ct);
     if ($len(idle) < $len(insert)) return NESTNOROOM;
     a_dup(u8c, ins, insert);
     while (!$empty(ins)) {
@@ -152,7 +149,6 @@ ok64 NESTRenderTree(u8s into, u8bp ct, u32 ndx) {
 
 ok64 NESTRender(u8* into[2], u8bp ct) {
     sane($ok(into) && Bok(ct));
-    u32 from = 0;
     mark128 mark = {.pos = $len(NESTdata(ct))};
     try(NESTaddmark, ct, &mark);
     then try(NESTRenderTree, into, ct, 0);

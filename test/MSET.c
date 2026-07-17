@@ -371,10 +371,10 @@ ok64 MSETg() {
     size_t nruns = 3;
     u64 result[10];
     size_t rlen = 0;
-    while (!$empty(heap) && $len(heap) >= nruns) {
+    while (!$empty(heap) && $len(heap) >= (i64)nruns) {
         u64css eqs;
         call(MSETu64TopZ, heap, eqs, u64Z);
-        if ($len(eqs) == nruns)
+        if ($len(eqs) == (i64)nruns)
             result[rlen++] = ****heap;
         MSETu64AdvZ(heap, $len(eqs), u64Z);
     }
@@ -454,10 +454,10 @@ ok64 MSETk() {
     MSETu64Start(heap);
     size_t nruns = 2;
     size_t rlen = 0;
-    while (!$empty(heap) && $len(heap) >= nruns) {
+    while (!$empty(heap) && $len(heap) >= (i64)nruns) {
         u64css eqs;
         call(MSETu64TopZ, heap, eqs, u64Z);
-        if ($len(eqs) == nruns) rlen++;
+        if ($len(eqs) == (i64)nruns) rlen++;
         MSETu64AdvZ(heap, $len(eqs), u64Z);
     }
     testeqv((long long)(rlen), (long long)((size_t)0), "%lld");

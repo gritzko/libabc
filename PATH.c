@@ -290,7 +290,7 @@ ok64 PATHu8bRel(path8b out, u8cs absbase, u8cs abs) {
     // abs starts with absbase as a directory prefix
     size_t base_len = $len(absbase);
     u8cs abs_prefix = {abs[0], abs[0] + base_len};
-    if ($len(abs) > base_len && $eq(absbase, abs_prefix) &&
+    if ($len(abs) > (i64)base_len && $eq(absbase, abs_prefix) &&
         (absbase[1][-1] == '/' || abs[0][base_len] == '/')) {
         u8cp start = abs[0] + base_len;
         if (*start == '/') start++;

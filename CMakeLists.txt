@@ -5,7 +5,20 @@ set(CMAKE_C_STANDARD 23)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 
+# ABC-017: warnings on for all targets (subdirs inherit);
+# unused-parameter waived: callback signatures are fixed by their APIs
+add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+
+# ABC-017: ragel-generated sources carry unused consts/vars by design
+set(ABC_RAGEL_OUTPUTS ANSI.rl.c JSON.rl.c URI.rl.c HTTP.rl.c LEX.rl.c)
+set_source_files_properties(${ABC_RAGEL_OUTPUTS} PROPERTIES
+    COMPILE_OPTIONS "-Wno-unused-variable;-Wno-unused-const-variable")
+
 enable_testing()
+
+# ABC-017: gate for the network tests (test/CMakeLists.txt); CI's
+# inet-asan lane turns it on — loopback-only, no live-internet deps
+option(WITH_INET "build network (loopback) tests" OFF)
 
 option(WITH_ASAN "build with ASAN" OFF)
 if (WITH_ASAN)
@@ -22,6 +35,8 @@ if (WITH_FUZZ)
     set(FUZZ_C_FLAGS "${FUZZ_FLAGS}")
     set(FUZZ_LDD_FLAGS "${FUZZ_FLAGS}")
     add_compile_options(-fsanitize=fuzzer-no-link)
+    # ABC-017: non-fuzz binaries need the sancov runtime linked in too
+    add_link_options(-fsanitize=fuzzer-no-link)
 endif ()
 
 set(DOG_BIN_DIR ${CMAKE_BINARY_DIR}/bin)

@@ -304,7 +304,7 @@ fun h64 mix64(u64 a) {
 #define u16max 0xffff
 #define u32max 0xffffffff
 #define u64max 0xffffffffffffffffUL
-con u128 u128max = {u64max, u64max};
+con u128 u128max = {{u64max, u64max}};
 
 #define LESS 0x54e71c
 #define GREQ 0
@@ -385,7 +385,7 @@ fun ok64 utf8sFeed10(u8 **dec, u64 x) {
         x /= 10;
     } while (x);
     size_t sz = e - to;
-    if (dec[1] - dec[0] < sz) return SNOROOM;
+    if (dec[1] - dec[0] < (i64)sz) return SNOROOM;
     memcpy(*dec, to, sz);
     *dec += sz;
     return OK;

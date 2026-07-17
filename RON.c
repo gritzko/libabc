@@ -39,7 +39,7 @@ ok64 RONutf8sFeed(u8** into, ron60 val) {
         val >>= 6;
     } while (val);
     size_t l = e - t;
-    if ($len(into) < l) return SNOROOM;
+    if ($len(into) < (i64)l) return SNOROOM;
     memcpy(*into, t, l);
     *into += l;
     return OK;

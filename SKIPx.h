@@ -85,8 +85,8 @@ fun ok64 X(SKIP, drain)(X(SKIP, tab) * hop, u8bp buf, size_t pos) {
     u8 t = 0;
     call(TLVu8sDrain, data, &t, w);
     test(t == SKIP_TLV_TYPE, SKIPBAD);
-    test(X(SKIP, len)(pos) * sizeof(T) <= $len(w) &&
-             X(SKIP, top)(pos) * sizeof(T) >= $len(w),
+    test((i64)(X(SKIP, len)(pos) * sizeof(T)) <= $len(w) &&
+             (i64)(X(SKIP, top)(pos) * sizeof(T)) >= $len(w),
          SKIPBAD);
     $copy(into, w);
     hop->pos = pos;
@@ -95,7 +95,7 @@ fun ok64 X(SKIP, drain)(X(SKIP, tab) * hop, u8bp buf, size_t pos) {
 }
 
 fun ok64 X(SKIP, finish)(u8bp buf, X(SKIP, tab) * k) {
-    sane(Bok(buf) && k != NULL && k->pos < Bdatalen(buf));
+    sane(Bok(buf) && k != NULL && (i64)k->pos < Bdatalen(buf));
     size_t pos = Bdatalen(buf);
     if (k->pos != 0 && X(SKIP, blk)(pos) == X(SKIP, blk)(k->pos)) {
         u8cs lastk = {};

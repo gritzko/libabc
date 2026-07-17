@@ -39,7 +39,7 @@ extern uint8_t _pro_depth;
 
 extern thread_local u8 *ABC_BASS[4];
 
-con char *_pro_indent =
+__attribute__((unused)) con char *_pro_indent =
     "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
 
 #define PROindent (_pro_indent + 32 - (_pro_depth & 31))
@@ -52,9 +52,9 @@ con char *_pro_indent =
         trace("%s<FAILSANITY at %s:%i\n", PROindent, __func__, __LINE__); \
         return FAILSANITY;                                                \
     }                                                                     \
-    ok64 __ = OK;
+    ok64 __ __attribute__((unused)) = OK;
 #else
-#define sane(c) ok64 __ = OK;
+#define sane(c) ok64 __ __attribute__((unused)) = OK;
 #endif
 
 // `call` propagates errors by `return`-ing immediately on failure.  This

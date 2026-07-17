@@ -95,7 +95,7 @@ ok64 HTTPutf8Feed(u8s into, HTTPstate const* http) {
 }
 
 ok64 HTTPfind(u8cs *value, u8csc key, u8css headers) {
-    for (size_t i = 0; i + 1 < $len(headers); i += 2) {
+    for (i64 i = 0; i + 1 < $len(headers); i += 2) {
         if ($eq($at(headers, i), key)) {
             u8csMv(*value, $at(headers, i + 1));
             return OK;

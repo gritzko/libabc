@@ -56,7 +56,7 @@ ok64 UTF8test2() {
         // Exactly `len` bytes must be consumed from source ...
         same($len(from), 0);
         // ... and exactly `len` bytes must be written to the sink.
-        same($len(into_data), c->len);
+        same($len(into_data), (i64)c->len);
         // The drained bytes must decode back to the expected codepoint.
         u32 cp = 0;
         u8cs decode = {into_data[0], into_data[1]};

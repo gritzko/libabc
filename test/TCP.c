@@ -33,13 +33,15 @@ void garble($u8 data) {
 ok64 TCPtest1() {
     sane(1);
 
-    a_cstr(addr, "tcp://127.0.0.1:12345");
+    // ABC-017: random loopback port, no hardcoded 12345
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "tcp://127.0.0.1:%d", NETRandomPort());
 
     int fd;
-    call(TCPListen, &fd, addr);
+    call(TCPListen, &fd, addr_datac);
 
     int cfd;
-    call(TCPConnect, &cfd, addr, 0);
+    call(TCPConnect, &cfd, addr_datac, 0);
 
     int sfd;
     aNETraw(caddr);
@@ -49,7 +51,6 @@ ok64 TCPtest1() {
     call(FILEFeedAll, cfd, bubu);
 
     aBpad2(u8, read, 128);
-    aNETraw(sndaddr);
     call(FILEdrain, readidle, sfd);
     $testeq(bubu, readdata);
 
@@ -64,17 +65,19 @@ ok64 TCPtest1() {
 // call must fail with TCPFAIL and must NOT leak a descriptor.
 ok64 TCPtestBindLeak() {
     sane(1);
-    a_cstr(addr, "tcp://127.0.0.1:12399");
+    // ABC-017: random loopback port (+9: clear of ABC-012's +1..+7)
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "tcp://127.0.0.1:%d", NETRandomPort() + 9);
 
     int held = -1;
-    call(TCPListen, &held, addr);  // occupy the port
+    call(TCPListen, &held, addr_datac);  // occupy the port
 
     int base = fdwatermark();
     test(base != -1, TCPFAIL);
 
     for (int i = 0; i < 64; ++i) {
         int fd = -1;
-        ok64 rc = TCPListen(&fd, addr);  // EADDRINUSE -> bind() fails
+        ok64 rc = TCPListen(&fd, addr_datac);  // EADDRINUSE -> bind() fails
         test(rc == TCPFAIL, TCPFAIL);    // must report failure
         int now = fdwatermark();
         test(now != -1, TCPFAIL);

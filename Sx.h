@@ -221,7 +221,7 @@ fun b8 X(, sEq)(X(, sc) a, X(, sc) b) {
     return X(, csEq)((T const *const *)a, (T const *const *)b);
 }
 fun b8 X(, Eq)(T const *a, T const *b) {
-    return 0 == memcmp(a, b, sizeof(T));
+    return 0 == memcmp(a, b, sizeof(*a));
 }
 #endif
 
@@ -288,7 +288,7 @@ fun T const *X(, csAtP)(X(, cs) s, size_t pos) { return s[0] + pos; }
 
 // sUsed*: advance head (consume from the left).
 fun ok64 X(, sUsed)(X(, s) s, size_t len) {
-    if (unlikely(len > $len(s))) return MISS;
+    if (unlikely((i64)len > $len(s))) return MISS;
     s[0] += len;
     return OK;
 }
@@ -315,7 +315,7 @@ fun ok64 X(, csUsedAll)(X(, cs) s) { return X(, sUsedAll)((T **)s); }
 
 // sShed*: retreat term (drop from the right).
 fun ok64 X(, sShed)(X(, s) s, size_t len) {
-    if (unlikely(len > $len(s))) return MISS;
+    if (unlikely((i64)len > $len(s))) return MISS;
     s[1] -= len;
     return OK;
 }
@@ -394,12 +394,12 @@ fun ok64 X(, csFindS)(X(, cs) haystack, X(, csc) needle) {
         *haystack = haystack[1];
         return NONE;
     }
-    while ($len(haystack) >= nlen) {
+    while ($len(haystack) >= (i64)nlen) {
         if (X(, csFind)(haystack, **needle) != OK) break;
         //  csFind advanced *haystack to the first-byte match, which may
         //  sit within nlen-1 of the term — re-check before memcmp so it
         //  never reads past haystack[1] (fuzz crash-d402460f).
-        if ($len(haystack) < nlen) break;
+        if ($len(haystack) < (i64)nlen) break;
         if (memcmp(*haystack, *needle, $size(needle)) == 0) return OK;
         ++*haystack;
     }
@@ -417,7 +417,7 @@ fun ok64 X(, sFindS)(X(, s) haystack, X(, csc) needle) {
 // to head.  Mirror of csFindS.
 fun ok64 X(, csRevFindS)(X(, cs) haystack, X(, csc) needle) {
     size_t nlen = X(, csLen)(needle);
-    if (nlen == 0 || $len(haystack) < nlen) {
+    if (nlen == 0 || $len(haystack) < (i64)nlen) {
         haystack[1] = haystack[0];
         return NONE;
     }
@@ -437,14 +437,14 @@ fun ok64 X(, sRevFindS)(X(, s) haystack, X(, csc) needle) {
 #endif
 
 fun ok64 X($, tail)(X($, c) into, X($c, c) from, size_t off) {
-    if ($len(from) < off) return SMISS;
+    if ($len(from) < (i64)off) return SMISS;
     into[0] = from[0] + off;
     into[1] = from[1];
     return OK;
 }
 
 fun ok64 X($, retract)(X($, c) from, size_t len) {
-    if ($len(from) < len) return SMISS;
+    if ($len(from) < (i64)len) return SMISS;
     from[1] -= len;
     return OK;
 }
@@ -474,7 +474,7 @@ fun ok64 X($, last)(X($, c) into, X($c, c) from, size_t len) {
 }
 */
 fun ok64 X($, part)(X($, c) into, X($c, c) orig, size_t from, size_t till) {
-    if ($len(orig) < till || from > till) return SMISS;
+    if ($len(orig) < (i64)till || from > till) return SMISS;
     into[0] = orig[0] + from;
     into[1] = orig[0] + till;
     return OK;
@@ -572,7 +572,7 @@ fun ok64 X(, gFeed)(X(, g) into, X(, csc) from) {
 fun ok64 X(, sFeedSome)(X(, s) into, X(, cs) from) {
     if (unlikely(!$ok(from) || !$ok(into))) return SBADARG;
     size_t len = $len(from);
-    if (len > $len(into)) len = $len(into);
+    if ((i64)len > $len(into)) len = $len(into);
     memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *into += len;
     return OK;
@@ -580,8 +580,8 @@ fun ok64 X(, sFeedSome)(X(, s) into, X(, cs) from) {
 
 fun ok64 X(, sFeedN)(X(, s) into, X(, cs) from, size_t len) {
     if (unlikely(!$ok(from) || !$ok(into))) return BADARG;
-    if (unlikely($len(into) < len)) return NOROOM;
-    if (unlikely($len(from) < len)) return NODATA;
+    if (unlikely($len(into) < (i64)len)) return NOROOM;
+    if (unlikely($len(from) < (i64)len)) return NODATA;
     memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *into += len;
     *from += len;
@@ -605,7 +605,7 @@ fun ok64 X($, drain)(X($, ) into, X($, c) from) {
 }
 
 fun ok64 X($, take)(X(, c$) prefix, X($, c) from, size_t len) {
-    if ($len(from) < len) return SNODATA;
+    if ($len(from) < (i64)len) return SNODATA;
     prefix[0] = from[0];
     from[0] += len;
     prefix[1] = from[0];
@@ -694,7 +694,7 @@ fun ok64 X(, csFed1)(X(, cs) into) {
 }
 
 fun ok64 X(, sFed)(X(, s) into, size_t len) {
-    if (unlikely($len(into) < len)) return SNOROOM;
+    if (unlikely($len(into) < (i64)len)) return SNOROOM;
     *into += len;
     return OK;
 }
@@ -703,7 +703,7 @@ fun ok64 X(, csFed)(X(, cs) into, size_t len) {
 }
 
 fun ok64 X(, sPuked)(X(, s) from, size_t len) {
-    if ($len(from) < len) return SMISS;
+    if ($len(from) < (i64)len) return SMISS;
     from[1] -= len;
     return OK;
 }
@@ -747,8 +747,8 @@ fun void X($, drop)(X($, ) into, T const *from) {
 }
 
 fun ok64 X($, drainn)(X($, ) into, X($, c) from, size_t len) {
-    if (len > $len(into) || len > $len(from)) {
-        return len > $len(into) ? BNOROOM : BNODATA;
+    if ((i64)len > $len(into) || (i64)len > $len(from)) {
+        return (i64)len > $len(into) ? BNOROOM : BNODATA;
     }
     memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *from += len;
@@ -756,11 +756,11 @@ fun ok64 X($, drainn)(X($, ) into, X($, c) from, size_t len) {
     return OK;
 }
 
-fun int X(, memcmp)(T const *a, T const *b) { return memcmp(a, b, sizeof(T)); }
+fun int X(, memcmp)(T const *a, T const *b) { return memcmp(a, b, sizeof(*a)); }
 
 fun size_t X($, prefix)(X($, c) common, X($c, c) a, X($c, c) b) {
     size_t lim = $len(a);
-    if ($len(b) < lim) lim = $len(b);
+    if ($len(b) < (i64)lim) lim = $len(b);
     size_t l = 0;
     while (l < lim && X(, memcmp)(*a + l, *b + l) == 0) l++;
     common[0] = a[0];
@@ -834,19 +834,19 @@ fun b8 X($, is0)(X($, ) s, size_t ndx) {
 }
 
 fun b8 X(, IsZero)(X(, cp) p) {
-    return memcmp(p, X(, zero), sizeof(T)) == 0;
+    return memcmp(p, X(, zero), sizeof(*p)) == 0;
 }
 
 fun b8 X(, csHasSuffix)(X(, csc) line, X(, csc) suffix) {
     size_t l = $len(suffix);
     size_t s = $size(suffix);
-    return l <= $len(line) && 0 == memcmp(line[1] - l, suffix[0], s);
+    return (i64)l <= $len(line) && 0 == memcmp(line[1] - l, suffix[0], s);
 }
 
 fun b8 X(, csHasPrefix)(X(, csc) line, X(, csc) prefix) {
     size_t l = $len(prefix);
     size_t s = $size(prefix);
-    return l <= $len(line) && 0 == memcmp(line[0], prefix[0], s);
+    return (i64)l <= $len(line) && 0 == memcmp(line[0], prefix[0], s);
 }
 
 fun b8 X(, pIn)(X(, cp) p, X(, csc) outer) {

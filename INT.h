@@ -157,71 +157,44 @@ fun ok64 u8sFeed8(u8s into, u8 const *what) {
     return OK;
 }
 
-#ifdef ABC_ALIGN
-fun ok64 u8sDrain16(u16 *into, u8sfrom) {
-    if ($size(from) < sizeof(u16)) return NODATA;
-    *into = **from;
-    ++*from;
-    *into |= u16(**from) << 8;
-    ++*from;
-    return OK;
-}
-fun ok64 u8sDrain32(u32 *into, u8sfrom) {
-    if ($size(from) < sizeof(u32)) return NODATA;
-    u16 lo = 0, hi = 0;
-    u8sDrain16(&lo, from);
-    u8sDrain16(&hi, from);
-    *into = lo;
-    *into |= u32(hi) << 16;
-    return OK;
-}
-fun ok64 u8sDrain64(u64 *into, u8sfrom) {
-    if ($size(from) < sizeof(u64)) return NODATA;
-    u32 lo = 0, hi = 0;
-    u8sDrain32(&lo, from);
-    u8sDrain32(&hi, from);
-    *into = lo;
-    *into |= u64(hi) << 32;
-    return OK;
-}
-#else
+// ABC-017: dead ABC_ALIGN drain/feed branch deleted (never compiled:
+// u8sfrom token, C++ casts, flipped args, missing Feed twins)
 fun ok64 u8sDrain16(u8cs from, u16 *into) {
-    if ($len(from) < sizeof(u16)) return NODATA;
+    if ($len(from) < (i64)sizeof(u16)) return NODATA;
     memcpy(into, *from, sizeof(u16));
     *from += sizeof(u16);
     return OK;
 }
 fun ok64 u8sFeed16(u8s into, u16 const *what) {
-    if ($len(into) < sizeof(u16)) return NOROOM;
+    if ($len(into) < (i64)sizeof(u16)) return NOROOM;
     memcpy(*into, what, 2);
     *into += sizeof(u16);
     return OK;
 }
 fun ok64 u8sDrain32(u8cs from, u32p into) {
-    if ($len(from) < sizeof(u32)) return NODATA;
+    if ($len(from) < (i64)sizeof(u32)) return NODATA;
     memcpy(into, *from, sizeof(u32));
     *from += sizeof(u32);
     return OK;
 }
 fun ok64 u8sFeed32(u8s into, u32 const *what) {
-    if ($len(into) < sizeof(u32)) return NOROOM;
+    if ($len(into) < (i64)sizeof(u32)) return NOROOM;
     memcpy(*into, what, 4);
     *into += sizeof(u32);
     return OK;
 }
 fun ok64 u8sDrain64(u8cs from, u64p into) {
-    if ($len(from) < sizeof(u64)) return NODATA;
+    if ($len(from) < (i64)sizeof(u64)) return NODATA;
     memcpy(into, *from, sizeof(u64));
     *from += sizeof(u64);
     return OK;
 }
 fun ok64 u8sFeed64(u8s into, u64 const *what) {
-    if ($len(into) < sizeof(u64)) return NOROOM;
+    if ($len(into) < (i64)sizeof(u64)) return NOROOM;
     memcpy(*into, what, 8);
     *into += sizeof(u64);
     return OK;
 }
-#endif
 
 fun u8 u64bit(u64 u, u32 ndx) { return 1 & (u >> ndx); }
 fun u8 u128bit(u128 u, u32 ndx) { return 1 & (u._64[ndx >> 6] >> (ndx & 63)); }

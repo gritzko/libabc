@@ -257,7 +257,6 @@ ok64 BSDDiff(u8s patch, u8csc old, u8csc neu, i64s work) {
         for (scsc = (scan += len); scan < neusize; scan++) {
             len = BSDsearch(I, ob, oldsize, nb + scan, neusize - scan, 0,
                             oldsize, &V[0]);  // reuse V[0] as pos
-            i64 pos = V[0];
 
             for (; scsc < scan + len; scsc++) {
                 if (scsc + lastoffset < oldsize &&
@@ -337,10 +336,7 @@ ok64 BSDDiff(u8s patch, u8csc old, u8csc neu, i64s work) {
         }
     }
 
-    u8p ctrl_end = out;
-
     // Now emit diff block
-    u8p diff_start = out;
     lastscan = 0;
     lastpos = 0;
     lastoffset = 0;

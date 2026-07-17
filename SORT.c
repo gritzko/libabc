@@ -8,7 +8,7 @@ ok64 SORTu64($u64 into, $u64 from) {
     ok64 o = OK;
     size_t clen = 1;
     b8 dir = NO;
-    while (clen < $len(from)) {
+    while ((i64)clen < $len(from)) {
         dir = !dir;
         $u8 into8;
         $u64 from64;

@@ -217,7 +217,7 @@ fun b8 FILEentryZ(u8cscp a, u8cscp b) {
 fun ok64 FILEentryX(u8csp rec, u8cs stream) {
     if ($len(stream) < 2) return NODATA;
     size_t reclen = 2 + stream[0][1];  // type + len + name
-    if ($len(stream) < reclen) return NODATA;
+    if ($len(stream) < (i64)reclen) return NODATA;
     rec[0] = stream[0];
     rec[1] = stream[0] + reclen;
     stream[0] += reclen;
@@ -375,7 +375,7 @@ fun int FILE2iovec(struct iovec *io, u8css datav) {
 fun void u8cssdrained(u8css datav, size_t re) {
     while (re > 0 && !$empty(datav)) {
         u8c$ data = $at(datav, 0);
-        if (re < $len(data)) {
+        if ((i64)re < $len(data)) {
             data[0] += re;
             re = 0;
         } else {

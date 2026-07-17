@@ -87,11 +87,6 @@ ok64 PAGEClose(pagep p) {
     done;
 }
 
-// Number of pages in buffer
-fun u64 PAGEnpages(pagecp p) {
-    return (p->buf[3] - p->buf[0]) / PAGESIZE;
-}
-
 b8 PAGEPresent(pagecp p, u64 pos, size_t len) {
     if (p == NULL || len == 0) return YES;
     if (!PAGEIsPaged(p)) return YES;  // streaming, no tracking

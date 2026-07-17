@@ -185,7 +185,7 @@ ok64 QSORT14() {
     u64sDedup(as);
     want($len(as) <= 1000);
     want($len(as) > 0);
-    for (size_t i = 1; i < $len(as); i++) want(as[0][i - 1] < as[0][i]);
+    for (i64 i = 1; i < $len(as); i++) want(as[0][i - 1] < as[0][i]);
     done;
 }
 

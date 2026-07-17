@@ -32,7 +32,8 @@ ok64 grep_stream(nfau8cs nfa, u32 *ws[2], FILE *fp, u8c *fname) {
 }
 
 ok64 nfagrep() {
-    sane($arglen >= 2);
+    // ABC-017: sane($arglen>=2) killed the usage message in debug builds
+    sane(1);
     if ($arglen < 2) {
         fprintf(stderr, "usage: nfagrep PATTERN [FILE ...]\n");
         fail(NFABADSYN);
@@ -60,15 +61,18 @@ ok64 nfagrep() {
     } else {
         for (int i = 2; i < $arglen; i++) {
             a$rg(fn, i);
-            char fname[256];
-            snprintf(fname, sizeof(fname), "%.*s", (int)$len(fn), fn[0]);
+            // ABC-017: argv slices are NUL-terminated (PRO.h) — use them
+            // directly; the 256-byte snprintf copy truncated long paths
+            const char *fname = (const char *)fn[0];
             FILE *fp = fopen(fname, "r");
             if (!fp) {
                 fprintf(stderr, "nfagrep: %s: %s\n", fname, strerror(errno));
                 continue;
             }
-            call(grep_stream, nfa, ws, fp, (u8c *)fname);
+            // ABC-017: close fp before propagating a grep_stream error
+            try(grep_stream, nfa, ws, fp, (u8c *)fname);
             fclose(fp);
+            nedo return __;
         }
     }
 

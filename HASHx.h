@@ -108,7 +108,7 @@ fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
 }
 
 fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
-    sane($ok(data) && ndx < $len(data));
+    sane($ok(data) && (i64)ndx < $len(data));
     size_t off = ndx & MASK;
     size_t base = ndx & ~MASK;
     for (size_t i = off + 1; i < off + ABC_HASH_LINE; ++i) {

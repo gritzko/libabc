@@ -45,7 +45,7 @@ ok64 _TLVu8sDrain(u8cs from, u8p type, u8csp value) {
 ok64 _TLVu8sFeed(u8s into, u8 type, u8csc value) {
     sane(TLVlong(type) && into != NULL && value != NULL);
     u64 len = $len(value);
-    test($len(into) >= len + 5, TLVNOROOM);
+    test($len(into) >= (i64)(len + 5), TLVNOROOM);
     if (len < 0x100) {
         u8sFeed2(into, type | TLVaA, (u8)len);
     } else {
@@ -93,7 +93,7 @@ ok64 TLVFeedKeyVal($u8 tlv, u8c type, u8cs key, $cu8c val) {
     size_t keylen = $len(key);
     test(keylen < 0x100, TLVBADARG);
     u64 blen = keylen + $len(val) + 1;
-    test($len(tlv) >= blen + 4 + 1, TLVNOROOM);
+    test($len(tlv) >= (i64)(blen + 4 + 1), TLVNOROOM);
     if (blen < 0x100) {
         u8sFeed2(tlv, type | TLVaA, (u8)blen);
     } else {

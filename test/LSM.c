@@ -143,7 +143,7 @@ ok64 LSM1000000() {
 
 // u64 slicer: take 8 bytes from stream
 fun ok64 u64drain(u8csp rec, u8cs from) {
-    if ($len(from) < sizeof(u64)) return NODATA;
+    if ($len(from) < (i64)sizeof(u64)) return NODATA;
     rec[0] = from[0];
     rec[1] = from[0] + sizeof(u64);
     from[0] += sizeof(u64);

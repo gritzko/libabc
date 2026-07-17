@@ -592,7 +592,7 @@ fun void NFAu8StepCls(nfau8c *s, u16 nstates, u16 *cl, u16 clen,
 // u8 anchored match (with class + \n support)
 fun b8 NFAu8Match(nfau8cs prog, u8cs text, u32 *ws[2]) {
     u16 n = NFAu8States(prog);
-    if (n == 0 || $len(ws) < 3 * (u64)n) return NO;
+    if (n == 0 || $len(ws) < (i64)(3 * (u64)n)) return NO;
     nfau8c *s = prog[0];
     u64 tlen = (u64)$len(text);
 
@@ -623,7 +623,7 @@ fun b8 NFAu8Match(nfau8cs prog, u8cs text, u32 *ws[2]) {
 // Like NFAu8Match but stops at first MATCH state instead of consuming all input.
 fun b8 NFAu8MatchPrefix(nfau8cs prog, u8cs text, u32 *ws[2]) {
     u16 n = NFAu8States(prog);
-    if (n == 0 || $len(ws) < 3 * (u64)n) return NO;
+    if (n == 0 || $len(ws) < (i64)(3 * (u64)n)) return NO;
     nfau8c *s = prog[0];
     u64 tlen = (u64)$len(text);
 
@@ -656,7 +656,7 @@ fun b8 NFAu8MatchPrefix(nfau8cs prog, u8cs text, u32 *ws[2]) {
 // u8 unanchored search (with class + \n support)
 fun b8 NFAu8Search(nfau8cs prog, u8cs text, u32 *ws[2]) {
     u16 n = NFAu8States(prog);
-    if (n == 0 || $len(ws) < 3 * (u64)n) return NO;
+    if (n == 0 || $len(ws) < (i64)(3 * (u64)n)) return NO;
     nfau8c *s = prog[0];
     u64 tlen = (u64)$len(text);
 

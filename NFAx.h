@@ -158,7 +158,7 @@ fun b8 X(NFA, IsMatch)(X(nfa, c) *s, u16 *list, u16 len) {
 // Anchored full match (generic, no character classes)
 fun b8 X(NFA, MatchPlain)(X(nfa, cs) prog, u16 nstates, Tcs text, u32 *ws[2]) {
     u16 n = nstates;
-    if (n == 0 || $len(ws) < 3 * (u64)n) return NO;
+    if (n == 0 || $len(ws) < (i64)(3 * (u64)n)) return NO;
     X(nfa, c) *s = prog[0];
     u64 tlen = (u64)$len(text);
 
@@ -188,7 +188,7 @@ fun b8 X(NFA, MatchPlain)(X(nfa, cs) prog, u16 nstates, Tcs text, u32 *ws[2]) {
 // Unanchored search (generic, no character classes)
 fun b8 X(NFA, SearchPlain)(X(nfa, cs) prog, u16 nstates, Tcs text, u32 *ws[2]) {
     u16 n = nstates;
-    if (n == 0 || $len(ws) < 3 * (u64)n) return NO;
+    if (n == 0 || $len(ws) < (i64)(3 * (u64)n)) return NO;
     X(nfa, c) *s = prog[0];
     u64 tlen = (u64)$len(text);
 

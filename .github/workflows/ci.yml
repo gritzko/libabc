@@ -35,6 +35,66 @@ jobs:
       working-directory: build
       run: ctest --output-on-failure --parallel 4 --no-tests=error
 
+  # ABC-017: network tests (loopback-only) under ASAN. POLtest excluded:
+  # its POLtest2 leg still fetches 5 live sites (reported, not in scope).
+  inet-asan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install ninja-build clang \
+          libsodium-dev libcurl4-gnutls-dev liblz4-dev
+
+    - name: Configure
+      run: >
+        cmake -B build -GNinja
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
+        -DWITH_INET=ON -DWITH_ASAN=ON
+
+    - name: Build
+      run: ninja -C build
+
+    - name: Test
+      working-directory: build
+      run: >
+        ctest --output-on-failure --parallel 4 --no-tests=error
+        -E '^POLtest$'
+
+  # ABC-017: fuzz targets must at least build and survive a short smoke run
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install ninja-build clang \
+          libsodium-dev libcurl4-gnutls-dev liblz4-dev
+
+    - name: Configure
+      run: >
+        cmake -B build -GNinja
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
+        -DWITH_FUZZ=ON -DWITH_ASAN=ON
+
+    - name: Build
+      run: ninja -C build
+
+    - name: Smoke (10k iterations per target)
+      run: |
+        for f in build/fuzz/*fuzz; do
+          echo "== $f"
+          "$f" -runs=10000 -max_total_time=60 || exit 1
+        done
+
   macos:
     runs-on: macos-latest
     steps:

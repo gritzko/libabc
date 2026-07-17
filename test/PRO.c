@@ -48,7 +48,7 @@ ok64 parse_args_big() {
     for (int i = 0; i < BIG_ARGN; ++i) {
         a$rg(a, i);
         size_t want = strlen(buf[i]);
-        if ($len(a) != want) fail(TESTFAIL);
+        if ($len(a) != (i64)want) fail(TESTFAIL);
         if (memcmp(a[0], buf[i], want) != 0) fail(TESTFAIL);
     }
     done;

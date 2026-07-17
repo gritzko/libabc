@@ -66,7 +66,7 @@
     assert($size(n) <= $size(orig));
 
 #define a$tail(T, n, s, off) \
-    $##T n = {(off) > $len(s) ? s[1] : s[0] + (off), s[1]};
+    $##T n = {(i64)(off) > $len(s) ? s[1] : s[0] + (off), s[1]};
 #define a$head(T, n, s, l) \
     T *n[2] = {s[0], ((l) > $len(s) ? s[1] : (s[0] + l))};
 
@@ -180,8 +180,6 @@ typedef int (*$cmpfn)($cc a, $cc b);
 
 fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
     va_list ap;
-    size_t l = 0;
-    ok64 o = OK;
     u8 const **sarg = NULL;
     a_dup(u8 const, p, tmpl);
     va_start(ap, tmpl);

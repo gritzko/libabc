@@ -103,7 +103,7 @@ ok64 u8sPrintf_test() {
 
     // empty format
     u8p before = buf[2];
-    call(u8sPrintf, buf_idle, "");
+    call(u8sPrintf, buf_idle, "%s", "");
     testeqv((long long)(buf[2]), (long long)(before), "%lld");
 
     // SNOROOM on overflow

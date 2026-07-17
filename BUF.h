@@ -126,14 +126,14 @@ typedef u8b const *u8bcp;
 fun b8 BitAt(u8b buf, size_t ndx) {
     size_t thebyte = ndx >> 3;
     size_t thebit = ndx & 7;
-    assert(thebyte < Bsize(buf));
+    assert((i64)thebyte < Bsize(buf));
     return (Bat(buf, thebyte) >> thebit) & 1;
 }
 
 fun void BitSet(u8b buf, size_t ndx) {
     size_t thebyte = ndx >> 3;
     size_t thebit = ndx & 7;
-    assert(thebyte < Bsize(buf));
+    assert((i64)thebyte < Bsize(buf));
     Bat(buf, thebyte) |= 1 << thebit;
 }
 
@@ -141,15 +141,16 @@ fun void BitSet(u8b buf, size_t ndx) {
 //  instead of clearing the target.  Use abc/BIT.h u1sClr for correct
 //  bit clearing; the lone remaining BitAt/BitSet callers stay.
 
-#define a$$pad(n, l, ll)                                \
-    u8 _##n[(l)];                                       \
-    Bu8 n##buf = {_##n, _##n, _##n, _##n + (l)};        \
-    u8$ n##idle = u8bIdle(n##buf);                      \
-    u8$ n##data = u8bData(n##buf);                      \
-    u8cs _$##n[(l)];                                    \
-    u8csb n##$buf = {_$##n, _$##n, _$##n, _$##n + (l)}; \
-    u8cssp n##$idle = u8csbIdle(n##$buf);               \
-    u8cssp n##$data = u8csbData(n##$buf);
+// ABC-017: aux views are macro API; tag unused so -Wall stays clean
+#define a$$pad(n, l, ll)                                             \
+    u8 _##n[(l)];                                                    \
+    Bu8 n##buf = {_##n, _##n, _##n, _##n + (l)};                     \
+    u8$ n##idle __attribute__((unused)) = u8bIdle(n##buf);           \
+    u8$ n##data __attribute__((unused)) = u8bData(n##buf);           \
+    u8cs _$##n[(l)];                                                 \
+    u8csb n##$buf = {_$##n, _$##n, _$##n, _$##n + (l)};              \
+    u8cssp n##$idle __attribute__((unused)) = u8csbIdle(n##$buf);    \
+    u8cssp n##$data __attribute__((unused)) = u8csbData(n##$buf);
 
 #define $$call(fn, n, ...)              \
     {                                   \
@@ -190,7 +191,7 @@ fun ok64 u8sPrintf(u8s into, const char *fmt, ...) {
     int n = vsnprintf((char *)*into, $len(into), fmt, ap);
     va_end(ap);
     if (n < 0) return BADARG;
-    if ((size_t)n >= $len(into)) return SNOROOM;
+    if (n >= $len(into)) return SNOROOM;
     *into += n;
     return OK;
 }
@@ -228,14 +229,14 @@ fun ok64 u8sFeedCStr($u8 into, const char *str) {
 }
 
 fun ok64 u8sFeedn($u8 into, u8c *what, size_t n) {
-    if (unlikely($len(into) < n)) return SNOROOM;
+    if (unlikely($len(into) < (i64)n)) return SNOROOM;
     memcpy(*into, what, n);
     *into += n;
     return OK;
 }
 
 fun ok64 u8sFeed1xN($u8 into, u8 what, size_t n) {
-    if ($len(into) < n) return BNOROOM;
+    if ($len(into) < (i64)n) return BNOROOM;
     memset(*into, what, n);
     *into += n;
     return OK;
@@ -250,7 +251,7 @@ fun ok64 u8sPop1(u8cs s, u8p last) {
 
 fun ok64 u8sPop(u8cs s, u8sc into) {
     size_t len = $len(into);
-    if (unlikely(len > $len(s))) return SNODATA;
+    if (unlikely((i64)len > $len(s))) return SNODATA;
     // ABC-005: pop reads the shed TAIL (like u8sPop1/u8sPop32);
     // it used to copy the head while shedding the tail
     s[1] -= len;

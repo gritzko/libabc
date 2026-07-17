@@ -20,13 +20,15 @@ static int fdwatermark(void) {
 ok64 UDPtest1() {
     sane(1);
 
-    a$str(addr, "udp://127.0.0.1:3456");
+    // ABC-017: random loopback port, no hardcoded 3456
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "udp://127.0.0.1:%d", NETRandomPort());
 
     int fd;
-    call(UDPBind, &fd, addr);
+    call(UDPBind, &fd, addr_datac);
 
     int cfd;
-    call(UDPConnect, &cfd, addr);
+    call(UDPConnect, &cfd, addr_datac);
 
     a$str(bubu, "BuBu");
     call(FILEFeedAll, cfd, bubu);
@@ -36,6 +38,8 @@ ok64 UDPtest1() {
     call(UDPDrain, readidle, sndaddr, fd);
     $testeq(bubu, readdata);
 
+    // ABC-017: cfd used to leak here
+    call(UDPClose, cfd);
     call(UDPClose, fd);
     done;
 }
@@ -45,17 +49,19 @@ ok64 UDPtest1() {
 // each call must fail with UDPFAIL and must NOT leak a descriptor.
 ok64 UDPtestBindLeak() {
     sane(1);
-    a$str(addr, "udp://127.0.0.1:3499");
+    // ABC-017: random loopback port (+9: clear of ABC-012's +5..+7)
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "udp://127.0.0.1:%d", NETRandomPort() + 9);
 
     int held = -1;
-    call(UDPBind, &held, addr);  // occupy the port
+    call(UDPBind, &held, addr_datac);  // occupy the port
 
     int base = fdwatermark();
     test(base != -1, UDPFAIL);
 
     for (int i = 0; i < 64; ++i) {
         int fd = -1;
-        ok64 rc = UDPBind(&fd, addr);  // EADDRINUSE -> bind() fails
+        ok64 rc = UDPBind(&fd, addr_datac);  // EADDRINUSE -> bind() fails
         test(rc == UDPFAIL, UDPFAIL);  // must report failure
         int now = fdwatermark();
         test(now != -1, UDPFAIL);

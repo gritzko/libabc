@@ -27,6 +27,10 @@ add_executable(SORTfuzz SORT.c ../SORT.c ../RON.c)
 
 add_executable(DIFFfuzz DIFF.c ../RON.c)
 
+# ABC-017: mirror the root-dir suppression for the ragel output
+set_source_files_properties(../URI.rl.c PROPERTIES
+    COMPILE_OPTIONS "-Wno-unused-variable;-Wno-unused-const-variable")
+
 add_executable(URIfuzz URI.c ../URI.c ../URI.rl.c)
 #  URISplitPath now walks the path via abc/PATH's PATHu8sDrainNE
 #  (URI-004), so the fuzz target needs PATH.c + its UTF8/ryu deps —

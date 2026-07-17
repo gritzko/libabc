@@ -87,11 +87,11 @@ FUZZ(u64, MSETfuzz) {
     MSETu64StartZ(iheap, u64Z);
     u64 ibuf[LEN];
     size_t ilen = 0;
-    while (!$empty(iheap) && $len(iheap) >= nruns) {
+    while (!$empty(iheap) && $len(iheap) >= (i64)nruns) {
         u64css eqs;
         ok64 o = MSETu64TopZ(iheap, eqs, u64Z);
         must(o == OK, "TopZ fail in intersection");
-        b8 emit = ($len(eqs) == nruns);
+        b8 emit = ($len(eqs) == (i64)nruns);
         u64 val = ****iheap;
         // advance and skip further duplicates of val
         do {

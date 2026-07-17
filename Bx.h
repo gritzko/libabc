@@ -425,7 +425,7 @@ fun ok64 X(, bShift)(X(, b) buf, size_t pastlen) {
         Breset(buf);
         return OK;
     }
-    if (unlikely(pastlen + datalen > Blen(buf))) return NOROOM;
+    if (unlikely((i64)(pastlen + datalen) > Blen(buf))) return NOROOM;
     T *to = buf[0] + pastlen;
     memmove((void *)(to), (void *)(buf[1]), BDataSize(buf));
     ((T **)buf)[1] = to;

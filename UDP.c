@@ -33,9 +33,7 @@ ok64 UDPBind(int *fd, u8cs addr) {
 
 ok64 UDPConnect(int *fd, u8cs addr) {
     sane(fd != NULL && !$empty(addr));
-    int sfd, s;
-    size_t len;
-    ssize_t nread;
+    int sfd;
     struct addrinfo *result = NULL, *rp;
 
     URIstate uri = {};

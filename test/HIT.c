@@ -620,7 +620,7 @@ ok64 HIT23() {
 
     // Both compactors produce the same shape and same merged contents.
     testeqv((long long)($len(h_stack)), (long long)($len(m_stack)), "%lld");
-    for (size_t i = 0; i < $len(h_stack); i++) {
+    for (i64 i = 0; i < $len(h_stack); i++) {
         testeqv((long long)($len(h_stack[0][i])), (long long)($len(m_stack[0][i])), "%lld");
     }
     size_t merged = $len(h_stack[0][$len(h_stack) - 1]);

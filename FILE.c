@@ -922,7 +922,7 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
 
     // Store booked end in FILE_BOOK
     size_t fdlen = u8pbDataLen(FILE_BOOK);
-    if (*fd >= fdlen) u8psFed(u8pbIdle(FILE_BOOK), *fd - fdlen + 1);
+    if (*fd >= (int)fdlen) u8psFed(u8pbIdle(FILE_BOOK), *fd - fdlen + 1);
     *u8pbAtP(FILE_BOOK, *fd) = base + book_size;
 
     FILE_WANTS[*fd] = FILEBookWant;

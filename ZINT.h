@@ -90,7 +90,7 @@ fun ok64 ZINTu128drain(u128* a, u8cs from) {
 }
 
 fun ok64 ZINTu128feed($u8 into, u128c* a) {
-    if (!$ok(into) || $size(into) < sizeof(u64) * 2) return ZINTNOROOM;
+    if (!$ok(into) || $size(into) < (i64)(sizeof(u64) * 2)) return ZINTNOROOM;
     u64 big = a->_64[0];
     u64 lil = a->_64[1];
     return ZINTu8sFeed128(into, big, lil);

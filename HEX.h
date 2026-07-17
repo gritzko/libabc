@@ -110,7 +110,7 @@ fun ok64 u64hexfeed($u8 hex, u64 val) {
 }
 
 fun ok64 u64hexdrain(u64* res, u8cs hex) {
-    if ($len(hex) > sizeof(u64) * 2) return HEXBAD;
+    if ($len(hex) > (i64)(sizeof(u64) * 2)) return HEXBAD;
     u64 t = 0;
     $for(u8c, p, hex) {
         u8 u = BASE16rev[*p];

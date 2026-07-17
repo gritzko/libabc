@@ -5,7 +5,7 @@
 typedef T const X(, c);
 
 fun ok64 X(, sUpAtZ)(X(, sc) heap, size_t at, X(, z) z) {
-    if (unlikely(!X(, sOK)(heap) || at >= $len(heap))) return MISS;
+    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return MISS;
     while (at) {
         size_t b = (at - 1) / 2;  // parent
         if (z(*heap + b, *heap + at)) break;
@@ -26,7 +26,7 @@ fun ok64 X(, sUpZ)(X(, sc) heap, X(, z) z) {
 }
 
 fun ok64 X(, sDownAtZ)(X(, sc) heap, size_t at, X(, z) z) {
-    if (unlikely(!X(, sOK)(heap) || at >= $len(heap))) return MISS;
+    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return MISS;
     size_t n = $len(heap);
     size_t i = at;
     do {
@@ -101,7 +101,7 @@ fun ok64 X(, sEjectAtZ)(X(, sp) heap, size_t at, X(, z) z) {
     if (at >= len) return MISS;
     X(, Swap)(*heap + at, $last(heap));
     --$term(heap);
-    if (at < $len(heap)) {
+    if ((i64)at < $len(heap)) {
         X(, sUpAtZ)(heap, at, z);
         X(, sDownAtZ)(heap, at, z);
     }

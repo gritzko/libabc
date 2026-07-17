@@ -22,7 +22,6 @@ static void on_http_response(CURLreq *req, long status, u8cs body) {
     a_cstr(needle, "HTTP/");
     u8$ hdr = u8bData(req->headers);
     a_dup(u8, search, hdr);
-    size_t hdrlen = u8sLen(search);
     found_http[idx] = (u8sFindS(search, needle) == OK);
 
     // Find and extract Server: header value

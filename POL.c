@@ -278,7 +278,7 @@ ok64 POLLoop(u64 timens) {
         if ($empty(data)) break;
 
         // Remove file pollers with no events
-        for (size_t i = 0; i < $len(data);) {
+        for (i64 i = 0; i < $len(data);) {
             poller* p = *data + i;
             if (p->tofd >= 0 && p->events == 0) {
                 HEAPpollerEjectAtZ(POL_QUEUE, i, pollerZ);

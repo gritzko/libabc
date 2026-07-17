@@ -45,10 +45,11 @@ ok64 Utest1() {
     u8 **data = u8bData(buf);
     $eat(data) printf("%c", (int)(**data + 'A'));
     printf("\n");
-    $u8 abc = $cut(u8bPast(buf), 0, 3);
+    // ABC-017: assert()-only vars, unused under NDEBUG (Release)
+    $u8 abc __attribute__((unused)) = $cut(u8bPast(buf), 0, 3);
     assert($len(abc) == 3);
     u8 three = 3;
-    u8c *c = $u8find(u8bPastC(buf), &three);
+    u8c *c __attribute__((unused)) = $u8find(u8bPastC(buf), &three);
     assert(c - buf[0] == 3);
     u8bFree(buf);
     done;

@@ -33,7 +33,7 @@ fun void u16csSwap(u16cs *a, u16cs *b) {
 
 FUZZ(u16, BOXfuzz) {
     sane(1);
-    if ($len(input) > MAX_INPUT_N) input[1] = input[0] + MAX_INPUT_N;
+    if ($len(input) > (i64)MAX_INPUT_N) input[1] = input[0] + MAX_INPUT_N;
     if ($empty(input)) done;
 
     u16 mem[BOX_RANGE_N] = {0};

@@ -52,7 +52,6 @@ ok64 BSDtestIdentical() {
 
 ok64 BSDtestEmptyToData() {
     sane(1);
-    u8csc empty = {NULL, NULL};
     a$str(data, "new content here");
     // empty old -> new data (all extra bytes)
     u8 zbuf = 0;

@@ -8,13 +8,11 @@
 
 a_cstr(ext, ".lex");
 
-con char *ragel_template;
-con char *header_template;
-
 ok64 lex2rl(u8cs mod, u8cs lang);
 
 ok64 lexcli() {
-    sane($arglen == 3);
+    // ABC-017: sane($arglen==3) killed the usage message in debug builds
+    sane(1);
     if ($arglen != 3) {
         fprintf(stderr, "Usage: lex MOD [c|go]\n");
         fail(BADARG);

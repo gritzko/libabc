@@ -468,7 +468,7 @@ fun b8 URIIsUnreserved(u8c c) {
     return NO;
 }
 
-con u8c HEX_DIGITS[16] = "0123456789ABCDEF";
+con u8c HEX_DIGITS[] = "0123456789ABCDEF";
 
 // Percent-encode: all non-unreserved chars → %XX
 ok64 URIu8sEsc(u8s into, u8cs raw) {

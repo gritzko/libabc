@@ -33,7 +33,8 @@ fun ok64 UDPDrain($u8 into, NETaddr addr, int fd) {
     range64 range = {0, len};
     Bu8rewind(addr, range);
     // ABC-012: MSG_TRUNC reports the real datagram size; refuse silent cuts
-    if ((size_t)nread > $len(into)) return NETNOSPACE;
+    // ABC-017: nread >= 0 here; signed compare avoids -Wsign-compare
+    if (nread > $len(into)) return NETNOSPACE;
     *into += nread;
     return OK;
 }
