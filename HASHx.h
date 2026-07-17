@@ -34,7 +34,8 @@ fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
     for (size_t i = off + 1; i < off + ABC_HASH_LINE; ++i) {
         *ndx = base + (i & MASK);
         if (X($, is0)(data, *ndx)) return HASHNONE;
-        if (X(, hashEq)(*data + *ndx, rec)) return OK;
+        // ABC-015: (rec, slot) arg order, same as Get/Del below
+        if (X(, hashEq)(rec, *data + *ndx)) return OK;
     }
     return HASHNOROOM;
 }
@@ -81,12 +82,17 @@ fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
     size_t base = fit & ~MASK;
     for (size_t i = 0; i < ABC_HASH_LINE; ++i) {
         size_t ndx = base + ((off + i) & MASK);
-        if (X($, is0)(data, ndx) || X(, hashEq)(rec, $atp(data, ndx))) {
+        if (X($, is0)(data, ndx) || X(, hashEq)(&r, $atp(data, ndx))) {
             X(, mv)($atp(data, ndx), &r);
             return OK;
         }
         u64 hash2 = X(, hash)($atp(data, ndx));
-        if (ABC_HASH_CONVERGE && hash2 > hash) X(, Swap)(&r, $atp(data, ndx));
+        // ABC-015: after Swap the carried record is the ex-occupant, so
+        // carry its hash too; a stale hash made layout depend on op order
+        if (ABC_HASH_CONVERGE && hash2 > hash) {
+            X(, Swap)(&r, $atp(data, ndx));
+            hash = hash2;
+        }
     }
     return HASHNOROOM;
 }
@@ -131,4 +137,6 @@ fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
 #undef MASK
 #undef LMASK
 #undef ABC_HASH_LINE
+// ABC-015: per-instantiation knob, undef like ABC_HASH_LINE
+#undef ABC_HASH_CONVERGE
 #undef T

@@ -4,10 +4,11 @@
 #include "B.h"
 
 typedef Bu8 X(SST, );
-typedef X(, ) Key;
+// ABC-015: was a bare `Key` typedef leaking into every including TU
+typedef X(, ) X(SST, key);
 
 static const u32 X(SST, magic) = (u32)'S' | ((u32)'S' << 8) | ((u32)'T' << 16) |
-                                 ((u32)('0' + (63 - clz64(sizeof(Key)))) << 24);
+                                 ((u32)('0' + (63 - clz64(sizeof(X(SST, key))))) << 24);
 
 fun ok64 X(SST, meta)(X(SST, ) sst, SSTheader const** head, u8c$ meta) {
     SSTheader const* h = (SSTheader const*)*sst;
@@ -45,30 +46,30 @@ fun ok64 X(SST, open)(X(SST, ) sst, u8cs path) {
 
 fun ok64 X(SST, hasindex)(X(SST, ) sst) { return Bidlelen(sst) != 0; }
 
-fun ok64 X(SST, feed)(X(SST, ) sst, SSTab* tab, u8 type, Key const* key,
+fun ok64 X(SST, feed)(X(SST, ) sst, SSTab* tab, u8 type, X(SST, key) const* key,
                       u8cs value) {
-    aBcpad(u8, raw, sizeof(Key));
+    aBcpad(u8, raw, sizeof(X(SST, key)));
     X(, pack)(rawidle, key);
     ok64 o = TLVFeedkv(u8bIdle(sst), type, rawdata, value);
     if (o == OK) o = SKIPu8mayfeed(sst, tab);
     return o;
 }
 
-fun ok64 X(SST, initshort)(X(SST, ) sst, u8 type, Key const* key, Bu8p stack) {
+fun ok64 X(SST, initshort)(X(SST, ) sst, u8 type, X(SST, key) const* key, Bu8p stack) {
     u8$ into = u8bIdle(sst);
-    aBcpad(u8, raw, sizeof(Key));
+    aBcpad(u8, raw, sizeof(X(SST, key)));
     X(, pack)(rawidle, key);
     TLVInitShort(into, type, stack);
-    u8sFeed1(into, sizeof(Key));
+    u8sFeed1(into, sizeof(X(SST, key)));
     return u8sFeed(into, rawdata);
 }
 
-fun ok64 X(SST, initlong)(X(SST, ) sst, u8 type, Key const* key, Bu8p stack) {
+fun ok64 X(SST, initlong)(X(SST, ) sst, u8 type, X(SST, key) const* key, Bu8p stack) {
     u8$ into = u8bIdle(sst);
-    aBcpad(u8, raw, sizeof(Key));
+    aBcpad(u8, raw, sizeof(X(SST, key)));
     X(, pack)(rawidle, key);
     TLVInitLong(u8bIdle(sst), type, stack);
-    u8sFeed1(into, sizeof(Key));
+    u8sFeed1(into, sizeof(X(SST, key)));
     return u8sFeed(into, rawdata);
 }
 
@@ -91,7 +92,7 @@ fun int X(SST, cmp)($cc a, $cc b) {
     a$dup(u8c, bb, b);  // TODO fast and robust
     TLVDrainKeyVal(&ta, ka, va, aa);
     TLVDrainKeyVal(&tb, kb, vb, bb);
-    Key keya = X(, max), keyb = X(, max);
+    X(SST, key) keya = X(, max), keyb = X(, max);
     X(, unpack)(&keya, ka);
     X(, unpack)(&keyb, kb);
     if (X(, Z)(&keya, &keyb)) return -1;
@@ -107,7 +108,7 @@ fun b8 X(SST, Z)(u8csc a, u8csc b) {
     a_dup(u8c, bb, b);
     TLVDrainKeyVal(&ta, ka, va, aa);
     TLVDrainKeyVal(&tb, kb, vb, bb);
-    Key keya = X(, max), keyb = X(, max);
+    X(SST, key) keya = X(, max), keyb = X(, max);
     X(, unpack)(&keya, ka);
     X(, unpack)(&keyb, kb);
     if (X(, Z)(&keya, &keyb)) return YES;
@@ -115,9 +116,9 @@ fun b8 X(SST, Z)(u8csc a, u8csc b) {
     return ta < tb;
 }
 
-fun ok64 X(SST, locate)(u8c$ rest, X(SST, ) sst, u8 type, Key const* key) {
+fun ok64 X(SST, locate)(u8c$ rest, X(SST, ) sst, u8 type, X(SST, key) const* key) {
     u8 t = (type ? type : 'A') | TLVaA;
-    aBcpad(u8, raw, sizeof(Key) + 3);
+    aBcpad(u8, raw, sizeof(X(SST, key)) + 3);
     u8sFeed1(rawidle, t);
     u8sFeed2(rawidle, 0, 0);
     X(, pack)(rawidle, key);
@@ -126,7 +127,7 @@ fun ok64 X(SST, locate)(u8c$ rest, X(SST, ) sst, u8 type, Key const* key) {
     return SKIPu8find(rest, sst, rawdata, X(SST, Z));
 }
 
-fun ok64 X(SST, next)(u8* t, Key* key, u8c$ val, u8cs rest) {
+fun ok64 X(SST, next)(u8* t, X(SST, key)* key, u8c$ val, u8cs rest) {
     if (!$empty(rest) && (**rest & ~TLVaA) == SKIP_TLV_TYPE) {
         u8cs rec;
         TLVDrain$(rec, rest);
@@ -138,12 +139,12 @@ fun ok64 X(SST, next)(u8* t, Key* key, u8c$ val, u8cs rest) {
     return OK;
 }
 
-fun ok64 X(SST, getkv)(u8c$ rec, X(SST, ) sst, u8 type, Key const* key) {
+fun ok64 X(SST, getkv)(u8c$ rec, X(SST, ) sst, u8 type, X(SST, key) const* key) {
     u8cs rest = {};
     ok64 o = X(SST, locate)(rest, sst, type, key);
     while (o == OK) {
         u8 t = 0;
-        Key k = {};
+        X(SST, key) k = {};
         u8cs v;
         a$dup(u8c, dup, rest);
         o = X(SST, next)(&t, &k, v, rest);
@@ -166,11 +167,11 @@ fun ok64 X(SST, getkv)(u8c$ rec, X(SST, ) sst, u8 type, Key const* key) {
 }
 
 // Get a record by its type, id. Set type to 0 if insignificant.
-fun ok64 X(SST, get)(u8* type, u8c$ val, X(SST, ) sst, Key const* key) {
+fun ok64 X(SST, get)(u8* type, u8c$ val, X(SST, ) sst, X(SST, key) const* key) {
     u8cs rest = {};
     ok64 o = X(SST, locate)(rest, sst, *type, key);
     while (o == OK) {
-        Key k = {};
+        X(SST, key) k = {};
         u8 t = 0;
         o = X(SST, next)(&t, &k, val, rest);
         if (o != OK) break;

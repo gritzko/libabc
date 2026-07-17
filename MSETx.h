@@ -167,7 +167,9 @@ fun ok64 X(MSET, SeekZ)(X(, css) iter, T key, X(, z) z) {
     while (!$empty(iter) && z(***iter, &key)) {
         X(, cs) *top = iter[0];
         X($c, c) run = {(*top)[0], (*top)[1]};
-        T const *pos = X(, sFindGE)(run, &key);
+        // ABC-015: search with the caller's z; default-Z sFindGE returned
+        // garbage positions (or looped) for any non-default order
+        T const *pos = X(, sFindGEZ)(run, &key, z);
         (*top)[0] = pos;
         if ($empty(*top)) {
             X(, cs) *last = iter[1] - 1;
@@ -266,7 +268,9 @@ fun ok64 X(MSET, Get)(X(, css) stack, T key) {
     size_t n = $len(stack);
     if (n == 0) return MSETNONE;
     X(, cs) runs[MSET_MAX_LEVELS];
-    if (n > MSET_MAX_LEVELS) n = MSET_MAX_LEVELS;
+    // ABC-015: clamping silently dropped the newest (tail) runs, turning
+    // present keys into MSETNONE; an over-deep stack is an error
+    if (n > MSET_MAX_LEVELS) return MSETNOROOM;
     for (size_t i = 0; i < n; i++) {
         runs[i][0] = stack[0][i][0];
         runs[i][1] = stack[0][i][1];

@@ -40,7 +40,8 @@ fun b8 ROCKmergeOnStack(size_t total) { return total <= ROCKMERGE_STACK; }
 fun ok64 ROCKmergeCap(u8css records, size_t* out) {
     out[0] = 0;
     size_t cap = 0;
-    for (int i = 0; i < $len(records); i++) {
+    // ABC-015: record count is a size_t; an int counter overflowed first
+    for (size_t i = 0; i < (size_t)$len(records); i++) {
         size_t l = $len($at(records, i));
         if (cap > SIZE_MAX - l) return ROCKHUGE;
         cap += l;

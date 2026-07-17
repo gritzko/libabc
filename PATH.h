@@ -27,6 +27,8 @@ typedef u8csp path8sp;
 // Owned buffer for path composition.
 typedef u8b   path8b;
 typedef u8bp  path8bp;
+// ABC-015: gauge view (ROCK.h used the name without a typedef)
+typedef u8g   path8g;
 
 // A u8cs view over a path buffer's DATA. Caller must have terminated
 // the buffer (PATHu8bTerm / Feed / Push) so *buf[2] == 0.

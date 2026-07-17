@@ -62,9 +62,9 @@ FUZZ(u64, HITfuzz) {
     u64css uheap = {uruns, uruns + nruns};
     HITu64Start(uheap);
     u64 ubuf[LEN];
-    u64p uout = ubuf;
-    HITu64Merge(uheap, &uout);
-    size_t ulen = uout - ubuf;
+    u64s uout = {ubuf, ubuf + sizeof(ubuf) / sizeof(u64)};
+    call(HITu64Merge, uheap, uout);
+    size_t ulen = uout[0] - ubuf;
     for (size_t i = 0; i + 1 < ulen; i++)
         must(ubuf[i] < ubuf[i + 1], "merge not sorted");
 
@@ -92,9 +92,9 @@ FUZZ(u64, HITfuzz) {
     u64css iheap = {iruns, iruns + nruns};
     HITu64Start(iheap);
     u64 ibuf[LEN];
-    u64p iout = ibuf;
-    HITu64Intersect(iheap, &iout, nruns);
-    size_t ilen = iout - ibuf;
+    u64s iout = {ibuf, ibuf + sizeof(ibuf) / sizeof(u64)};
+    call(HITu64Intersect, iheap, iout, nruns);
+    size_t ilen = iout[0] - ibuf;
     // intersection strictly sorted
     for (size_t i = 0; i + 1 < ilen; i++)
         must(ibuf[i] < ibuf[i + 1], "intersection not sorted");
@@ -141,9 +141,9 @@ FUZZ(u64, HITfuzz) {
     if (!$empty(sheap))
         HITu64Seek(sheap, &seekkey);
     u64 sbuf[LEN];
-    u64p sout = sbuf;
-    HITu64Merge(sheap, &sout);
-    size_t slen = sout - sbuf;
+    u64s sout = {sbuf, sbuf + sizeof(sbuf) / sizeof(u64)};
+    call(HITu64Merge, sheap, sout);
+    size_t slen = sout[0] - sbuf;
     for (size_t i = 0; i + 1 < slen; i++)
         must(sbuf[i] < sbuf[i + 1], "seek merge not sorted");
     for (size_t i = 0; i < slen; i++)
@@ -189,9 +189,9 @@ FUZZ(u64, HITfuzz) {
         HITu64Start(oha[0]);
         HITu64Start(oha[1]);
         u64csss imh = {oha, oha + 2};
-        u64 imbuf[LEN]; u64p imout = imbuf;
-        HITu64sIntersectMerge(imh, &imout);
-        size_t imlen = imout - imbuf;
+        u64 imbuf[LEN]; u64s imout = {imbuf, imbuf + sizeof(imbuf) / sizeof(u64)};
+        call(HITu64sIntersectMerge, imh, imout);
+        size_t imlen = imout[0] - imbuf;
         for (size_t i = 0; i + 1 < imlen; i++)
             must(imbuf[i] < imbuf[i + 1], "sIM not sorted");
 
@@ -206,11 +206,11 @@ FUZZ(u64, HITfuzz) {
         u64css mh1 = {mr1, mr1 + half};
         u64css mh2 = {mr2, mr2 + (nruns - half)};
         HITu64Start(mh1); HITu64Start(mh2);
-        u64 m1[LEN]; u64p m1o = m1;
-        u64 m2[LEN]; u64p m2o = m2;
-        HITu64Merge(mh1, &m1o);
-        HITu64Merge(mh2, &m2o);
-        size_t m1len = m1o - m1, m2len = m2o - m2;
+        u64 m1[LEN]; u64s m1o = {m1, m1 + sizeof(m1) / sizeof(u64)};
+        u64 m2[LEN]; u64s m2o = {m2, m2 + sizeof(m2) / sizeof(u64)};
+        call(HITu64Merge, mh1, m1o);
+        call(HITu64Merge, mh2, m2o);
+        size_t m1len = m1o[0] - m1, m2len = m2o[0] - m2;
 
         u64 refbuf[LEN]; size_t reflen = 0;
         size_t p1 = 0, p2 = 0;

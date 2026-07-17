@@ -176,6 +176,20 @@ ok64 SKIP4() {
     done;
 }
 
+// ABC-015: SKIPpos shifted a plain int by hi; for hi >= 31 (logs past
+// 512 GiB) that is UB and yields a garbage mask on common targets.
+ok64 SKIP5() {
+    sane(1);
+    SKIPu8tab k = {.pos = (u64)1 << 40};
+    memset(k.off, 0xff, sizeof(k.off));
+    k.off[32] = 5;
+    // blk = 2^32, top = 33; hi=32: was = (2^32-1) & ~(2^32-1) = 0
+    testeqv((long long)(SKIPu8pos(&k, 32)), (long long)(5), "%lld");
+    k.off[33] = 0xff;  // SKIP_NONE at 33
+    testeqv((long long)(SKIPu8pos(&k, 33)), (long long)(0), "%lld");
+    done;
+}
+
 ok64 SKIPtest() {
     sane(1);
     call(SKIP0);
@@ -183,6 +197,7 @@ ok64 SKIPtest() {
     call(SKIP2);
     call(SKIP3);
     call(SKIP4);
+    call(SKIP5);
     done;
 }
 

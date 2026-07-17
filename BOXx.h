@@ -225,14 +225,15 @@ fun ok64 X(BOX, Feed1)(X(, sb) box, BOX_T const *rec) {
         nruns++;
     }
 
-    //  Merge into target's chunk.  HITMerge writes through `out`
-    //  pointer-to-pointer; it advances `*out` past the produced
-    //  output.  We then read back the new data extent.
+    //  Merge into target's chunk.  ABC-015: HITMerge drains into a
+    //  bounded slice (the chunk, fenced by the next level's head) and
+    //  advances its head; we then read back the new data extent.
     X(, css) heap = {runs, runs + nruns};
     X(HIT, Start)(heap);
-    BOX_T *out = data[target][0];
-    X(HIT, Merge)(heap, &out);
-    data[target][1] = out;
+    X(, s) out = {data[target][0], data[target + 1][0]};
+    ok64 o = X(HIT, Merge)(heap, out);
+    if (o != OK) return o;
+    data[target][1] = out[0];
 
     //  Zero the dirty buffer and the source levels' data.  Required
     //  so a future Open's first-zero scan recovers the right extent

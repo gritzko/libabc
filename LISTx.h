@@ -26,3 +26,5 @@ fun ok64 X(LIST, insert)(X(, b) list, T const* entry, u32 prev) {
     X(, bAtP)(list, next)->_list.prev = len;
     return OK;
 }
+
+#undef T  // ABC-015: T leaked into every including TU

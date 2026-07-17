@@ -115,22 +115,25 @@ fun void X(HIT, AdvanceTops)(X(, css) heap, size_t ntops) {
 }
 
 // --- MergeBag: drain heap producing sorted output (keeps duplicates) ---
+// ABC-015: drains write into a bounded slice (head advances past the
+// output) and return OKNOROOM when it fills, like MSETMerge.
 
-fun void X(HIT, MergeBag)(X(, css) heap, X(, p) *out) {
+fun ok64 X(HIT, MergeBag)(X(, css) heap, X(, s) into) {
     while (!$empty(heap)) {
-        **out = *(*heap[0])[0];
-        ++*out;
+        if ($empty(into)) return OKNOROOM;
+        *into[0]++ = *(*heap[0])[0];
         X(HIT, Step)(heap);
     }
+    return OK;
 }
 
 // --- Merge: drain heap producing sorted deduplicated output ---
 
-fun void X(HIT, Merge)(X(, css) heap, X(, p) *out) {
+fun ok64 X(HIT, Merge)(X(, css) heap, X(, s) into) {
     while (!$empty(heap)) {
         HIT_T val = *(*heap[0])[0];
-        **out = val;
-        ++*out;
+        if ($empty(into)) return OKNOROOM;
+        *into[0]++ = val;
         size_t ntops = X(HIT, Tops)(heap);
         X(HIT, AdvanceTops)(heap, ntops);
         // skip remaining duplicates
@@ -138,17 +141,18 @@ fun void X(HIT, Merge)(X(, css) heap, X(, p) *out) {
                               && !X(, Z)(&val, (*heap[0])[0]))
             X(HIT, Step)(heap);
     }
+    return OK;
 }
 
 // --- Intersect: emit values present in ALL nruns iterators ---
 
-fun void X(HIT, Intersect)(X(, css) heap, X(, p) *out, size_t nruns) {
+fun ok64 X(HIT, Intersect)(X(, css) heap, X(, s) into, size_t nruns) {
     while (!$empty(heap)) {
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
         if (ntops >= nruns) {
-            **out = val;
-            ++*out;
+            if ($empty(into)) return OKNOROOM;
+            *into[0]++ = val;
         }
         X(HIT, AdvanceTops)(heap, ntops);
         // skip remaining duplicates of val
@@ -156,6 +160,7 @@ fun void X(HIT, Intersect)(X(, css) heap, X(, p) *out, size_t nruns) {
                               && !X(, Z)(&val, (*heap[0])[0]))
             X(HIT, Step)(heap);
     }
+    return OK;
 }
 
 // --- Seek: advance all entries until heap top >= key ---
@@ -273,7 +278,7 @@ fun size_t X(HIT, cssTops)(X(, csss) oh) {
     return eqlen;
 }
 
-fun void X(HIT, sIntersectMerge)(X(, csss) oheap, X(, p) *out) {
+fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
     // Filter empty inner HITs
     X(, css) *w = oheap[0];
     for (X(, css) *r = oheap[0]; r < oheap[1]; r++) {
@@ -284,7 +289,7 @@ fun void X(HIT, sIntersectMerge)(X(, csss) oheap, X(, p) *out) {
     }
     oheap[1] = w;
     size_t nruns = (size_t)$len(oheap);
-    if (nruns == 0) return;
+    if (nruns == 0) return OK;
 
     // Heapify outer
     for (size_t i = nruns / 2; i > 0; --i)
@@ -295,18 +300,19 @@ fun void X(HIT, sIntersectMerge)(X(, csss) oheap, X(, p) *out) {
         HIT_T val = *X(HIT, cssTop)($atp(oheap, 0));
 
         if (ntops >= nruns) {
-            **out = val;
-            ++*out;
+            if ($empty(into)) return OKNOROOM;
+            *into[0]++ = val;
         }
 
         // Advance top ntops inner HITs past val
         for (size_t j = ntops; j > 0; --j) {
             size_t i = j - 1;
             X(HIT, SkipValue)(*$atp(oheap, i));
-            if ($empty(*$atp(oheap, i))) return;
+            if ($empty(*$atp(oheap, i))) return OK;
             X(HIT, cssDown)(oheap, i);
         }
     }
+    return OK;
 }
 
 // --- LSM-stack compaction (1/8 size-tiered ladder) ---
@@ -320,6 +326,8 @@ fun void X(HIT, sIntersectMerge)(X(, csss) oheap, X(, p) *out) {
 // uses HIT's stream-merge-with-dedup (HITStart + HITMerge), so
 // identical full-element rows across runs collapse to one.
 
+// ABC-015: near-duplicate of MSETIsCompact/Compact (different NOROOM
+// codes); unifying the LSM-ladder logic into one home is a follow-up.
 fun b8 X(HIT, IsCompact)(X(, css) stack) {
     size_t n = $len(stack);
     for (size_t i = 0; i + 1 < n; i++) {
@@ -350,7 +358,8 @@ fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     HIT_T *base = *into;
     X(, css) sub = {stack[0] + (n - m), stack[0] + n};
     X(HIT, Start)(sub);
-    X(HIT, Merge)(sub, into);
+    ok64 o = X(HIT, Merge)(sub, into);
+    if (o != OK) return o;
     stack[0][n - m][0] = base;
     stack[0][n - m][1] = *into;
     stack[1] = stack[0] + (n - m + 1);

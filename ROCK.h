@@ -2,6 +2,8 @@
 #define ABC_ROCK_H
 
 #include <rocksdb/c.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "01.h"
 #include "BUF.h"
@@ -13,9 +15,11 @@ con ok64 ROCKBAD = 0x1b60c50b28d;
 con ok64 ROCKFAIL = 0x6d83143ca495;
 con ok64 ROCKNONE = 0x6d83145d85ce;
 
-// Convert RocksDB's malloc'd error string to ok64 (frees the string)
+// Convert RocksDB's malloc'd error string to ok64 (logs, then frees)
 fun ok64 ROCKerr(char *err) {
     if (err == NULL) return OK;
+    // ABC-015: the message was freed unread; surface it before mapping
+    fprintf(stderr, "rocksdb: %s\n", err);
     free(err);
     return ROCKFAIL;
 }

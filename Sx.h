@@ -232,17 +232,23 @@ fun T const *X($, lastc)(X($c, c) data) {
 
 // sSort / sBinSearch: see QSORTx.h (inline Z comparator, no fn-ptr overhead)
 
-// Find the first entry >= needle, or $term if none.
-fun T const *X(, sFindGE)(X($c, c) haystack, T const *needle) {
+// Find the first entry >= needle (per z), or $term if none.
+// ABC-015: custom-comparator twin of sFindGE for z-ordered runs.
+fun T const *X(, sFindGEZ)(X($c, c) haystack, T const *needle, X(, z) z) {
     size_t b = 0, e = $len(haystack);
     if (e == 0) return haystack[1];
     while (e > b + 1) {
         size_t m = (b + e) >> 1;
-        if (X(, Z)($atp(haystack, m), needle)) b = m;
+        if (z($atp(haystack, m), needle)) b = m;
         else e = m;
     }
-    if (X(, Z)($atp(haystack, b), needle)) return $atp(haystack, e);
+    if (z($atp(haystack, b), needle)) return $atp(haystack, e);
     return $atp(haystack, b);
+}
+
+// Find the first entry >= needle, or $term if none.
+fun T const *X(, sFindGE)(X($c, c) haystack, T const *needle) {
+    return X(, sFindGEZ)(haystack, needle, X(, Z));
 }
 
 // Find sub-slice [sFindGE(lo), sFindGE(hi)) within a sorted haystack.

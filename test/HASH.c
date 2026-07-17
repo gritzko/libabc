@@ -171,6 +171,50 @@ ok64 HASHd() {
     done;
 }
 
+// ABC-015: convergent insert must be op-order-independent; the stale
+// carried hash after Swap made the layout depend on insertion order.
+ok64 HASHo() {
+    sane(1);
+    // A,B: fit 7 with hA < hB;  C: fit 8 with hA < hC < hB.
+    u32 A = 0, B = 0, C = 0;
+    u64 hA = 0, hB = 0;
+    for (u32 k = 1; k < 4000000 && !(A && B && C); k++) {
+        u64 h = u32hash(&k);
+        u64 fit = h & 15;
+        if (fit == 7) {
+            if (!A) {
+                A = k;
+                hA = h;
+            } else if (!B && h > hA) {
+                B = k;
+                hB = h;
+            }
+        } else if (fit == 8 && A && B && !C && h > hA && h < hB) {
+            C = k;
+        }
+    }
+    want(A && B && C);
+    u32 keyset[3] = {A, B, C};
+    int perms[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2},
+                       {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    u32 ref[16] = {};
+    for (int p = 0; p < 6; p++) {
+        u32 tab[16] = {};
+        $u32 data = {tab, tab + 16};
+        for (int i = 0; i < 3; i++) call(HASHu32Put, data, keyset + perms[p][i]);
+        if (p == 0) {
+            memcpy(ref, tab, sizeof(ref));
+        } else {
+            want(0 == memcmp(ref, tab, sizeof(ref)));
+        }
+        for (int i = 0; i < 3; i++) {
+            u32 v = keyset[i];
+            call(HASHu32Get, &v, data);
+        }
+    }
+    done;
+}
+
 ok64 RAPtest() {
     sane(1);
     u8c hello[] = "hello world";
@@ -204,6 +248,7 @@ ok64 HASH() {
     call(HASH1);
     call(HASH3);
     call(HASHd);
+    call(HASHo);
     call(RAPtest);
     done;
 }

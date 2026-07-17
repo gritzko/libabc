@@ -159,6 +159,16 @@ static inline ok64 X(DIFF, Recurse)(e32g edl, i32s vf, i32s vb, Tcs a, Tcs b) {
         len = valid_len;
     }
 
+    // ABC-015: a degenerate middle (empty snake at either corner) would
+    // recurse on the identical subproblem forever; emit a replace instead
+    if (len == 0 && ((x == 0 && y == 0) || (x >= n && y >= m))) {
+        o = X(DIFF, AddEntry)(edl, DIFF_DEL, n);
+        if (o != OK) return o;
+        o = X(DIFF, AddEntry)(edl, DIFF_INS, m);
+        if (o != OK) return o;
+        goto emit_suffix;
+    }
+
     if (d == 1) {
         if (n > m) {
             if (y > 0) { o = X(DIFF, AddEntry)(edl, DIFF_EQ, y); if (o != OK) return o; }
@@ -194,6 +204,8 @@ emit_suffix:
 }
 
 static inline ok64 X(DIFF, s)(e32g edl, i32s work, Tcs a, Tcs b) {
+    // ABC-015: lengths are i32 and e32 run lengths are 30-bit (DIFF.h);
+    // inputs at/past 2^30 elements truncate silently — not supported here
     i32 n = $len(a), m = $len(b), max = n + m;
 
     if (max == 0) return OK;

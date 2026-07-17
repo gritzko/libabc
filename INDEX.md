@@ -171,7 +171,7 @@ In-place binary heap over a slice or buffer; the comparator is either the type's
 Index-based prev/next links living inside buffer records (no pointers).
 
  -  `list64` — a `{u32 prev, u32 next}` link cell embedded in a record.
- -  `LISTfor`/`LISTnext`/`LISTat` — iterate and dereference list nodes by buffer index.
+ -  `LISTat`/`X(LIST,next)`/`X(LIST,insert)` (LISTx) — dereference, step and link list nodes by buffer index.
 
 ###  BIN.h — logarithmic interval bins
 

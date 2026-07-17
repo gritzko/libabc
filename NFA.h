@@ -33,10 +33,14 @@ con ok64 NFANOROOM = 0x173ca5d86d8616;
 con ok64 NFABADSYN = 0x173ca2ca35c897;
 
 // --- Instantiate NFAx.h for u8 ---
-
+// ABC-015: save/restore the includer's X — NFAx.h includes NFA.h, so a
+// non-u8 instantiation used to get its X clobbered unless NFA.h came first
+#pragma push_macro("X")
+#undef X
 #define X(M, name) M##u8##name
 #include "NFAx.h"
 #undef X
+#pragma pop_macro("X")
 
 // ============================================================
 //  u8 regex compiler: string -> NFA state array

@@ -114,6 +114,9 @@ fun ok64 X(HEAP, EjectAtZ)(X(, bp) buf, size_t at, X(, z) z) {
 
 fun ok64 X(, sTopsZ)(X(, sc) heap, X(, sp) eqs, X(, z) z) {
     size_t l = $len(heap);
+    // ABC-015: an empty heap has no tops; fabricating a 1-element slice
+    // over nothing sent consumers out of bounds (twin MSETTopZ MISSes)
+    if (l == 0) return MISS;
     size_t eqlen = 1;
     size_t lim = 2;
     for (size_t i = 1; i < l && i <= lim; ++i) {
@@ -146,6 +149,7 @@ fun ok64 X(, sHeapZ)(X(, sc) heap, X(, z) z) {
     return o;
 }
 
-fun ok64 X(, sHeap)(X(, sc) heap, X(, z) z) {
-    return X(, sHeapZ)(heap, X(, Z));
-}
+// ABC-015: was (heap, z) but ignored z; now the default-Z twin of sHeapZ
+fun ok64 X(, sHeap)(X(, sc) heap) { return X(, sHeapZ)(heap, X(, Z)); }
+
+#undef T

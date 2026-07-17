@@ -18,8 +18,7 @@ typedef struct {
 
 #define LISTat Batp
 
-#define LISTfor(list, i) for (; i != 0 && _ == OK; i = Batp(list, i).next)
-
-#define LISTnext(list, ndx) Batp(list, ndx)->_list.next
+// ABC-015: dropped dead LISTfor/LISTnext macros (referenced PRO's old `_`
+// carrier and a non-struct Batp value; zero users, LISTx has the real ones)
 
 #endif

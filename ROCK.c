@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "FILE.h"  // ABC-015: a_path needs FILE_PATH_MAX_LEN
 #include "ROCKMERGE.h"
 #include "PRO.h"
 
@@ -17,7 +18,11 @@ ok64 ROCKInit(ROCKdbp db, b8 create) {
 
     rocksdb_block_based_table_options_t *topt =
         rocksdb_block_based_options_create();
-    test(topt != NULL, ROCKFAIL);
+    // ABC-015: failure paths must free what Init already allocated
+    if (topt == NULL) {
+        ROCKClose(db);
+        fail(ROCKFAIL);
+    }
 
     rocksdb_filterpolicy_t *bloom =
         rocksdb_filterpolicy_create_bloom_full(10.0);
@@ -32,7 +37,10 @@ ok64 ROCKInit(ROCKdbp db, b8 create) {
 
     db->ropt = rocksdb_readoptions_create();
     db->wopt = rocksdb_writeoptions_create();
-    test(db->ropt != NULL && db->wopt != NULL, ROCKFAIL);
+    if (db->ropt == NULL || db->wopt == NULL) {
+        ROCKClose(db);  // ABC-015: don't leak opt/cache on a partial Init
+        fail(ROCKFAIL);
+    }
     done;
 }
 
@@ -196,7 +204,10 @@ ok64 ROCKOpenMerge(ROCKdbp db, path8s path, u8ys merge) {
     db->mop = rocksdb_mergeoperator_create(ms, ROCKmerge_destroy,
                                            ROCKmerge_full, ROCKmerge_partial,
                                            ROCKmerge_delval, ROCKmerge_name);
-    test(db->mop != NULL, ROCKFAIL);
+    if (db->mop == NULL) {
+        free(ms);  // ABC-015
+        fail(ROCKFAIL);
+    }
     rocksdb_options_set_merge_operator(db->opt, db->mop);
 
     return ROCKOpenDB(db, path);
@@ -204,13 +215,18 @@ ok64 ROCKOpenMerge(ROCKdbp db, path8s path, u8ys merge) {
 
 ok64 ROCKSetMerge(ROCKdbp db, u8ys merge) {
     sane(db != NULL && db->opt != NULL && merge != NULL);
+    // ABC-015: a second SetMerge leaked the first operator; refuse it
+    test(db->mop == NULL, ROCKBAD);
     ROCKmerge_state *ms = malloc(sizeof(ROCKmerge_state));
     test(ms != NULL, ROCKFAIL);
     ms->merge = merge;
     db->mop = rocksdb_mergeoperator_create(ms, ROCKmerge_destroy,
                                            ROCKmerge_full, ROCKmerge_partial,
                                            ROCKmerge_delval, ROCKmerge_name);
-    test(db->mop != NULL, ROCKFAIL);
+    if (db->mop == NULL) {
+        free(ms);  // ABC-015
+        fail(ROCKFAIL);
+    }
     rocksdb_options_set_merge_operator(db->opt, db->mop);
     done;
 }
@@ -405,6 +421,8 @@ b8 ROCKIterValid(ROCKiterp it) {
 }
 
 void ROCKIterKey(ROCKiterp it, u8csp out) {
+    out[0] = out[1] = NULL;  // ABC-015: NULL-guard like the other iter fns
+    if (it == NULL || it->it == NULL) return;
     size_t len = 0;
     const char *k = rocksdb_iter_key(it->it, &len);
     out[0] = (u8cp)k;
@@ -412,6 +430,8 @@ void ROCKIterKey(ROCKiterp it, u8csp out) {
 }
 
 void ROCKIterVal(ROCKiterp it, u8csp out) {
+    out[0] = out[1] = NULL;  // ABC-015
+    if (it == NULL || it->it == NULL) return;
     size_t len = 0;
     const char *v = rocksdb_iter_value(it->it, &len);
     out[0] = (u8cp)v;

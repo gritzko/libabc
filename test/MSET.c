@@ -487,6 +487,54 @@ ok64 MSETl() {
     done;
 }
 
+// ABC-015: SeekZ must honor the custom comparator (descending order here);
+// it used default-Z sFindGE inside the run, yielding garbage positions.
+fun b8 u64Zdesc(u64c *a, u64c *b) { return *a > *b; }
+
+ok64 MSETm() {
+    sane(1);
+    u64 a[] = {9, 7, 5, 3, 1};
+    u64 b[] = {8, 6, 4, 2};
+    u64cs runs[2] = {{a, a + 5}, {b, b + 4}};
+    u64css iter = {runs, runs + 2};
+    MSETu64StartZ(iter, u64Zdesc);
+    testeqv((long long)(****iter), (long long)((u64)9), "%lld");
+    call(MSETu64SeekZ, iter, (u64)5, u64Zdesc);
+    testeqv((long long)(****iter), (long long)((u64)5), "%lld");
+    call(MSETu64SeekZ, iter, (u64)3, u64Zdesc);
+    testeqv((long long)(****iter), (long long)((u64)3), "%lld");
+    // absent key: land on the next one in z order
+    u64cs runs2[2] = {{a, a + 5}, {b, b + 4}};
+    u64css iter2 = {runs2, runs2 + 2};
+    MSETu64StartZ(iter2, u64Zdesc);
+    call(MSETu64SeekZ, iter2, (u64)100, u64Zdesc);
+    testeqv((long long)(****iter2), (long long)((u64)9), "%lld");
+    testeqv((long long)(MSETu64SeekZ(iter2, (u64)0, u64Zdesc)),
+            (long long)(MSETNODATA), "%lld");
+    done;
+}
+
+// ABC-015: MSETGet on an over-deep stack must error, not silently drop
+// the newest runs (that turned existing keys into MSETNONE).
+ok64 MSETn() {
+    sane(1);
+    u64 vals[MSET_MAX_LEVELS + 1];
+    u64cs runs[MSET_MAX_LEVELS + 1];
+    for (size_t i = 0; i <= MSET_MAX_LEVELS; i++) {
+        vals[i] = (u64)(i * 10);
+        runs[i][0] = vals + i;
+        runs[i][1] = vals + i + 1;
+    }
+    u64css stack = {runs, runs + MSET_MAX_LEVELS + 1};
+    // key lives in the newest (tail) run: must NOT report MSETNONE
+    testeqv((long long)(MSETu64Get(stack, (u64)(MSET_MAX_LEVELS * 10))),
+            (long long)(MSETNOROOM), "%lld");
+    // a fitting stack still finds its keys
+    u64css stack2 = {runs, runs + MSET_MAX_LEVELS};
+    testeqv((long long)(MSETu64Get(stack2, (u64)10)), (long long)(OK), "%lld");
+    done;
+}
+
 ok64 MSETtest() {
     sane(1);
     call(MSET0);
@@ -511,6 +559,8 @@ ok64 MSETtest() {
     call(MSETj);
     call(MSETk);
     call(MSETl);
+    call(MSETm);
+    call(MSETn);
     done;
 }
 

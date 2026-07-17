@@ -8,7 +8,9 @@
 #include "TLV.h"
 #define T X(, )
 #define SKIP_BLK_HI (sizeof(T) * 8)
-#define SKIP_BLK_MASK ((1UL << SKIP_BLK_HI) - 1)
+// ABC-015: 1UL << 64 is UB for a u64 instantiation; mask the shift count
+#define SKIP_BLK_MASK \
+    (SKIP_BLK_HI >= 64 ? ~(size_t)0 : (((size_t)1 << (SKIP_BLK_HI & 63)) - 1))
 
 #define SKIP_TERM_LEN (1 + sizeof(T))
 #define SKIP_TERM_LIT ('0' + sizeof(T))
@@ -35,7 +37,8 @@ fun u32 X(SKIP, tlvlen)(size_t pos) {
 fun size_t X(SKIP, pos)(X(SKIP, tab) const* k, u8 hi) {
     size_t pos = k->pos;
     if (pos == 0 || hi > X(SKIP, top)(pos)) return 0;
-    size_t mask = (1 << hi) - 1;
+    // ABC-015: int shift was UB/garbage for hi >= 31 (logs past 512 GiB)
+    size_t mask = ((size_t)1 << hi) - 1;
     size_t was = (X(SKIP, blk)(pos) - 1) & ~mask;
     size_t off = k->off[hi];
     if (off == SKIP_NONE) return 0;
@@ -103,7 +106,8 @@ fun ok64 X(SKIP, finish)(u8bp buf, X(SKIP, tab) * k) {
         call($u8retract, u8bDataC(buf), $len(lastk));
     }
     a$raw(w, k->off);
-    a$head(u8c, wl, w, X(SKIP, top)(pos));
+    // ABC-015: top() counts T entries, the byte view needs top*sizeof(T)
+    a$head(u8c, wl, w, X(SKIP, top)(pos) * sizeof(T));
     call(TLVu8sFeed, u8bIdle(buf), SKIP_TLV_TYPE, wl);
     done;
 }
@@ -122,7 +126,9 @@ fun ok64 X(SKIP, load)(X(SKIP, tab) * k, u8bp buf) {
     u64 termlen2 = 2 + top * sizeof(T);
     len2 = len - termlen2;
     call(X(SKIP, drain), k, buf, len2);
-    u8 l = termlen2 / sizeof(T) - 2;
+    // ABC-015: 2 is the TLV header in BYTES; dividing it by sizeof(T)
+    // miscounted entries for sizeof(T) > 1 (identical for u8)
+    u8 l = (termlen2 - 2) / sizeof(T);
 
     X(SKIP, tab) pre = *k;
 
@@ -133,7 +139,7 @@ fun ok64 X(SKIP, load)(X(SKIP, tab) * k, u8bp buf) {
             --hi;
         }
         size_t prepos = X(SKIP, pos)(&pre, hi);
-        u8 preoff = pre.off[hi];
+        T preoff = pre.off[hi];  // ABC-015: u8 truncated for sizeof(T) > 1
         u8 ll = X(SKIP, len)(prepos);
         zero(pre);
         call(X(SKIP, drain), &pre, buf, prepos);
@@ -217,6 +223,11 @@ fun ok64 X(SKIP, findTLV)(u8csp rec, u8bp buf, u8cs x, u8zs z) {
     return SKIPNONE;
 }
 
-#undef aSKIP
+// ABC-015: undef all template-local names (aSKIP never existed; T and
+// the SKIP_* knobs used to leak into every including TU)
+#undef T
 #undef SKIP_BLK_HI
 #undef SKIP_BLK_MASK
+#undef SKIP_TERM_LEN
+#undef SKIP_TERM_LIT
+#undef SKIP_NONE

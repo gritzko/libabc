@@ -106,6 +106,13 @@ target_compile_options(MSETtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(MSETtest abc)
 add_test(NAME MSETtest COMMAND MSETtest)
 
+# ABC-015: template hygiene pin (non-u8 instantiations, no leftovers)
+add_executable(TEMPLtest TEMPL.c)
+target_link_options(TEMPLtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(TEMPLtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(TEMPLtest abc)
+add_test(NAME TEMPLtest COMMAND TEMPLtest)
+
 add_executable(HITtest HIT.c)
 target_link_options(HITtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(HITtest PRIVATE ${TEST_CXX_FLAGS})
