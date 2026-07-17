@@ -1,5 +1,7 @@
 #ifndef ABC_UDP_H
 #define ABC_UDP_H
+#include <errno.h>
+
 #include "NET.h"
 
 con ok64 UDPFAIL = 0x1e3593ca495;
@@ -18,12 +20,20 @@ ok64 UDPBind(int *fd, u8cs addr);
 ok64 UDPConnect(int *fd, u8cs addr);
 
 fun ok64 UDPDrain($u8 into, NETaddr addr, int fd) {
-    socklen_t len = Blen(addr);
-    ssize_t nread =
-        recvfrom(fd, *into, $len(into), 0, (struct sockaddr *)*addr, &len);
-    if (nread == -1) return UDPFAIL;
+    socklen_t len;
+    ssize_t nread;
+    do {  // ABC-012: EINTR retries in place, EAGAIN is a soft NETAGAIN
+        len = (socklen_t)Blen(addr);
+        nread = recvfrom(fd, *into, $len(into), MSG_TRUNC,
+                         (struct sockaddr *)*addr, &len);
+    } while (nread == -1 && errno == EINTR);
+    if (nread == -1)
+        return errno == EAGAIN || errno == EWOULDBLOCK ? NETAGAIN : UDPFAIL;
+    if (len > (socklen_t)Blen(addr)) len = (socklen_t)Blen(addr);
     range64 range = {0, len};
     Bu8rewind(addr, range);
+    // ABC-012: MSG_TRUNC reports the real datagram size; refuse silent cuts
+    if ((size_t)nread > $len(into)) return NETNOSPACE;
     *into += nread;
     return OK;
 }

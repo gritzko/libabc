@@ -319,7 +319,7 @@ Address parsing/resolution and thin TCP/UDP socket verbs; a DNS message codec fo
 An fd+timer event poller (`POL`), its read/write buffer layer (`POLL`), and an async libcurl wrapper (`CURL`).
 
  -  `poller`/`POLInit`/`POLLoop`/`POLStop`/`POLSleep` — set up, run, and stop the event loop.
- -  `POLTrackEvents`/`AddEvents`/`IgnoreEvents`/`TrackTime`/`AddTime` — register an fd's interest set + timer callbacks.
+ -  `POLTrackEvents`/`AddEvents`/`Events`/`IgnoreEvents`/`TrackTime`/`AddTime` — register/read an fd's interest set + timer callbacks.
  -  `CURLInit`/`CURLGet`/`CURLPost`/`CURLTick`/`CURLFree` — async HTTP GET/POST driven by callbacks.
 
 ###  URI.h, URI.rl.h — URI parsing

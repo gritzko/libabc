@@ -32,6 +32,8 @@ ok64 POLTrackEvents(int fd, poller p);
 ok64 POLAddEvents(int fd, short events);
 // stop tracking events on a file descriptor
 ok64 POLIgnoreEvents(int fd);
+// read the current interest mask of a tracked descriptor
+ok64 POLEvents(int fd, short *events);
 
 // assign the timer callback
 ok64 POLTrackTime(timercb callback);

@@ -205,6 +205,13 @@ add_test(NAME URItest COMMAND URItest)
 
 if (WITH_INET)
 
+# ABC-012: NETInfo / aNETAddress / NETResolve regressions
+add_executable(NETtest NET.c)
+target_link_options(NETtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(NETtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(NETtest abc)
+add_test(NAME NETtest COMMAND NETtest)
+
 add_executable(HTTPtest HTTP.c)
 target_link_options(HTTPtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(HTTPtest PRIVATE ${TEST_CXX_FLAGS})

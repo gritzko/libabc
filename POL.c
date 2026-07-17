@@ -31,9 +31,11 @@ int POLMaxFiles() { return POL_MAXFD; }
 b8 POLAny() { return !pollerbEmpty(POL_QUEUE); }
 
 ok64 POLInit(int max_fd) {
-    pollerbAllocate(POL_QUEUE, max_fd);
+    sane(max_fd > 0);
+    // ABC-012: an unchecked allocation left a NULL queue behind an OK
+    call(pollerbAllocate, POL_QUEUE, max_fd);
     POL_MAXFD = max_fd;
-    return OK;
+    done;
 }
 
 ok64 POLFree() {
@@ -112,6 +114,14 @@ ok64 POLIgnoreEvents(int fd) {
     int idx = POLFind(fd);
     if (idx < 0) return POLNONE;
     return HEAPpollerEjectAtZ(POL_QUEUE, idx, pollerZ);
+}
+
+ok64 POLEvents(int fd, short *events) {
+    int idx = POLFind(fd);
+    if (idx < 0) return POLNONE;
+    poller** data = pollerbData(POL_QUEUE);
+    *events = (short)(*data)[idx].events;
+    return OK;
 }
 
 fun int POLFindTimer(void* payload);
@@ -298,7 +308,12 @@ ok64 POLLoop(u64 timens) {
             continue;
         }
 
-        int pollms = (next_timeout - now) / POLNanosPerMSec;
+        // ABC-012: clamp; a multi-week deadline overflowed int into a
+        // negative timeout, making poll() block forever
+        u64 waitns = next_timeout - now;
+        int pollms = waitns > 60000UL * POLNanosPerMSec
+                         ? 60000
+                         : (int)(waitns / POLNanosPerMSec);
         poll(vec, pollscount, pollms);
 
         // Process poll results

@@ -15,6 +15,7 @@
 con ok64 NETBADADDR = 0x5ce74b28d28d35b;
 con ok64 NETNOSPACE = 0x5ce75761c64a30e;
 con ok64 NETNONE = 0x1739d5d85ce;
+con ok64 NETAGAIN = 0x5ce74a40a497;
 
 typedef Bu8 NETaddr;
 #define NEThost(a) u8bPast(a)
@@ -26,15 +27,18 @@ typedef Bu8 NETaddr;
 
 #define aNETraw(name) aBpad(u8, name, 128);
 
+//  ABC-012: copy only if the checked rewind sized the regions; an oversize
+//  host/port leaves `name` empty instead of smashing the stack pad.
 #define aNETAddress(name, host, port)         \
     aBpad(u8, name, NETmaxhost + NETmaxserv); \
     {                                         \
-        int hl = strlen(host) + 1;            \
-        int pl = strlen(port) + 1;            \
+        u64 hl = strlen(host) + 1;            \
+        u64 pl = strlen(port) + 1;            \
         range64 r = {hl, hl + pl};            \
-        Bu8rewind(name, r);                   \
-        memcpy(name[0], host, hl);            \
-        memcpy(name[1], port, pl);            \
+        if (Bu8rewind(name, r) == OK) {       \
+            memcpy(name[0], host, hl);        \
+            memcpy(name[1], port, pl);        \
+        }                                     \
     }
 
 fun ok64 NETInfo(NETaddr text, NETaddr raw) {
@@ -48,8 +52,10 @@ fun ok64 NETInfo(NETaddr text, NETaddr raw) {
     u64 hl = strlen(host);
     u64 sl = strlen(service);
     range64 range = {hl + 1, hl + sl + 2};
-    if (range.till > Blen(text)) return NETNOSPACE;
-    Bu8rewind(text, range);
+    if (Bu8rewind(text, range) != OK) return NETNOSPACE;
+    // ABC-012: rewind only moves boundaries; copy the resolved text in
+    memcpy(text[0], host, hl + 1);
+    memcpy(text[1], service, sl + 1);
     return OK;
 }
 

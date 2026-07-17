@@ -5,7 +5,7 @@
 
 ok64 UDPBind(int *fd, u8cs addr) {
     sane(fd != NULL && !$empty(addr));
-    int s, sfd;
+    int sfd = -1;
     struct addrinfo *result = NULL, *rp;
 
     URIstate uri = {};
@@ -16,16 +16,11 @@ ok64 UDPBind(int *fd, u8cs addr) {
         sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (sfd == -1) continue;
 
-        int rc = bind(sfd, rp->ai_addr, rp->ai_addrlen);
-        if (rc != 0) {
-            trace("bind failed: %s\n", strerror(errno));
-            close(sfd);
-            if (result) NETFreeAddress(&result);
-            return UDPFAIL;
-        }
-        if (rc == 0) break;
-
+        if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == 0) break;
+        // ABC-012: keep walking the list (dual-stack: v6 may fail, v4 next)
+        trace("bind failed: %s\n", strerror(errno));
         close(sfd);
+        sfd = -1;
     }
 
     NETFreeAddress(&result);

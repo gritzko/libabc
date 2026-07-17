@@ -5,20 +5,25 @@
 
 #include "POL.h"
 
+// ABC-012: curl_multi/curl_running/timer are process-global while POL state
+// is thread_local: drive CURL* only from the one thread that ran CURLInit.
 static CURLM *curl_multi = NULL;
 static int curl_running = 0;
+
+#ifndef CURL_WRITEFUNC_ERROR
+#define CURL_WRITEFUNC_ERROR 0  // pre-7.87 curl: any short count aborts
+#endif
 
 // Header callback - accumulates response headers
 static size_t curl_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
     CURLreq *req = (CURLreq *)userdata;
     size_t bytes = size * nmemb;
 
-    if (Bidlelen(req->headers) < bytes) {
-        u8bReserve(req->headers, bytes);
-    }
+    // ABC-012: propagate buffer failure; never ack bytes we did not keep
+    if (u8bReserve(req->headers, bytes) != OK) return CURL_WRITEFUNC_ERROR;
 
     u8cs src = {(u8c *)ptr, (u8c *)ptr + bytes};
-    u8bFeed(req->headers, src);
+    if (u8bFeed(req->headers, src) != OK) return CURL_WRITEFUNC_ERROR;
     return bytes;
 }
 
@@ -27,13 +32,11 @@ static size_t curl_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata
     CURLreq *req = (CURLreq *)userdata;
     size_t bytes = size * nmemb;
 
-    // Grow buffer if needed (downstream reallocation - not ideal but necessary here)
-    if (Bidlelen(req->response) < bytes) {
-        u8bReserve(req->response, bytes);
-    }
+    // ABC-012: propagate buffer failure; a truncated 200 body must FAIL
+    if (u8bReserve(req->response, bytes) != OK) return CURL_WRITEFUNC_ERROR;
 
     u8cs src = {(u8c *)ptr, (u8c *)ptr + bytes};
-    u8bFeed(req->response, src);
+    if (u8bFeed(req->response, src) != OK) return CURL_WRITEFUNC_ERROR;
     return bytes;
 }
 
@@ -46,15 +49,16 @@ static short curl_pol_cb(int fd, poller *p) {
     if (p->revents & POLLIN) action |= CURL_CSELECT_IN;
     if (p->revents & POLLOUT) action |= CURL_CSELECT_OUT;
 
-    // Save events before calling curl - p may become invalid if socket is removed
-    short events = p->events;
-
     curl_multi_socket_action(curl_multi, fd, action, &curl_running);
     CURLTick();  // Check for completions
 
     // If no more running handles, return 0 to stop watching
     if (curl_running == 0) return 0;
 
+    // ABC-012: return the POST-action interest mask; socket_action may have
+    // re-registered this fd (IN<->OUT) and the pre-action mask would stall it
+    short events = 0;
+    if (POLEvents(fd, &events) != OK) return 0;  // curl dropped the fd
     return events;
 }
 
@@ -74,7 +78,8 @@ static int curl_sock_cb(CURL *easy, curl_socket_t fd, int action,
             .events = events,
             .tofd = fd,
         };
-        POLTrackEvents(fd, p);
+        // ABC-012: an untracked fd would stall the transfer; abort instead
+        if (POLTrackEvents(fd, p) != OK) return -1;
     }
     return 0;
 }
