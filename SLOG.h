@@ -81,11 +81,11 @@ ok64 SLOGSeek(u64gp stack, u8csc stream, u8zs less, u8csc target);
 
 // --- Skip record encoding (delta + ZINT compressed) ---
 
-// Write offsets as delta-compressed ZINT TLV record
-// data = gauge [container_start, write_pos, buf_end]
-// If trailen is true, appends reclen byte (for close records)
-// If count > 64, excess entries are flushed as 'k' records
-ok64 SLOGu8sFeedSkips(u8gp data, u8 lit, u64csc offs, b8 trailen);
+// Write offsets as delta-compressed ZINT TLV record into slice `into`.
+// If trailen is true, appends reclen byte (for close records).
+// ABC-014: decl now matches the definition's (u8sp into) — the caller
+// passes the gauge's rest slice, not the gauge itself.
+ok64 SLOGu8sFeedSkips(u8sp into, u8 lit, u64csc offs, b8 trailen);
 
 // Read delta-compressed ZINT offsets into gauge
 ok64 SLOGu8bDrainSkips(u64gp into, u8csc from);

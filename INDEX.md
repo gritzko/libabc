@@ -370,7 +370,7 @@ The shared lexer framework and a code generator that emits typed lexer templates
 
 Tracks open/close of nested markup or container contexts in a buffer, with splice-on-close rendering. Guide: [NEST.md].
 
- -  `NESTInsert`/`NESTSplice`/`NESTSpliceAll`/`NESTSpliceAny` — open a context variable and splice (close) one, all.
+ -  `NESTSplice`/`NESTSpliceAll`/`NESTSpliceAny` — splice (close) a context variable: one, all, any.
  -  `NESTFeed`/`NESTRender` — feed literal content into the current context and render the accumulated nested structure.
 
 ###  ABC.h — umbrella header

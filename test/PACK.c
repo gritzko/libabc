@@ -1,6 +1,7 @@
 #include "PACK.h"
 
 #include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -236,6 +237,73 @@ ok64 PACKtestOpenFail() {
     done;
 }
 
+// ABC-014: an untrusted trailer that lies about datalen must be bounded
+// against the file.  A page holds >=1 compressed byte, so npages can never
+// exceed the on-disk data area (fsize-16-idxsize).  Here the trailer claims
+// 100 pages but the file has ZERO data area: pre-fix PACKOpen returned OK
+// with a wild datalen (buf[2]=buf[0]+datalen); post-fix rejects PACKCORRUPT.
+// (The same bound also guards the near-u64max ceil-div wrap.)
+ok64 PACKtestTrailerWrap() {
+    sane(1);
+
+    u32 before = PACKtestPagesUsed();
+
+    u64 datalen = PAGESIZE * 100;  // npages = 100
+    u64 npages = 100;
+    u64 idxsize = PACKIdxSize(npages);
+
+    // File = [idxsize bytes fake index][16B trailer]; data area = 0.
+    int fd = open(TEST_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    test(fd >= 0, PACKFAIL);
+    u8 *idxbuf = calloc(idxsize, 1);
+    test(idxbuf != NULL, PACKNOROOM);
+    ssize_t iw = write(fd, idxbuf, idxsize);
+    free(idxbuf);
+    test(iw == (ssize_t)idxsize, PACKFAIL);
+    u64 trailer[2] = {datalen, idxsize};
+    test(write(fd, trailer, sizeof(trailer)) == sizeof(trailer), PACKFAIL);
+    close(fd);
+
+    pack pr = {};
+    __ = PACKOpen(&pr, TEST_FILE);
+    test(__ != OK, PACKFAIL);  // must reject: 100 pages, 0 data bytes
+    __ = OK;
+
+    u32 after = PACKtestPagesUsed();
+    test(after == before, PACKFAIL);
+    test(pr.pg == NULL && pr.fd < 0 && pr.idx[0] == NULL, PACKFAIL);
+
+    unlink(TEST_FILE);
+    done;
+}
+
+// ABC-014: PACKClose must free fd + PAGE + index mmap even when the
+// flush/index/trailer write fails (ENOSPC).  Write to /dev/full so every
+// write() returns ENOSPC; a leaked PAGE would keep its registry slot.
+ok64 PACKtestCloseFail() {
+    sane(1);
+
+    u32 before = PACKtestPagesUsed();
+
+    pack pw = {};
+    call(PACKCreate, &pw, "/dev/full", PAGESIZE * 10);
+
+    // Stage a full page so PACKClose actually writes (and thus fails).
+    u8p buf = pw.pg->buf[0];
+    for (int i = 0; i < PAGESIZE; i++) buf[i] = (u8)(i & 0xFF);
+    ((u8 **)pw.pg->buf)[2] = buf + PAGESIZE;
+
+    __ = PACKClose(&pw);
+    test(__ != OK, PACKFAIL);  // write to /dev/full fails (ENOSPC)
+    __ = OK;
+
+    u32 after = PACKtestPagesUsed();
+    test(after == before, PACKFAIL);  // no leaked PAGE slot
+    test(pw.pg == NULL && pw.fd < 0 && pw.idx[0] == NULL, PACKFAIL);
+
+    done;
+}
+
 ok64 PACKtest() {
     sane(1);
     call(PACKtestIndex);
@@ -243,6 +311,8 @@ ok64 PACKtest() {
     call(PACKtestLargeFile);
     call(PACKtestCreateFail);
     call(PACKtestOpenFail);
+    call(PACKtestTrailerWrap);
+    call(PACKtestCloseFail);
     done;
 }
 

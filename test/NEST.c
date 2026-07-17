@@ -44,10 +44,34 @@ ok64 NESTtest2() {
     done;
 }
 
+// ABC-014: NESTFeed checked room once up-front, then copied literals
+// without re-checking while NESTaddvar shrank idle[1] 16B/var.  A '$var'
+// followed by enough literals overran idle into the stored mark128s.
+// Post-fix the per-char room check must stop it with NESTNOROOM.
+ok64 NESTtest3() {
+    sane(1);
+    aBpad(u8, ct, 48);
+    NESTreset(ct);
+    // "$a" adds a 16B mark (idle end drops 48->32), then 40 space literals
+    // would run idle head to 40, smashing the mark; insert len 42 < 48 so
+    // the single up-front check is fooled.  Spaces end the var name.
+    a_pad(u8, tbuf, 64);
+    u8 *tp = tbuf[0];
+    *tp++ = '$';
+    *tp++ = 'a';
+    for (int i = 0; i < 40; ++i) *tp++ = ' ';
+    u8cs templ = {tbuf[0], tp};
+    __ = NESTFeed(ct, templ);
+    test(__ == NESTNOROOM, NESTBAD);  // must refuse, not overrun
+    __ = OK;
+    done;
+}
+
 ok64 NESTtest() {
     sane(1);
     call(NESTtest1);
     call(NESTtest2);
+    call(NESTtest3);
     done;
 }
 

@@ -23,9 +23,11 @@ ok64 SLOGFeed(u64gp stack, u8gp data) {
     while (count < len && SLOGRank(u64sAt(u64gLeft(stack), len - 1 - count)) < r)
         ++count;
 
-    if (len>=128) 
+    // ABC-014: cap the flush count at the reader's a_pad(u64,tmp,64) so a
+    // 'k' record never carries more offsets than SLOGSeek can expand.
+    if (count > 64)
         count = 64;
-    if (count == 0) 
+    if (count == 0)
         done;
 
     // Pop and write compressed 'k' TLV record
@@ -213,6 +215,9 @@ ok64 SLOGu8sFeedSkips(u8sp into, u8 lit, u64csc offs, b8 trailen) {
         size_t bodylen = complen + 1;
         size_t reclen = TLVlen(bodylen);
         test(reclen <= 255, ok64sub(SLOGBAD, RON_g));
+        // ABC-014: the trailing reclen byte needs one free slot; an exact
+        // fill of body by ZINTu8sFeedBlocked would make this an OOB store.
+        test(body_idle[0] < body_idle[1], SLOGNOROOM);
         *body_idle[0] = (u8)reclen;
         fullbody[0] = body[1];
         fullbody[1] = body_idle[0] + 1;

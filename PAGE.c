@@ -232,7 +232,9 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
             }
             ssize_t n = write(fd, *data, u8csLen(data));
             if (n < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) done;
+                // ABC-014: `need` is still unmet — report FILEAGAIN, not OK,
+                // so callers don't act on a false success postcondition.
+                if (errno == EAGAIN || errno == EWOULDBLOCK) fail(FILEAGAIN);
                 fail(FILEErr(FILEFAIL));
             }
             if (n == 0) fail(PAGEFAIL);
@@ -250,7 +252,9 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
             }
             ssize_t n = read(fd, *idle, u8sLen(idle));
             if (n < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) done;
+                // ABC-014: `need` is still unmet — report FILEAGAIN, not OK,
+                // so callers don't act on a false success postcondition.
+                if (errno == EAGAIN || errno == EWOULDBLOCK) fail(FILEAGAIN);
                 fail(FILEErr(FILEFAIL));
             }
             if (n == 0) return END;

@@ -13,8 +13,6 @@ con ok64 NESTNODATA = 0x5ce71d5d834a74a;
 con ok64 NESTBAD = 0x1739c74b28d;
 con ok64 NESTNONE = 0x5ce71d5d85ce;
 
-ok64 NESTInsert(u8bp ct, ok64 var);
-
 ok64 NESTSplice(u8bp ct, ok64 var);
 
 ok64 NESTSpliceMany(u8bp ct, ok64 var, b8 some);

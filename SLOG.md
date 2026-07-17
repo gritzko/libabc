@@ -26,7 +26,7 @@ start binary search.
 Two TLV record types:
 
     'k' - intermediate skip record (flushed during writes)
-    'i' - close record (final flush, last byte = record length)
+    'c' - close record (final flush, last byte = record length)
 
 Skip record body contains raw u64 offsets (relative to DATA start).
 Offsets are stored in order on a stack; flushing pops lower-rank
@@ -54,7 +54,7 @@ con ok64 SLOGEOF    = 0x1c55840e60f;
 con ok64 SLOGNONE   = 0x7156105d85ce;
 
 #define SLOG_K 'k'   // intermediate skip record
-#define SLOG_I 'i'   // close record
+#define SLOG_C 'c'   // close record
 
 // State is a u64 gauge (stack of offsets), typically from u64bDataIdle()
 // Write: stack grows as records are sampled, shrinks on flush
@@ -76,8 +76,8 @@ ok64 SLOGMark(u64gp stack, u8bp buf);
 // May mark the offset if a block has changed
 ok64 SLOGSample(u64gp stack, u8bp buf);
 
-// Close stream: flush remaining stack as 'i' record.
-// Last byte of 'i' = total length of 'i' record (max 255).
+// Close stream: flush remaining stack as 'c' record.
+// Last byte of 'c' = total length of 'c' record (max 255).
 ok64 SLOGClose(u64gp stack, u8bp buf);
 
 // --- Read Path ---
@@ -89,7 +89,7 @@ ok64 SLOGOpen(u64gp stack, u8csc stream);
 // Seek to equal-or-greater marked entry. Uses the stack to navigate
 // in a logarithmical number of steps. The offset of the target
 // (or greater marked entry) is on the top of the stack on return.
-ok64 SLOGSeek(u64gp stack, u8csc stream, $cmpfn cmp, u8csc target);
+ok64 SLOGSeek(u64gp stack, u8csc stream, u8zs less, u8csc target);
 ```
 
 ##  Write Action Sequence
@@ -104,7 +104,7 @@ ok64 SLOGSeek(u64gp stack, u8csc stream, $cmpfn cmp, u8csc target);
      d. Write popped offsets as 'k' TLV record
      e. Push `off` onto stack
 4. After last record, call `SLOGClose(stack, buf)`
-   - Flushes all stack entries as 'i' record
+   - Flushes all stack entries as 'c' record
    - Appends record length as final byte
 
 Example write sequence (G=7, blocks are 128 bytes):
@@ -120,20 +120,20 @@ write rec, Sample  -> off=0x200, block=4, rank=2 > 0, flush [0x90, 0x180] as 'k'
                       stack: [0, 0x1F0] (0x1F0 = 'k' record offset)
 write rec, Sample  -> off=0x280, block=5, rank=0, push
                       stack: [0, 0x1F0, 0x280]
-SLOGClose          -> flush all as 'i': [0, 0x1F0, 0x280, reclen]
+SLOGClose          -> flush all as 'c': [0, 0x1F0, 0x280, reclen]
 ```
 
 ##  Read Action Sequence
 
 1. Allocate stack, call `SLOGOpen(stack, stream)`:
-   - Reads last byte to get 'i' record length
-   - Parses 'i' record, pushes offsets in reverse (lower on top)
+   - Reads last byte to get 'c' record length
+   - Parses 'c' record, pushes offsets in reverse (lower on top)
    - Stack now has: `[highest_off, ..., 0]` (0 on top)
-2. To seek for `target` using comparator `cmp`:
-   - Call `SLOGSeek(stack, stream, cmp, target)`
+2. To seek for `target` using comparator `less`:
+   - Call `SLOGSeek(stack, stream, less, target)`
    - Internally:
      a. Pop top offset, read record at that position
-     b. Compare record with target using `cmp`
+     b. Compare record with target using `less`
      c. If record < target: continue popping (skip past it)
      d. If record >= target: found, leave offset on top, return
      e. If stack has 'k' record offset: parse it, push its offsets
@@ -142,9 +142,9 @@ SLOGClose          -> flush all as 'i': [0, 0x1F0, 0x280, reclen]
 
 ##  Close Record Format
 
-The 'i' close record:
+The 'c' close record:
 ```
-[lit='i'][len][off0][off1]...[offN][reclen]
+[lit='c'][len][off0][off1]...[offN][reclen]
           ^    <-- offsets as u64 -->  ^
           |                            +-- 1 byte: total TLV record length
           +-- TLV length field (1 or 4 bytes)
@@ -188,7 +188,7 @@ Worst case adds ~12 comparisons for 10-byte records (one block worth).
 For streams with large records (e.g., 200+ byte TLVs):
 - Every record crosses a block boundary, so 100% get marked
 - No linear scan needed; pure logarithmic seek
-- Higher index overhead: more 'k' records flushed, larger 'i' record
+- Higher index overhead: more 'k' records flushed, larger 'c' record
 - Stack may need more slots (still bounded by log₂(stream_size/128))
 
 ### Space Overhead
@@ -196,11 +196,11 @@ For streams with large records (e.g., 200+ byte TLVs):
 The index overhead is bounded:
 - Stack slots: O(log₂(N)) where N = stream size in blocks
 - 'k' record frequency: one per rank-increase event
-- 'i' record size: stack_depth × 8 bytes + 3 bytes header
+- 'c' record size: stack_depth × 8 bytes + 3 bytes header
 
 For a 1GB stream with 10-byte records (~100M records, ~8M blocks):
 - ~23 stack slots maximum (log₂(8M))
-- 'i' record: ~186 bytes
+- 'c' record: ~186 bytes
 - Total 'k' records: O(blocks) but amortized over stream
 
 ##  TODO

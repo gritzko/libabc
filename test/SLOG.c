@@ -639,8 +639,39 @@ ok64 SLOG9() {
     done;
 }
 
+// ABC-014: the writer clamped a flush to 64 only when the stack had >=128
+// entries, so a flush of 65..127 low-rank offsets emitted a 'k' record the
+// reader's a_pad(u64,tmp,64) cannot expand.  Drive SLOGFeed with 70 rank-0
+// offsets and a rank-1 write offset: the cap must leave 70-64=6 on the stack.
+ok64 SLOG10() {
+    sane(1);
+
+    a_pad(u8, buf, 8192);
+    a_pad(u64, stk, 128);
+    u64gp stkdi = u64bDataIdle(stk);
+    u8gp data = u8bDataIdle(buf);
+
+    // Fake 256 bytes already written -> write offset 256 is in a rank-1
+    // block, so a flush pops every rank-0 entry below it.
+    ((u8 **)buf)[2] = buf[0] + 256;
+
+    // Push 70 offsets, all inside block 1 (rank 0), ascending.
+    for (u64 i = 1; i <= 70; ++i) {
+        call(u64gFeed1, stkdi, i);
+    }
+    test(u64gLeftLen(stkdi) == 70, SLOGBAD);
+
+    call(SLOGFeed, stkdi, data);
+
+    // Post-fix: exactly 64 flushed, 6 remain.  Pre-fix all 70 flushed (0).
+    testeqv((long long)6, (long long)u64gLeftLen(stkdi), "%lld");
+
+    done;
+}
+
 ok64 SLOGtest() {
     sane(1);
+    call(SLOG10);
     call(SLOG0);
     call(SLOG1);
     call(SLOG2);

@@ -117,34 +117,46 @@ ok64 PACKFlush(packp p) {
     done;
 }
 
+// ABC-014: the flush/index/trailer writes that can fail (e.g. ENOSPC).
+// Split out so PACKClose can free fd + PAGE + index mmap on every path.
+fun ok64 PACKCloseWrite(packp p) {
+    sane(p != NULL && p->writing);
+
+    // Flush complete pages
+    call(PACKFlush, p);
+
+    // Write remaining partial page (if any)
+    u8p data = p->pg->buf[1];
+    size_t remaining = p->pg->buf[2] - data;
+    if (remaining > 0) {
+        call(PACKWritePage, p, data, remaining);
+    }
+
+    // Write index
+    u64 npages = (p->datalen + PAGESIZE - 1) / PAGESIZE;
+    u64 nblocks = PACKIdxBlocks(npages);
+    u64 idxsize = nblocks * PACK_BLOCK_SIZE;
+    ssize_t w = write(p->fd, p->idx[0], idxsize);
+    test(w == (ssize_t)idxsize, PACKFAIL);
+
+    // Write trailer: uncompressed length (u64) + index size (u64)
+    u64 trailer[2] = {p->datalen, idxsize};
+    w = write(p->fd, trailer, sizeof(trailer));
+    test(w == sizeof(trailer), PACKFAIL);
+
+    done;
+}
+
 ok64 PACKClose(packp p) {
     sane(p != NULL);
 
+    // ABC-014: wrapper+worker so a failed write frees everything too.
     if (p->writing) {
-        // Flush complete pages
-        call(PACKFlush, p);
-
-        // Write remaining partial page (if any)
-        u8p data = p->pg->buf[1];
-        size_t remaining = p->pg->buf[2] - data;
-        if (remaining > 0) {
-            call(PACKWritePage, p, data, remaining);
-        }
-
-        // Write index
-        u64 npages = (p->datalen + PAGESIZE - 1) / PAGESIZE;
-        u64 nblocks = PACKIdxBlocks(npages);
-        u64 idxsize = nblocks * PACK_BLOCK_SIZE;
-        ssize_t w = write(p->fd, p->idx[0], idxsize);
-        test(w == (ssize_t)idxsize, PACKFAIL);
-
-        // Write trailer: uncompressed length (u64) + index size (u64)
-        u64 trailer[2] = {p->datalen, idxsize};
-        w = write(p->fd, trailer, sizeof(trailer));
-        test(w == sizeof(trailer), PACKFAIL);
+        try(PACKCloseWrite, p);
+        p->writing = NO;  // never re-enter the write path on a second close
     }
 
-    // Cleanup
+    // Cleanup on every path (incl. a failed PACKCloseWrite above)
     if (p->fd >= 0) {
         close(p->fd);
         p->fd = -1;
@@ -160,7 +172,7 @@ ok64 PACKClose(packp p) {
         ((u64 **)p->idx)[3] = NULL;
     }
 
-    done;
+    done;  // returns the try()'s status (write failure) or OK
 }
 
 ok64 PACKOpen(packp p, const char *path) {
@@ -189,8 +201,16 @@ ok64 PACKOpen(packp p, const char *path) {
     p->datalen = trailer[0];
     u64 idxsize = trailer[1];
 
+    // ABC-014: bound untrusted datalen before the ceil-div can wrap and
+    // mint a tiny npages / wild DATA terminator.  Each stored page holds
+    // >=1 compressed byte, so npages <= on-disk data area (fsize-16-idxsize).
+    testsafe(p->datalen <= UINT64_MAX - (PAGESIZE - 1), PACKCORRUPT,
+             __ = PACKAbort(p, __));
     u64 npages = (p->datalen + PAGESIZE - 1) / PAGESIZE;
     testsafe(idxsize == PACKIdxSize(npages), PACKCORRUPT,
+             __ = PACKAbort(p, __));
+    testsafe((u64)fsize >= 16 + idxsize, PACKCORRUPT, __ = PACKAbort(p, __));
+    testsafe(npages <= (u64)fsize - 16 - idxsize, PACKCORRUPT,
              __ = PACKAbort(p, __));
 
     // Map index buffer

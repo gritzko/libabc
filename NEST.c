@@ -1,5 +1,7 @@
 #include "NEST.h"
 
+#include <string.h>
+
 #include "PRO.h"
 
 typedef struct {
@@ -23,7 +25,9 @@ fun ok64 NESTaddmark(u8bp ct, mark128 const* rec) {
     u8$ idle = NESTidle(ct);
     if ($size(idle) < sizeof(u128)) return NESTNOROOM;
     --log[0];
-    **log = *rec;
+    // ABC-014: marks are 16B-strided down from an unaligned u8 buffer end;
+    // memcpy avoids a misaligned mark128/u64 store (UBSan/strict-align trap).
+    memcpy(*log, rec, sizeof(*rec));
     return OK;
 }
 
@@ -101,12 +105,16 @@ ok64 NESTFeed(u8bp ct, u8cs insert) {
     a_dup(u8c, ins, insert);
     while (!$empty(ins)) {
         if (**ins != '$' || $len(ins) <= 1) {
+            // ABC-014: re-check room per char — NESTaddvar shrinks idle[1]
+            // 16B/var, so the up-front check no longer covers these copies.
+            test(idle[0] < idle[1], NESTNOROOM);
             **idle = **ins, ++*idle, ++*ins;
             continue;
         }
         ok64 var = 0;
         ok64 o = NESTscanvar(&var, ins);
         if (o != OK) {
+            test(idle[0] < idle[1], NESTNOROOM);  // ABC-014
             **idle = **ins, ++*idle, ++*ins;
         } else {
             call(NESTaddvar, ct, var);
