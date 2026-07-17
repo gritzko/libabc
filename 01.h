@@ -1,5 +1,7 @@
 #ifndef ABC_BITS_H
 #define ABC_BITS_H
+// ABC-016: Ocopy below uses assert(); include it here, not by luck
+#include <assert.h>
 #include <float.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -151,8 +153,19 @@ typedef w512 u512;
 typedef u64 pos48;
 fun u16 pos48hi16(pos48 u) { return u >> 48; }
 
-#define max(a, b) ((a) > (b) ? (a) : (b))
-#define min(a, b) ((a) < (b) ? (a) : (b))
+// ABC-016: single-evaluation forms, args may have side effects
+#define max(a, b)               \
+    ({                          \
+        typeof(a) _mxa = (a);   \
+        typeof(b) _mxb = (b);   \
+        _mxa > _mxb ? _mxa : _mxb; \
+    })
+#define min(a, b)               \
+    ({                          \
+        typeof(a) _mna = (a);   \
+        typeof(b) _mnb = (b);   \
+        _mna < _mnb ? _mna : _mnb; \
+    })
 
 // bit counting
 #ifdef _MSC_VER
@@ -169,7 +182,8 @@ uint32_t __inline clz64(u64 value) {
 #define clz32(x) __builtin_clz(x)
 #define ctz32(x) __builtin_ctz(x)
 #define popc32(x) __builtin_popcount(x)
-#define popc64(x) __builtin_popcount(x)
+// ABC-016: was the 32-bit popcount, top 32 bits went uncounted
+#define popc64(x) __builtin_popcountll(x)
 #endif
 
 // flipping byte order (we imply CPU is little endian)
@@ -237,15 +251,17 @@ fun u32 rotl32(u32 val, uint8_t len) {
     return (val << len) | (val >> (32U - len));
 }
 
-fun b8 u64is2power(u64 w) { return 0 == ((w - 1U) & w); }
+// ABC-016: 0 is not a power of two (used to say YES)
+fun b8 u64is2power(u64 w) { return w != 0 && 0 == ((w - 1U) & w); }
 
 fun u64 round_power_of_2(u64 a) {
-    if (u64is2power(a)) return a;
+    if (a == 0 || u64is2power(a)) return a;
     int p = clz64(a);
     return 1UL << (64 - p);
 }
 
 fun u8 upper_log_2(u64 val) {
+    if (val == 0) return 0;  // ABC-016: clz64(0) is UB
     u8 pow = 64 - clz64(val);
     if (!u64is2power(val)) ++pow;
     return pow;

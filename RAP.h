@@ -23,17 +23,18 @@ fun u64 RAPMicro(u8csc data) {
     return rapidhashMicro(*data, $len(data));
 }
 
-fun u64 RAPMicroSeed(u8cs data, u64 seed) {
+fun u64 RAPMicroSeed(u8csc data, u64 seed) {
     return rapidhashMicro_withSeed(*data, $len(data), seed);
 }
 
 // Nano variant - mobile/embedded, <100 instructions
 // Fastest for sizes up to 48 bytes, slower for larger inputs
-fun u64 RAPNano(u8cs data) {
+// ABC-016: read-only input is u8csc, matching the siblings above
+fun u64 RAPNano(u8csc data) {
     return rapidhashNano(*data, $len(data));
 }
 
-fun u64 RAPNanoSeed(u8cs data, u64 seed) {
+fun u64 RAPNanoSeed(u8csc data, u64 seed) {
     return rapidhashNano_withSeed(*data, $len(data), seed);
 }
 

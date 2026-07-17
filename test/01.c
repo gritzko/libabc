@@ -48,11 +48,54 @@ ok64 BITSstr() {
     done;
 }
 
+// ABC-016: popc64 was the 32-bit builtin; zero guards for pow2 helpers
+ok64 BITSpow2() {
+    sane(1);
+    same(popc64(0), 0);
+    same(popc64(1), 1);
+    same(popc64(1UL << 63), 1);
+    same(popc64(0xffffffff00000000UL), 32);
+    same(popc64(u64max), 64);
+    same(u64is2power(0), NO);
+    same(u64is2power(1), YES);
+    same(u64is2power(2), YES);
+    same(u64is2power(3), NO);
+    same(u64is2power(1UL << 63), YES);
+    same(upper_log_2(0), 0);
+    same(upper_log_2(1), 1);
+    same(upper_log_2(2), 2);
+    same(upper_log_2(3), 3);
+    same(upper_log_2(4), 3);
+    same(upper_log_2(5), 4);
+    same(round_power_of_2(0), 0);
+    same(round_power_of_2(1), 1);
+    same(round_power_of_2(5), 8);
+    same(round_power_of_2(16), 16);
+    same(round_power_of_2(17), 32);
+    done;
+}
+
+// ABC-016: max/min must evaluate each argument exactly once
+ok64 BITSminmax() {
+    sane(1);
+    u64 x = 3, y = 5;
+    same(max(x++, y++), 5);
+    same(x, 4);
+    same(y, 6);
+    x = 3, y = 5;
+    same(min(x++, y++), 3);
+    same(x, 4);
+    same(y, 6);
+    done;
+}
+
 ok64 BITStest() {
     sane(1);
     call(BITStest1);
     call(BITSbytelen);
     call(BITSstr);
+    call(BITSpow2);
+    call(BITSminmax);
     done;
 }
 

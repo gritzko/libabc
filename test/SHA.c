@@ -35,9 +35,21 @@ ok64 SHAtest1() {
     done;
 }
 
+// ABC-016: sha256empty on a 1-aligned record (mmapped-stream offsets)
+ok64 SHAemptytest() {
+    sane(1);
+    u8 buf[1 + sizeof(sha256)] = {};
+    sha256 const *odd = (sha256 const *)(buf + 1);
+    want(sha256empty(odd));
+    buf[sizeof(buf) - 1] = 1;
+    want(!sha256empty(odd));
+    done;
+}
+
 ok64 SHAtest() {
     sane(1);
     call(SHAtest1);
+    call(SHAemptytest);
     done;
 }
 

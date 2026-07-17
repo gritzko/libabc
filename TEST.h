@@ -32,7 +32,8 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
             fprintf(stderr, "%s<%s at %s:%i\ntest fail\n", PROindent, \
                     ok64str(ret), __func__, __LINE__);                \
         }                                                             \
-        return ret;                                                   \
+        /* ABC-016: raw ok64 truncates to low byte, 0x??00 == "ok" */ \
+        return ret == OK ? 0 : 1;                                     \
     }
 
 #define FUZZ(T, n)                                                 \

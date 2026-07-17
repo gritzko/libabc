@@ -383,7 +383,8 @@ fun ok64 PROStderrToFile(char const *name) {
                   __LINE__);                                             \
             fprintf(stderr, "Error: %s\n", ok64str(ret));                \
         }                                                                \
-        return ret;                                                      \
+        /* ABC-016: raw ok64 truncates to low byte, 0x??00 == "ok" */    \
+        return ret == OK ? 0 : 1;                                        \
     }
 
 #endif

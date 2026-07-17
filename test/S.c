@@ -321,6 +321,22 @@ ok64 feedftest() {
     done;
 }
 
+// ABC-016: $off must evaluate its offset argument exactly once
+ok64 offtest() {
+    sane(1);
+    u8c str[] = "abcdef";
+    u8c *s[2] = {str, str + 6};
+    u64 o = 0;
+    u8c *p = $off(s, o++);
+    want(p == str);
+    want(o == 1);
+    want($off(s, 100) == str + 6);
+    $u8c sub = $cut(s, 1, 2);
+    want($len(sub) == 2);
+    want(sub[0] == str + 1);
+    done;
+}
+
 ok64 $test() {
     sane(1);
     call($test1);
@@ -331,6 +347,7 @@ ok64 $test() {
     call(rmtest);
     call(draintest);
     call(feedftest);
+    call(offtest);
     done;
 }
 

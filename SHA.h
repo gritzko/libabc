@@ -9,8 +9,9 @@ typedef struct {
 } sha256;
 
 fun b8 sha256empty(sha256 const* sha) {
-    u64c* w = (u64c*)sha->data;
-    return (w[0] | w[1] | w[2] | w[3]) == 0;
+    // ABC-016: data is 1-aligned (mmapped records); u64 loads were UB
+    static sha256 const zero;
+    return memcmp(sha->data, zero.data, sizeof(zero.data)) == 0;
 }
 
 typedef crypto_hash_sha256_state SHAstate;

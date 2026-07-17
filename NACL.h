@@ -25,20 +25,23 @@ con ok64 NACLBAD = 0x1728c54b28d;
 con ok64 NACLFAIL = 0x5ca3153ca495;
 con ok64 NACLFAIL0 = 0x1728c54f292540;
 
+// ABC-016: libsodium returns -1; NACLFAIL0 + ret minted undocumented
+// codes, so failures map to the documented NACLFAIL
 fun ok64 NACLed25519create(edpub256 *publicKey, edsec512 *secretKey) {
     int ret = crypto_sign_ed25519_keypair((u8 *)publicKey, (u8 *)secretKey);
-    return ret == 0 ? OK : NACLFAIL0 + ret;
+    return ret == 0 ? OK : NACLFAIL;
 }
 
 typedef unsigned long long int nacl_size_t;
 
 fun ok64 NACLed25519sign(edsig512 *sign, const sha256 *hash,
                          const edsec512 *seckey) {
-    nacl_size_t slen;
+    nacl_size_t slen = 0;  // ABC-016: left uninit on failure
     int ret = crypto_sign_detached((u8 *)sign, &slen, (u8 *)hash,
                                    sizeof(sha256), (u8 *)seckey);
+    if (ret != 0) return NACLFAIL;
     assert(slen == sizeof(edsig512));
-    return ret == 0 ? OK : NACLFAIL0 + ret;
+    return OK;
 }
 
 fun ok64 NACLed25519verify(const edsig512 *signature, const sha256 *hash,
@@ -49,20 +52,22 @@ fun ok64 NACLed25519verify(const edsig512 *signature, const sha256 *hash,
     return ret == 0 ? OK : NACLBAD;
 }
 
+// ABC-016: Blake wrappers used to discard libsodium return codes
 fun ok64 NACLBlakeInit(blake0 *state) {
-    crypto_generichash_blake2b_init(state, 0, 0,
-                                    crypto_generichash_blake2b_BYTES);
-    return OK;
+    int ret = crypto_generichash_blake2b_init(
+        state, 0, 0, crypto_generichash_blake2b_BYTES);
+    return ret == 0 ? OK : NACLFAIL;
 }
 
 fun ok64 NACLBlakeUpdate(blake0 *state, u8cs data) {
-    crypto_generichash_blake2b_update(state, *data, u8csLen(data));
-    return OK;
+    int ret = crypto_generichash_blake2b_update(state, *data, u8csLen(data));
+    return ret == 0 ? OK : NACLFAIL;
 }
 
 fun ok64 NACLBlakeFinal(blake0 *state, blake256 *out) {
-    crypto_generichash_blake2b_final(state, out->_8, sizeof(blake256));
-    return OK;
+    int ret =
+        crypto_generichash_blake2b_final(state, out->_8, sizeof(blake256));
+    return ret == 0 ? OK : NACLFAIL;
 }
 
 #endif  // DW_ED_H

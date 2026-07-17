@@ -28,7 +28,12 @@
 
 #define a$(T, n, a) T *n[2] = {(a), (a) + (sizeof(a) / sizeof(T))};
 
-#define $off(s, o) ((s[0] + (o) < s[1]) ? (s[0] + (o)) : s[1])
+// ABC-016: single-evaluation of o (may have side effects)
+#define $off(s, o)                        \
+    ({                                    \
+        typeof((s)[0]) _oh = (s)[0] + (o); \
+        _oh < (s)[1] ? _oh : (s)[1];      \
+    })
 
 #define a_dup(T, n, s) T *n[2] = {(s)[0], (s)[1]}
 #define $dup(s) {(s)[0], (s)[1]}
@@ -86,7 +91,8 @@
     }
 
 /** produce a subslice given offset and length */
-#define $cut(s, o, l) {$off(s, o), $off(s, o + l)}
+// ABC-016: parenthesize; o is still evaluated once per element
+#define $cut(s, o, l) {$off(s, o), $off(s, (o) + (l))}
 
 #define $for(T, n, s) for (T *n = s[0]; (n + 1) <= s[1]; ++n)
 #define $rof(T, n, s) for (T *n = s[1] - 1; n >= s[0]; --n) /*fixme*/
