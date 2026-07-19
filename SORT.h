@@ -7,7 +7,13 @@ con ok64 SORTNODATA = 0x7186dd5d834a74a;
 
 fun ok64 SORTu64x(u8cs s, u8cs rest) { return $u8take(s, rest, sizeof(u64)); }
 
-fun ok64 SORTu64y($u8 into, u8css eqs) { return u8sFeed(into, (u8c$c)eqs[0]); }
+// ABC-021: a sort keeps duplicates -- feed every tied element
+fun ok64 SORTu64y($u8 into, u8css eqs) {
+    ok64 o = OK;
+    for (u8cs *e = eqs[0]; o == OK && e != eqs[1]; ++e)
+        o = u8sFeed(into, (u8c$c)e);
+    return o;
+}
 
 fun b8 SORTu64z($cu8c *a, $cu8c *b) { return u64Z((u64c *)**a, (u64c *)**b); }
 

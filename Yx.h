@@ -23,7 +23,10 @@ fun ok64 _X(next)($u8 into, u8css lsm) {
             if ($empty(lsm)) break;
         }
         u8cssDownZ(lsm, _X(z));
-    } while (0 == _X(z)($head(lsm), &next));
+        // ABC-021: guard args were swapped (head>=next always, so one
+        // call drained the whole heap as one "tie group"); a full pad
+        // ends the group early, the next call carries the rest
+    } while (!$empty(inidle) && 0 == _X(z)(&next, $head(lsm)));
 
     if ($len(indata) == 1) {
         o = u8sFeed(into, next);

@@ -89,10 +89,12 @@ target_compile_options(BINtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(BINtest abc)
 add_test(NAME BINtest COMMAND BINtest)
 
-#add_executable(SORTtest SORT.c ../SORT.c)
-#target_link_options(SORTtest PRIVATE ${TEST_LDD_FLAGS})
-#target_compile_options(SORTtest PRIVATE ${TEST_CXX_FLAGS})
-#add_test(NAME SORTtest COMMAND SORTtest)
+# ABC-021: revived, result-checking now that SORTu64 actually sorts
+add_executable(SORTtest SORT.c)
+target_link_options(SORTtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(SORTtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(SORTtest abc)
+add_test(NAME SORTtest COMMAND SORTtest)
 
 add_executable(QSORTtest QSORT.c)
 target_link_options(QSORTtest PRIVATE ${TEST_LDD_FLAGS})
