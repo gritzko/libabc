@@ -283,6 +283,11 @@ ok64 PACKtestTrailerWrap() {
 ok64 PACKtestCloseFail() {
     sane(1);
 
+    // /dev/full is Linux/BSD-only; skip where absent (macOS)
+    int probe = open("/dev/full", O_WRONLY);
+    if (probe < 0) done;
+    close(probe);
+
     u32 before = PACKtestPagesUsed();
 
     pack pw = {};
