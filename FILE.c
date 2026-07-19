@@ -837,6 +837,18 @@ ok64 FILEUnMap(u8bp buf) {
     done;
 }
 
+//  ABC-020: explicit release by mapping base — find the owning booked slot
+//  and FILEUnMap it (munmap + close + fd=-1); NONE if not a live FILE map.
+ok64 FILEUnMapBase(u8 *base) {
+    sane(base != NULL);
+    call(FILEInit);
+    int fd = FILE_CLOSED;
+    u8 *const probe[4] = { base, base, base, base };
+    call(FILEFindMap, &fd, probe);
+    call(FILEUnMap, FILE_WANT_BUFS[fd]);
+    done;
+}
+
 // . . . . . . . . booked mmapped buffers . . . . . . . .
 
 // Internal: book VA range and map fd at start.  `mode` is the open

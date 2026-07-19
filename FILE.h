@@ -121,9 +121,12 @@ typedef int *FILE;
 #define FILE_NAME_MAX_LEN 255
 #define FILE_PATH_MAX_LEN 1024
 
-#ifndef FILE_MAX_OPEN
-#define FILE_MAX_OPEN 1024
+//  ABC-020: FILE_MAX_OPEN is a power of two by construction; the bit count
+//  is the knob (the mmap finalizer ctx packs an fd into that many low bits).
+#ifndef FILE_MAX_OPEN_BITS
+#define FILE_MAX_OPEN_BITS 10
 #endif
+#define FILE_MAX_OPEN (1 << FILE_MAX_OPEN_BITS)
 
 // Legacy alias — path composition uses a u8b buffer.
 typedef path8b path8;
@@ -583,6 +586,9 @@ ok64 FILEMapCreateAt(u8bp *buf, int dir, path8s path, size_t size);
 
 // Unmaps the buffer (buf must point into FILE_WANT_BUFS).
 ok64 FILEUnMap(u8bp buf);
+
+// ABC-020: release a live mapping by its base pointer (find slot + FILEUnMap).
+ok64 FILEUnMapBase(u8 *base);
 
 // Resize the file and update the mapping.
 ok64 FILEReMap(u8bp buf, size_t new_size);
