@@ -210,11 +210,15 @@ ok64 PAGEtestEnsure() {
     test(PAGEIdxRead(p, 2) == PAGE_LOADED, PAGEFAIL);
     test(PAGEIdxRead(p, 3) == PAGE_LOADED, PAGEFAIL);
 
-    // Non-paged buffer: u8bEnsure should be no-op
-    a_pad(u8, plain, 256);
-    call(u8bEnsure1, plain, 0);
-    call(u8bEnsure2, plain, 0);
-    call(u8bEnsure, plain, 0, 100);
+    // Non-paged buffer: u8bEnsure should be no-op (PAGETracked only checks
+    // registry membership).  The u8b lives inside a full `page` object so
+    // gcc's inlined idx probe — dead at runtime — stays within bounds
+    // (-Warray-bounds on a bare 32-byte u8b).
+    u8 _plain[256];
+    page fake = {.buf = {_plain, _plain, _plain, _plain + 256}};
+    call(u8bEnsure1, fake.buf, 0);
+    call(u8bEnsure2, fake.buf, 0);
+    call(u8bEnsure, fake.buf, 0, 100);
 
     call(PAGEClose, p);
 

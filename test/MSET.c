@@ -468,7 +468,10 @@ ok64 MSETk() {
 ok64 MSETl() {
     sane(1);
     u64 a[] = {10, 20, 30};
-    u64cs runs[1] = {{a, a + 3}};
+    // one live run + a spare slot: the inlined heap-sift probes h[1] behind
+    // a length guard (dead at runtime), and gcc flags the probe on a 1-slot
+    // backing array (-Warray-bounds)
+    u64cs runs[2] = {{a, a + 3}};
     u64css heap = {runs, runs + 1};
     MSETu64Start(heap);
     u64 result[3];

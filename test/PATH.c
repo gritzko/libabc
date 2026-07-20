@@ -100,8 +100,9 @@ ok64 PATHTestNext() {
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         a_PATHu8cg(path, cases[i].path);
-        // Create a working copy of the gauge for iteration
-        u8cg rem = {path[0], path[1], path[2]};
+        // Create a working copy of the slice for iteration (Drain advances
+        // rem[0]); path is a u8cs, so there is no path[2] to copy.
+        u8cs rem = {path[0], path[1]};
         size_t seg_idx = 0;
 
         while (cases[i].segments[seg_idx] != NULL) {

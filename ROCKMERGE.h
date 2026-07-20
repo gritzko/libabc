@@ -13,7 +13,9 @@
 con ok64 ROCKHUGE = 0x6d831445e40e;
 
 // Number of records that fit on the stack array in ROCKmerge_full.
-con size_t ROCKMERGE_STACK = 64;
+// An enum (not `con size_t`) so the stack arrays sized by it are true
+// fixed-size arrays, not VLAs (clang's -Wgnu-folding-constant).
+enum { ROCKMERGE_STACK = 64 };
 
 // Compute the total record count = num_operands + (has_existing?1:0) as a
 // size_t, rejecting a negative or overflowing count.  RocksDB hands us

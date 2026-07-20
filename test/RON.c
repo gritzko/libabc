@@ -203,7 +203,7 @@ ok64 RONTestInk() {
 
 ok64 RONTestNowMonotone() {
     sane(1);
-    con int N = 1000;
+    enum { N = 1000 };
     ron60 ts[N];
     ts[0] = RONNow();
     for (int i = 1; i < N; i++) {
@@ -366,7 +366,7 @@ ok64 RONTestSpliceIsolation() {
     sane(1);
     con ok64 n = 10;
     con u64 prob = 1000;
-    con int trials = 10000;
+    enum { trials = 10000 };
     ok64 bases[trials];
     u8 width = 0;
     for (int i = 0; i < trials; i++) {

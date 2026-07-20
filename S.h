@@ -73,7 +73,7 @@
 #define a$tail(T, n, s, off) \
     $##T n = {(i64)(off) > $len(s) ? s[1] : s[0] + (off), s[1]};
 #define a$head(T, n, s, l) \
-    T *n[2] = {s[0], ((l) > $len(s) ? s[1] : (s[0] + l))};
+    T *n[2] = {s[0], ((i64)(l) > $len(s) ? s[1] : (s[0] + l))};
 
 // a_part: len elements at offset off [start+off, start+off+len)
 #define a_part(T, n, s, off, len)                   \
