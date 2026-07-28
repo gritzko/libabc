@@ -296,7 +296,7 @@ fun ok64 X(, csUsed)(X(, cs) s, size_t len) { return X(, sUsed)((T **)s, len); }
 
 //  Bounds-checked sub-slice [from, till) of `whole` into `sub`.
 //  Sets `sub` to a window over `whole`'s data — no copy.
-fun ok64 X(, csSub)(X(, csc) whole, X(, cs) sub, u32 from, u32 till) {
+fun ok64 X(, csSub)(X(, csc) whole, X(, cs) sub, u64 from, u64 till) {
     if (unlikely(from > till)) return BADRANGE;
     if (unlikely((size_t)till > X(, csLen)(whole))) return BADRANGE;
     sub[0] = whole[0] + from;
