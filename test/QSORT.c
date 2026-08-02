@@ -1,4 +1,5 @@
 #include "INT.h"
+#include "KV.h"
 #include "PRO.h"
 #include "TEST.h"
 
@@ -189,6 +190,61 @@ ok64 QSORT14() {
     done;
 }
 
+// DOG-027: 15 — QSORTkv64InSort is STABLE: kv64Z compares keys only, so
+// equal keys must come out in arrival order.
+ok64 QSORT15() {
+    sane(1);
+    kv64 arr[] = {{2, 20}, {1, 10}, {2, 21}, {1, 11}, {2, 22}, {1, 12}};
+    QSORTkv64InSort(arr, arr + 6);
+    static kv64 const want[6] = {{1, 10}, {1, 11}, {1, 12},
+                                 {2, 20}, {2, 21}, {2, 22}};
+    for (size_t i = 0; i < 6; i++) {
+        testeqv((long long)(arr[i].key), (long long)(want[i].key), "%lld");
+        testeqv((long long)(arr[i].val), (long long)(want[i].val), "%lld");
+    }
+    done;
+}
+
+// DOG-027: 16 — kv64sDedup keeps the LAST of an equal-key run, which after
+// a stable sort is the arrival-newest value.
+ok64 QSORT16() {
+    sane(1);
+    kv64 arr[] = {{1, 10}, {1, 11}, {1, 12}, {2, 20}, {3, 30}, {3, 31}};
+    kv64s data = {arr, arr + 6};
+    kv64sDedup(data);
+    static kv64 const want[3] = {{1, 12}, {2, 20}, {3, 31}};
+    testeqv((long long)($len(data)), (long long)((size_t)3), "%lld");
+    for (size_t i = 0; i < 3; i++) {
+        testeqv((long long)(data[0][i].key), (long long)(want[i].key), "%lld");
+        testeqv((long long)(data[0][i].val), (long long)(want[i].val), "%lld");
+    }
+    done;
+}
+
+// DOG-027: 17 — the memtable's worst case: a 32-row DATA window, each of 16
+// keys arriving twice; InSort then Dedup must leave the newest arrival.
+#define QSORT_MEM 32
+ok64 QSORT17() {
+    sane(1);
+    kv64 arr[QSORT_MEM];
+    for (u64 i = 0; i < QSORT_MEM; i++) {
+        arr[i].key = (i * 11) % 16;  // 11 is invertible mod 16: each key twice
+        arr[i].val = 1000 + i;       // value == arrival index
+    }
+    QSORTkv64InSort(arr, arr + QSORT_MEM);
+    for (int i = 1; i < QSORT_MEM; i++) want(arr[i - 1].key <= arr[i].key);
+    kv64s data = {arr, arr + QSORT_MEM};
+    kv64sDedup(data);
+    testeqv((long long)($len(data)), (long long)((size_t)16), "%lld");
+    for (u64 k = 0; k < 16; k++) {
+        testeqv((long long)(data[0][k].key), (long long)(k), "%lld");
+        // second arrival of key k sits at i = 16 + (3*k)%16 (3 == 11^-1 mod 16)
+        testeqv((long long)(data[0][k].val),
+                (long long)(1000 + 16 + (3 * k) % 16), "%lld");
+    }
+    done;
+}
+
 ok64 QSORTtest() {
     sane(1);
     call(QSORT0);
@@ -206,6 +262,9 @@ ok64 QSORTtest() {
     call(QSORT12);
     call(QSORT13);
     call(QSORT14);
+    call(QSORT15);
+    call(QSORT16);
+    call(QSORT17);
     done;
 }
 

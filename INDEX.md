@@ -207,9 +207,10 @@ A bit VALUE (`u1`, carried as a b8 0/1; no addressable `u1*`) plus bit addressin
 
 Introsort with an inline comparator (no function-pointer overhead) plus binary search and dedup; SORT.h adds the merge-style u64 sort glue.
 
- -  `sSort`/`gSort`/`bSort` — introsort a slice/gauge/buffer in place using the type's inline `Z` comparator.
+ -  `sSort`/`gSort`/`bSort` — introsort a slice/gauge/buffer in place using the type's inline `Z` comparator. NOT stable above `QS_ISORT_THRESH` (24) elements.
+ -  `QSORT<type>InSort(lo, hi)` — STABLE insertion sort over a raw `[lo, hi)` range; the sort to use for a few dozen rows, where `sSort` is neither stable nor faster.
  -  `sBinSearch` — binary-search a `Z`-sorted slice; "match" is `!Z(a,b)&& !Z(b,a)`. Returns a pointer or NULL.
- -  `sDedup`/`gDedup`/`bDedup` — collapse adjacent equal runs in a sorted slice (the `SortAndDedup` pattern in [README.md]).
+ -  `sDedup`/`gDedup`/`bDedup` — collapse adjacent equal runs in a sorted slice, keeping the LAST element of each run (the `SortAndDedup` pattern in [README.md]). Under a key-only `Z` that is the arrival-newest of the group, provided the sort was stable.
  -  `SORTu64`/`SORTu64x`/`SORTu64y`/`SORTu64z` — the slicer/merger/comparator trio (`x`/`y`/`z`) that drives.
 
 ###  DIFF.h, DIFFx.h — Myers diff

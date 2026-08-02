@@ -19,8 +19,9 @@
 #define QS_ISORT_THRESH 24
 
 // --- Insertion sort for small arrays ---
+// DOG-027: public as X(QSORT,InSort) — STABLE, and the memtable's DATA sort.
 
-fun void X(QS, Isort)(T *lo, T *hi) {
+fun void X(QSORT, InSort)(T *lo, T *hi) {
     for (T *i = lo + 1; i < hi; i++) {
         T key = *i;
         T *j = i;
@@ -111,7 +112,7 @@ fun void X(QS, Core)(T *lo, T *hi, int depth) {
             hi = i;
         }
     }
-    X(QS, Isort)(lo, hi);
+    X(QSORT, InSort)(lo, hi);
 }
 
 // --- depth limit: 2 * floor(log2(n)) ---
@@ -161,13 +162,16 @@ fun T *X(, sBinSearch)(T const *needle, X(, sc) data) {
 }
 
 // --- Dedup: shrink sorted slice, removing adjacent duplicates ---
+// DOG-027: an equal run collapses to its LAST element — after a stable
+// sort that element is the arrival-newest.
 
 fun void X(, sDedup)(X(, s) data) {
     if (data[0] >= data[1]) return;
-    T *w = data[0] + 1;
+    T *w = data[0];
     for (T *r = data[0] + 1; r < data[1]; r++) {
-        if (X(, Z)(r - 1, r) || X(, Z)(r, r - 1)) *w++ = *r;
+        if (X(, Z)(r - 1, r) || X(, Z)(r, r - 1)) *w++ = *(r - 1);
     }
+    *w++ = *(data[1] - 1);
     data[1] = w;
 }
 
