@@ -12,6 +12,14 @@
 #include "OK.h"
 #include "S.h"
 
+// DOG-027: LSM policy as C defines — ONE run cap and ONE ladder ratio for
+// every entry point and both JS leaves.  Above the cap the caller re-derives.
+#ifndef HIT_MAX_RUNS
+#define HIT_MAX_RUNS 64   //  a strict ladder never nears it; past it = damaged
+#define HIT_LADDER_DIV 8  //  1/8 size-tiered: run i+1 < run i / HIT_LADDER_DIV
+con ok64 HITTOOMANY = 0x45275d61858a5e2;  //  "HITTOOMANY": drop + re-derive
+#endif
+
 #define HIT_T X(, )
 #define HIT_E X(, cs)    // entry = const slice
 #define HIT_H X(, csps)  // heap = slice of pointers to entries
@@ -78,15 +86,17 @@ fun void X(HIT, Start)(X(, css) heap) {
     heap[1] = w;
 }
 
-// --- Load: build the 64-slot pointer heap over the caller's entries ---
+// --- Load: build the HIT_MAX_RUNS-slot pointer heap over the entries ---
 // DOG-027: entries stay put in the oldest-first array; only csp permute.
+// Past HIT_MAX_RUNS the stack is damaged or foreign: HITTOOMANY, no window.
 
-fun void X(HIT, Load)(X(, csps) heap, X(, csp) *slots, X(, css) runs) {
-    assert($len(runs) <= 64);
+fun ok64 X(HIT, Load)(X(, csps) heap, X(, csp) *slots, X(, css) runs) {
+    if ($len(runs) > HIT_MAX_RUNS) return HITTOOMANY;
     heap[0] = heap[1] = slots;
     for (HIT_E *r = runs[0]; r < runs[1]; r++)
         if (!$empty(*r)) *heap[1]++ = *r;
     X(HIT, Heap)(heap);
+    return OK;
 }
 
 // --- Step: advance top entry, eject if exhausted, re-heapify ---
@@ -144,9 +154,10 @@ fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
 // output) and return OKNOROOM when it fills, like MSETMerge.
 
 fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
-    X(, csp) slots[64];
+    X(, csp) slots[HIT_MAX_RUNS];
     X(, csps) heap;
-    X(HIT, Load)(heap, slots, runs);
+    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    if (lo != OK) return lo;
     while (!$empty(heap)) {
         if ($empty(into)) return OKNOROOM;
         *into[0]++ = *(*heap[0])[0];
@@ -158,9 +169,10 @@ fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
 // --- Merge: drain heap producing sorted deduplicated output ---
 
 fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
-    X(, csp) slots[64];
+    X(, csp) slots[HIT_MAX_RUNS];
     X(, csps) heap;
-    X(HIT, Load)(heap, slots, runs);
+    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    if (lo != OK) return lo;
     while (!$empty(heap)) {
         HIT_T val = *(*heap[0])[0];
         if ($empty(into)) return OKNOROOM;
@@ -178,9 +190,10 @@ fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
 // --- Intersect: emit values present in ALL nruns iterators ---
 
 fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
-    X(, csp) slots[64];
+    X(, csp) slots[HIT_MAX_RUNS];
     X(, csps) heap;
-    X(HIT, Load)(heap, slots, runs);
+    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    if (lo != OK) return lo;
     while (!$empty(heap)) {
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
@@ -200,9 +213,10 @@ fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
 // --- Seek: advance all entries until heap top >= key ---
 
 fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
-    X(, csp) slots[64];
+    X(, csp) slots[HIT_MAX_RUNS];
     X(, csps) heap;
-    X(HIT, Load)(heap, slots, runs);
+    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    if (lo != OK) return lo;
     while (!$empty(heap) && X(, Z)((*heap[0])[0], key)) {
         X(, c) *const run[2] = {(*heap[0])[0], (*heap[0])[1]};
         X(, c) *pos = X(, sFindGE)(run, key);
@@ -222,6 +236,7 @@ fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
 // (Load + Step) emits them in order with no prefix checks needed.
 
 fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
+    if ($len(heap) > HIT_MAX_RUNS) return HITTOOMANY;  // DOG-027: uniform cap
     HIT_E *w = heap[0];
     for (HIT_E *r = heap[0]; r < heap[1]; r++) {
         if ($empty(*r)) continue;
@@ -242,11 +257,12 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
 // DOG-027: rebuilds the pointer heap per call — an inner HIT's state
 // lives entirely in its (oldest-first, in-place-advanced) entries.
 
-fun void X(HIT, SkipValue)(X(, css) runs) {
-    X(, csp) slots[64];
+fun ok64 X(HIT, SkipValue)(X(, css) runs) {
+    X(, csp) slots[HIT_MAX_RUNS];
     X(, csps) inner;
-    X(HIT, Load)(inner, slots, runs);
-    if ($empty(inner)) return;
+    ok64 lo = X(HIT, Load)(inner, slots, runs);
+    if (lo != OK) return lo;
+    if ($empty(inner)) return OK;
     HIT_T val = *(*inner[0])[0];
     size_t ntops = X(HIT, Tops)(inner);
     X(HIT, AdvanceTops)(inner, ntops);
@@ -254,6 +270,7 @@ fun void X(HIT, SkipValue)(X(, css) runs) {
                            && !X(, Z)(&val, (*inner[0])[0]))
         X(HIT, Step)(inner);
     X(HIT, Start)(runs);
+    return OK;
 }
 
 // --- IntersectMerge: intersect the merged outputs of N inner HITs ---
@@ -353,7 +370,8 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
         // Advance top ntops inner HITs past val
         for (size_t j = ntops; j > 0; --j) {
             size_t i = j - 1;
-            X(HIT, SkipValue)(*$atp(oheap, i));
+            ok64 so = X(HIT, SkipValue)(*$atp(oheap, i));
+            if (so != OK) return so;
             if ($empty(*$atp(oheap, i))) return OK;
             X(HIT, cssDown)(oheap, i);
         }
@@ -377,7 +395,7 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
 fun b8 X(HIT, IsCompact)(X(, css) stack) {
     size_t n = $len(stack);
     for (size_t i = 0; i + 1 < n; i++) {
-        if ($len(stack[0][i + 1]) * 8 > $len(stack[0][i]))
+        if ($len(stack[0][i + 1]) * HIT_LADDER_DIV > $len(stack[0][i]))
             return NO;
     }
     return YES;
@@ -392,10 +410,11 @@ fun b8 X(HIT, IsCompact)(X(, css) stack) {
 // stack's idle pointer is moved up so $len(stack) drops by m-1.
 fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     size_t n = $len(stack);
+    if (n > HIT_MAX_RUNS) return HITTOOMANY;  // DOG-027: uniform cap
     if (n < 2) return OK;
     size_t m = 1;
     size_t total = $len(stack[0][n - 1]);
-    while (m < n && (i64)(total * 8) > $len(stack[0][n - 1 - m])) {
+    while (m < n && (i64)(total * HIT_LADDER_DIV) > $len(stack[0][n - 1 - m])) {
         total += $len(stack[0][n - 1 - m]);
         m++;
     }

@@ -3,15 +3,7 @@
 #include "PRO.h"
 #include "TEST.h"
 
-// Manual Swap for u64cs (array type, can't use Sx.h)
-fun void u64csSwap(u64cs *a, u64cs *b) {
-    u64c *t0 = (*a)[0], *t1 = (*a)[1];
-    (*a)[0] = (*b)[0];
-    (*a)[1] = (*b)[1];
-    (*b)[0] = t0;
-    (*b)[1] = t1;
-}
-
+// DOG-027: no csSwap prerequisite — the heap swaps entry pointers now.
 #define X(M, name) M##u64##name
 #include "HITx.h"
 #undef X
@@ -263,8 +255,9 @@ ok64 HIT9() {
     HITu64Start(heap);
     u64 key = 4;
     HITu64Seek(heap, &key);
-    // top should be exactly 4
-    testeqv((long long)(*(*heap[0])[0]), (long long)((u64)4), "%lld");
+    // DOG-027: entries stay oldest-first (heap[0] is the FIRST run, not the
+    // root) — the post-condition is that every surviving head is >= the key.
+    for (u64cs *r = heap[0]; r < heap[1]; r++) test(*(*r)[0] >= key, FAILSANITY);
     // drain rest
     u64 buf[8];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -741,6 +734,63 @@ ok64 HIT26() {
     done;
 }
 
+// DOG-027: one cap (HIT_MAX_RUNS) for every entry point.  Above it the leaf
+// just refuses — no windowing, no repair cascade, no youngest-N batching.
+static void hit27fill(u64 *v, u64cs *runs, u64css st, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        v[i] = (u64)i;
+        runs[i][0] = v + i;
+        runs[i][1] = v + i + 1;
+    }
+    st[0] = runs;
+    st[1] = runs + n;
+}
+
+ok64 HIT27() {
+    sane(1);
+    u64 v[HIT_MAX_RUNS + 1];
+    u64cs runs[HIT_MAX_RUNS + 1];
+    u64 buf[HIT_MAX_RUNS + 1];
+    u64css st;
+    u64s out;
+    u64 lo = 0, hi = 1000, key = 3;
+    size_t over = HIT_MAX_RUNS + 1;
+
+    // --- one run past the cap: every entry point returns HITTOOMANY ---
+#define HIT27OVER(EXPR)                                                     \
+    hit27fill(v, runs, st, over);                                           \
+    out[0] = buf;                                                           \
+    out[1] = buf + over;                                                    \
+    testeqv((long long)(EXPR), (long long)(HITTOOMANY), "%lld")
+    HIT27OVER(HITu64Merge(st, out));
+    HIT27OVER(HITu64MergeBag(st, out));
+    HIT27OVER(HITu64Intersect(st, out, over));
+    HIT27OVER(HITu64Seek(st, &key));
+    HIT27OVER(HITu64SeekRange(st, &lo, &hi));
+    HIT27OVER(HITu64Compact(st, out));
+    HIT27OVER(HITu64SkipValue(st));
+#undef HIT27OVER
+
+    // --- exactly at the cap: every entry point works ---
+#define HIT27AT(EXPR)                                                       \
+    hit27fill(v, runs, st, (size_t)HIT_MAX_RUNS);                           \
+    out[0] = buf;                                                           \
+    out[1] = buf + HIT_MAX_RUNS;                                            \
+    testeqv((long long)(EXPR), (long long)(OK), "%lld")
+    HIT27AT(HITu64Merge(st, out));
+    testeqv((long long)((size_t)(out[0] - buf)), (long long)((size_t)HIT_MAX_RUNS),
+            "%lld");
+    HIT27AT(HITu64MergeBag(st, out));
+    HIT27AT(HITu64Intersect(st, out, (size_t)HIT_MAX_RUNS));
+    HIT27AT(HITu64Seek(st, &key));
+    HIT27AT(HITu64SeekRange(st, &lo, &hi));
+    HIT27AT(HITu64Compact(st, out));
+    testeqv((long long)($len(st)), (long long)((size_t)1), "%lld");
+    HIT27AT(HITu64SkipValue(st));
+#undef HIT27AT
+    done;
+}
+
 ok64 HITtest() {
     sane(1);
     call(HIT0);
@@ -770,6 +820,7 @@ ok64 HITtest() {
     call(HIT24);
     call(HIT25);
     call(HIT26);
+    call(HIT27);
     done;
 }
 

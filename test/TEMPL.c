@@ -38,15 +38,7 @@
 #error "SKIPx.h leaked SKIP_NONE"
 #endif
 
-// HITx needs a csSwap for the entry type (array type, not in Sx.h)
-fun void u32csSwap(u32cs *a, u32cs *b) {
-    u32c *t0 = (*a)[0], *t1 = (*a)[1];
-    (*a)[0] = (*b)[0];
-    (*a)[1] = (*b)[1];
-    (*b)[0] = t0;
-    (*b)[1] = t1;
-}
-
+// DOG-027: no csSwap prerequisite — HIT swaps entry pointers now.
 #define X(M, name) M##u32##name
 #include "HITx.h"
 #undef X

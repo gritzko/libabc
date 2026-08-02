@@ -13,10 +13,27 @@ There are no prerequisites beyond Sx (DOG-027: the heap permutes entry
 POINTERS, so `X(,csSwap)` is no longer needed).
 
 The entry points take an oldest-first `X(,css)` of runs, whose entries
-never move; each builds its own 64-slot `X(,csps)` pointer heap.  Equal
-head elements (a keyed lane's genuine ties) resolve to the highest
-entry pointer — the youngest run — in Merge, Seek, SeekRange's drain
-and Compact alike.
+never move; each builds its own `HIT_MAX_RUNS`-slot `X(,csps)` pointer
+heap.  Equal head elements (a keyed lane's genuine ties) resolve to the
+highest entry pointer — the youngest run — in Merge, Seek, SeekRange's
+drain and Compact alike.
+
+## Policy defines (DOG-027)
+
+| Define           | Value | Meaning                                   |
+|------------------|-------|-------------------------------------------|
+| `HIT_MAX_RUNS`   | 64    | runs per merge; ONE cap for every entry point and both JS leaves |
+| `HIT_LADDER_DIV` | 8     | the 1/8 size-tiered ladder ratio          |
+| `HITTOOMANY`     | —     | the `ok64` every entry point returns above the cap |
+
+`runs[]` is OLDEST-FIRST and that is positional, not checkable: a
+newest-first array silently inverts newest-wins on a keyed lane.  The
+caller owns the convention (in JS, the `abc.index` handle, which holds
+each run's pup key).
+
+Above `HIT_MAX_RUNS` an entry point just refuses with `HITTOOMANY` — no
+windowing, no repair cascade, no youngest-N batching.  A stack that deep
+is damaged or foreign; the cure is to drop the runs and re-derive.
 
 ## Types
 
@@ -44,7 +61,7 @@ and Compact alike.
 | Function                        | Description                       |
 |--------------------------------|-----------------------------------|
 | `HITTsIntersectMerge(oh, &out)` | Intersect merged outputs of N inner HITs |
-| `HITTSkipValue(inner)`          | Advance inner HIT past current top value |
+| `HITTSkipValue(inner)`          | Advance inner HIT past current top value (`ok64`) |
 
 ## Merge
 

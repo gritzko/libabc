@@ -12,15 +12,7 @@
 #include "PRO.h"
 #include "TEST.h"
 
-// HITx requires a manual cs-swap (array type, can't auto-gen).
-fun void u16csSwap(u16cs *a, u16cs *b) {
-    u16c *t0 = (*a)[0], *t1 = (*a)[1];
-    (*a)[0] = (*b)[0];
-    (*a)[1] = (*b)[1];
-    (*b)[0] = t0;
-    (*b)[1] = t1;
-}
-
+// DOG-027: no csSwap prerequisite — HIT swaps entry pointers now.
 #define BOX_DIRTY_BYTES 8
 #define X(M, name) M##u16##name
 #include "HITx.h"

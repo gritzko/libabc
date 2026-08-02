@@ -29,7 +29,8 @@
 //  PAST and IDLE for one populated slice each.
 //
 //    PAST  = box[0..1] : the dirty level's Ts (one descriptor)
-//    DATA  = box[1..2] : sorted levels' Ts entries, oldest-first
+//    DATA  = box[1..2] : sorted levels' Ts entries, youngest-first
+//                        (DOG-027: higher levels hold OLDER data)
 //    IDLE  = box[2..3] : starts with a *fence* Ts {range_end,range_end}
 //                        followed by any unused descriptor slots
 //
@@ -38,6 +39,8 @@
 //  the byte range's end.  HIT's filter-empty pass skips the fence
 //  naturally, so callers can still feed `X(,sDataC)(box)` straight
 //  to HITx for lookup, range scan, or full sweep without a wrapper.
+//  DOG-027: that direct feed is youngest-first; a keyed lane (age
+//  breaks ties) must reverse DATA into an oldest-first runs array.
 //
 //  Like HASHx and HITx, BOX is a pure data-structure template: it
 //  knows nothing about allocation, mmap, or files.  The caller
@@ -214,16 +217,18 @@ fun ok64 X(BOX, Feed1)(X(, sb) box, BOX_T const *rec) {
     //  Build a HIT input from dirty + every level below target.  Do
     //  the merge into the target chunk, then zero each source
     //  chunk's data tail and reset its Ts.
+    //  DOG-027: HIT runs are OLDEST-first; higher levels hold older data
+    //  and dirty is youngest, so feed L(target-1)..L0, then dirty.
     X(, cs) runs[BOX_MAX_LEVELS + 1];
     size_t nruns = 0;
+    for (size_t i = target; i > 0; i--) {
+        runs[nruns][0] = data[i - 1][0];
+        runs[nruns][1] = data[i - 1][1];
+        nruns++;
+    }
     runs[nruns][0] = (*dirty)[0];
     runs[nruns][1] = (*dirty)[1];
     nruns++;
-    for (size_t i = 0; i < target; i++) {
-        runs[nruns][0] = data[i][0];
-        runs[nruns][1] = data[i][1];
-        nruns++;
-    }
 
     //  Merge into target's chunk.  ABC-015: HITMerge drains into a
     //  bounded slice (the chunk, fenced by the next level's head) and
@@ -280,20 +285,21 @@ fun ok64 X(BOX, Flush)(X(, sb) box, X(, s) save) {
         X(, sSort)(ds);
     }
 
-    //  Build runs: dirty + every non-empty DATA level.
+    //  Build runs: every non-empty DATA level + dirty.
+    //  DOG-027: OLDEST-first for HIT — top level down to L0, dirty last.
     X(, cs) runs[BOX_MAX_LEVELS + 1];
     size_t nruns = 0;
+    for (size_t i = n; i > 0; i--) {
+        if (data[i - 1][1] > data[i - 1][0]) {
+            runs[nruns][0] = data[i - 1][0];
+            runs[nruns][1] = data[i - 1][1];
+            nruns++;
+        }
+    }
     if ((*dirty)[1] > (*dirty)[0]) {
         runs[nruns][0] = (*dirty)[0];
         runs[nruns][1] = (*dirty)[1];
         nruns++;
-    }
-    for (size_t i = 0; i < n; i++) {
-        if (data[i][1] > data[i][0]) {
-            runs[nruns][0] = data[i][0];
-            runs[nruns][1] = data[i][1];
-            nruns++;
-        }
     }
     if (nruns == 0) return OK;   // empty box
 
