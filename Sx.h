@@ -34,6 +34,7 @@ typedef X(, cs) const **X(, cscsp);
 typedef T const *const *X(, cspc);
 typedef X(, s) * X(, ss)[2];
 typedef X(, cs) * X(, css)[2];
+typedef X(, csp) * X(, csps)[2];
 typedef X(, p) * X(, ps)[2];
 
 typedef T *X(, g)[3];

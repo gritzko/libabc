@@ -2,9 +2,11 @@
 // A HIT is a min-heap of sorted slices (iterators).
 // Instantiate with element type: #define X(M, name) M##u64##name
 // Entry type: X(,cs) (e.g. u64cs = u64 const *[2])
-// Heap type:  X(,css) (e.g. u64css = u64cs *[2])
-// Comparator: X(,Z) on element pointers
-// Swap:       X(,csSwap) on slice entries
+// Heap type:  X(,csps) — slice of POINTERS to entries (DOG-027); the
+//             entries sit in the caller's oldest-first array, never move,
+//             and only the pointers permute, so csp order = age.
+// Comparator: X(,Z) on element pointers; ties by entry pointer, highest
+//             (= youngest run) wins
 // Advance:    ++(*entry)[0], eject when $empty(*entry)
 
 #include "OK.h"
@@ -12,17 +14,27 @@
 
 #define HIT_T X(, )
 #define HIT_E X(, cs)    // entry = const slice
-#define HIT_H X(, css)   // heap = slice of entries
+#define HIT_H X(, csps)  // heap = slice of pointers to entries
 
 // --- Comparator: compare entries by head element ---
 
-fun b8 X(HIT, Z)(HIT_E const *a, HIT_E const *b) {
-    return X(, Z)((*a)[0], (*b)[0]);
+// DOG-027: total order — equal heads resolve by entry pointer, highest
+// wins (entries are oldest-first, so the highest pointer is youngest).
+fun b8 X(HIT, Z)(X(, csp) const *a, X(, csp) const *b) {
+    if (X(, Z)((*a)[0], (*b)[0])) return YES;
+    if (X(, Z)((*b)[0], (*a)[0])) return NO;
+    return *a > *b;
+}
+
+fun void X(HIT, Swap)(X(, csp) *a, X(, csp) *b) {
+    X(, csp) t = *a;
+    *a = *b;
+    *b = t;
 }
 
 // --- Heap operations ---
 
-fun void X(HIT, Down)(X(, css) heap, size_t at) {
+fun void X(HIT, Down)(X(, csps) heap, size_t at) {
     size_t n = $len(heap);
     size_t i = at;
     for (;;) {
@@ -33,12 +45,12 @@ fun void X(HIT, Down)(X(, css) heap, size_t at) {
         if (right < n && X(HIT, Z)($atp(heap, right), $atp(heap, left)))
             j = right;
         if (!X(HIT, Z)($atp(heap, j), $atp(heap, i))) break;
-        X(, csSwap)($atp(heap, i), $atp(heap, j));
+        X(HIT, Swap)($atp(heap, i), $atp(heap, j));
         i = j;
     }
 }
 
-fun void X(HIT, Heap)(X(, css) heap) {
+fun void X(HIT, Heap)(X(, csps) heap) {
     size_t n = $len(heap);
     for (size_t i = n / 2; i > 0; --i)
         X(HIT, Down)(heap, i - 1);
@@ -46,29 +58,40 @@ fun void X(HIT, Heap)(X(, css) heap) {
 
 // --- Eject entry at position ---
 
-fun void X(HIT, Eject)(X(, css) heap, size_t at) {
+fun void X(HIT, Eject)(X(, csps) heap, size_t at) {
     size_t last = $len(heap) - 1;
-    if (at != last) X(, csSwap)($atp(heap, at), $atp(heap, last));
+    if (at != last) X(HIT, Swap)($atp(heap, at), $atp(heap, last));
     --heap[1];
 }
 
-// --- Start: filter empty entries, compact, heapify ---
+// --- Start: filter empty entries, compact keeping oldest-first order ---
+// DOG-027: no longer heapifies — entry points build their own pointer heap.
 
 fun void X(HIT, Start)(X(, css) heap) {
     HIT_E *w = heap[0];
     for (HIT_E *r = heap[0]; r < heap[1]; r++) {
         if (!$empty(*r)) {
-            if (w != r) X(, csSwap)(w, r);
+            if (w != r) X(, csMv)(*w, *r);
             w++;
         }
     }
     heap[1] = w;
+}
+
+// --- Load: build the 64-slot pointer heap over the caller's entries ---
+// DOG-027: entries stay put in the oldest-first array; only csp permute.
+
+fun void X(HIT, Load)(X(, csps) heap, X(, csp) *slots, X(, css) runs) {
+    assert($len(runs) <= 64);
+    heap[0] = heap[1] = slots;
+    for (HIT_E *r = runs[0]; r < runs[1]; r++)
+        if (!$empty(*r)) *heap[1]++ = *r;
     X(HIT, Heap)(heap);
 }
 
 // --- Step: advance top entry, eject if exhausted, re-heapify ---
 
-fun void X(HIT, Step)(X(, css) heap) {
+fun void X(HIT, Step)(X(, csps) heap) {
     ++(*heap[0])[0];
     if ($empty(*heap[0])) {
         X(HIT, Eject)(heap, 0);
@@ -80,15 +103,17 @@ fun void X(HIT, Step)(X(, css) heap) {
 // --- Tops: find all entries with head equal to minimum ---
 // Moves them to front of heap. Returns count.
 
-fun size_t X(HIT, Tops)(X(, css) heap) {
+fun size_t X(HIT, Tops)(X(, csps) heap) {
     size_t l = $len(heap);
     if (l == 0) return 0;
     size_t eqlen = 1;
     size_t lim = 2;
     for (size_t i = 1; i < l && i <= lim; ++i) {
-        if (X(HIT, Z)($atp(heap, 0), $atp(heap, i))) continue;
+        // DOG-027: element compare — the total-order Z would exclude
+        // equal heads that lose the pointer tiebreak
+        if (X(, Z)((*$atp(heap, 0))[0], (*$atp(heap, i))[0])) continue;
         if (eqlen != i) {
-            X(, csSwap)($atp(heap, eqlen), $atp(heap, i));
+            X(HIT, Swap)($atp(heap, eqlen), $atp(heap, i));
             X(HIT, Down)(heap, i);
             --i;
         } else {
@@ -101,7 +126,7 @@ fun size_t X(HIT, Tops)(X(, css) heap) {
 
 // --- AdvanceTops: advance ntops entries, eject exhausted ---
 
-fun void X(HIT, AdvanceTops)(X(, css) heap, size_t ntops) {
+fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
     for (size_t j = ntops; j > 0; --j) {
         size_t i = j - 1;
         ++(*$atp(heap, i))[0];
@@ -118,7 +143,10 @@ fun void X(HIT, AdvanceTops)(X(, css) heap, size_t ntops) {
 // ABC-015: drains write into a bounded slice (head advances past the
 // output) and return OKNOROOM when it fills, like MSETMerge.
 
-fun ok64 X(HIT, MergeBag)(X(, css) heap, X(, s) into) {
+fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
+    X(, csp) slots[64];
+    X(, csps) heap;
+    X(HIT, Load)(heap, slots, runs);
     while (!$empty(heap)) {
         if ($empty(into)) return OKNOROOM;
         *into[0]++ = *(*heap[0])[0];
@@ -129,7 +157,10 @@ fun ok64 X(HIT, MergeBag)(X(, css) heap, X(, s) into) {
 
 // --- Merge: drain heap producing sorted deduplicated output ---
 
-fun ok64 X(HIT, Merge)(X(, css) heap, X(, s) into) {
+fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
+    X(, csp) slots[64];
+    X(, csps) heap;
+    X(HIT, Load)(heap, slots, runs);
     while (!$empty(heap)) {
         HIT_T val = *(*heap[0])[0];
         if ($empty(into)) return OKNOROOM;
@@ -146,7 +177,10 @@ fun ok64 X(HIT, Merge)(X(, css) heap, X(, s) into) {
 
 // --- Intersect: emit values present in ALL nruns iterators ---
 
-fun ok64 X(HIT, Intersect)(X(, css) heap, X(, s) into, size_t nruns) {
+fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
+    X(, csp) slots[64];
+    X(, csps) heap;
+    X(HIT, Load)(heap, slots, runs);
     while (!$empty(heap)) {
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
@@ -165,9 +199,11 @@ fun ok64 X(HIT, Intersect)(X(, css) heap, X(, s) into, size_t nruns) {
 
 // --- Seek: advance all entries until heap top >= key ---
 
-fun ok64 X(HIT, Seek)(X(, css) heap, X(, cp) key) {
-    HIT_E keyentry = {key, key + 1};
-    while (!$empty(heap) && X(HIT, Z)(heap[0], &keyentry)) {
+fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
+    X(, csp) slots[64];
+    X(, csps) heap;
+    X(HIT, Load)(heap, slots, runs);
+    while (!$empty(heap) && X(, Z)((*heap[0])[0], key)) {
         X(, c) *const run[2] = {(*heap[0])[0], (*heap[0])[1]};
         X(, c) *pos = X(, sFindGE)(run, key);
         (*heap[0])[0] = pos;
@@ -177,12 +213,13 @@ fun ok64 X(HIT, Seek)(X(, css) heap, X(, cp) key) {
         }
         X(HIT, Down)(heap, 0);
     }
-    return $empty(heap) ? NODATA : OK;
+    X(HIT, Start)(runs);  // DOG-027: drop exhausted entries, keep age order
+    return $empty(runs) ? NODATA : OK;
 }
 
-// --- SeekRange: trim all entries to [lo, hi), eject empty, re-heapify ---
-// After this, the heap only contains elements in [lo, hi).
-// No prefix checks needed during the walk — just drain until empty.
+// --- SeekRange: trim all entries to [lo, hi), eject empty ---
+// After this, the entries only contain elements in [lo, hi); a drain
+// (Load + Step) emits them in order with no prefix checks needed.
 
 fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
     HIT_E *w = heap[0];
@@ -198,13 +235,17 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
     }
     heap[1] = w;
     if ($empty(heap)) return NODATA;
-    X(HIT, Heap)(heap);
     return OK;
 }
 
 // --- SkipValue: advance inner HIT past its current top merged value ---
+// DOG-027: rebuilds the pointer heap per call — an inner HIT's state
+// lives entirely in its (oldest-first, in-place-advanced) entries.
 
-fun void X(HIT, SkipValue)(X(, css) inner) {
+fun void X(HIT, SkipValue)(X(, css) runs) {
+    X(, csp) slots[64];
+    X(, csps) inner;
+    X(HIT, Load)(inner, slots, runs);
     if ($empty(inner)) return;
     HIT_T val = *(*inner[0])[0];
     size_t ntops = X(HIT, Tops)(inner);
@@ -212,6 +253,7 @@ fun void X(HIT, SkipValue)(X(, css) inner) {
     while (!$empty(inner) && !X(, Z)((*inner[0])[0], &val)
                            && !X(, Z)(&val, (*inner[0])[0]))
         X(HIT, Step)(inner);
+    X(HIT, Start)(runs);
 }
 
 // --- IntersectMerge: intersect the merged outputs of N inner HITs ---
@@ -230,8 +272,12 @@ fun void X(HIT, SkipValue)(X(, css) inner) {
 typedef X(, css) *X(, csss)[2];
 
 // Top value pointer of an inner HIT
+// DOG-027: entries are no longer heap-ordered — scan for the min head.
 fun X(, cp) X(HIT, cssTop)(X(, css) *hit) {
-    return (*(*hit)[0])[0];
+    X(, cp) m = (*(*hit)[0])[0];
+    for (X(, cs) *r = (*hit)[0] + 1; r < (*hit)[1]; r++)
+        if (X(, Z)((*r)[0], m)) m = (*r)[0];
+    return m;
 }
 
 fun void X(, cssSwap)(X(, css) *a, X(, css) *b) {
@@ -357,7 +403,6 @@ fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     if ($len(into) < (i64)total) return OKNOROOM;
     HIT_T *base = *into;
     X(, css) sub = {stack[0] + (n - m), stack[0] + n};
-    X(HIT, Start)(sub);
     ok64 o = X(HIT, Merge)(sub, into);
     if (o != OK) return o;
     stack[0][n - m][0] = base;

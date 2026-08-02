@@ -1,4 +1,5 @@
 #include "INT.h"
+#include "KV.h"
 #include "PRO.h"
 #include "TEST.h"
 
@@ -18,6 +19,13 @@ fun void u64csSwap(u64cs *a, u64cs *b) {
 // MSETx for cross-validation
 #define X(M, name) M##u64##name
 #include "MSETx.h"
+#undef X
+
+// DOG-027: keyed lane — kv64Z compares keys only, so equal keys are
+// genuine ties and the tie winner is observable in the merged output.
+// No csSwap needed: the heap swaps entry pointers now.
+#define X(M, name) M##kv64##name
+#include "HITx.h"
 #undef X
 
 // HIT0: merge 3 sorted runs -> sorted deduped
@@ -658,6 +666,81 @@ ok64 HIT24() {
     done;
 }
 
+// HIT25: keyed kv64 Merge ties — the youngest run (highest entry in the
+// oldest-first array) must win; table-driven.
+ok64 HIT25() {
+    sane(1);
+    typedef struct {
+        kv64 runs[3][4];  // up to 3 runs, oldest-first
+        size_t len[3];    // per-run length, 0 = run absent
+        kv64 want[8];
+        size_t wlen;
+    } kase;
+    static kase const K[] = {
+        //  cross-run winner by age: key 1 in all three runs
+        {{{{1, 10}, {3, 30}}, {{1, 11}}, {{1, 12}, {2, 22}}},
+         {2, 1, 2},
+         {{1, 12}, {2, 22}, {3, 30}},
+         3},
+        //  tie group of three on key 7, youngest val 73 wins
+        {{{{5, 51}, {7, 71}}, {{7, 72}}, {{7, 73}, {9, 93}}},
+         {2, 1, 2},
+         {{5, 51}, {7, 73}, {9, 93}},
+         3},
+        //  two-run tie amid untied keys
+        {{{{2, 20}, {4, 40}, {6, 60}}, {{4, 44}}, {{0, 0}}},
+         {3, 1, 0},
+         {{2, 20}, {4, 44}, {6, 60}},
+         3},
+    };
+    for (size_t k = 0; k < sizeof(K) / sizeof(K[0]); k++) {
+        kv64cs runs[3];
+        size_t n = 0;
+        for (size_t r = 0; r < 3; r++) {
+            if (K[k].len[r] == 0) continue;
+            runs[n][0] = K[k].runs[r];
+            runs[n][1] = K[k].runs[r] + K[k].len[r];
+            n++;
+        }
+        kv64css heap = {runs, runs + n};
+        HITkv64Start(heap);
+        kv64 buf[8];
+        kv64s out = {buf, buf + 8};
+        call(HITkv64Merge, heap, out);
+        size_t olen = out[0] - buf;
+        testeqv((long long)(olen), (long long)(K[k].wlen), "%lld");
+        for (size_t i = 0; i < K[k].wlen; i++) {
+            testeqv((long long)(buf[i].key), (long long)(K[k].want[i].key),
+                    "%lld");
+            testeqv((long long)(buf[i].val), (long long)(K[k].want[i].val),
+                    "%lld");
+        }
+    }
+    done;
+}
+
+// HIT26: keyed kv64 Compact — the compaction drain resolves ties the
+// same way (youngest run wins), so query and compaction agree.
+ok64 HIT26() {
+    sane(1);
+    kv64 old[] = {{1, 10}, {5, 50}};
+    kv64 yng[] = {{1, 11}, {9, 90}};
+    kv64cs runs[2] = {{old, old + 2}, {yng, yng + 2}};
+    kv64css stack = {runs, runs + 2};
+    kv64 buf[4];
+    kv64s into = {buf, buf + 4};
+    call(HITkv64Compact, stack, into);
+    testeqv((long long)($len(stack)), (long long)((size_t)1), "%lld");
+    testeqv((long long)($len(stack[0][0])), (long long)((size_t)3), "%lld");
+    testeqv((long long)(buf[0].key), (long long)((u64)1), "%lld");
+    testeqv((long long)(buf[0].val), (long long)((u64)11), "%lld");
+    testeqv((long long)(buf[1].key), (long long)((u64)5), "%lld");
+    testeqv((long long)(buf[1].val), (long long)((u64)50), "%lld");
+    testeqv((long long)(buf[2].key), (long long)((u64)9), "%lld");
+    testeqv((long long)(buf[2].val), (long long)((u64)90), "%lld");
+    done;
+}
+
 ok64 HITtest() {
     sane(1);
     call(HIT0);
@@ -685,6 +768,8 @@ ok64 HITtest() {
     call(HIT22);
     call(HIT23);
     call(HIT24);
+    call(HIT25);
+    call(HIT26);
     done;
 }
 

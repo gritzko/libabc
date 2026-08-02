@@ -4,22 +4,27 @@ A HIT is a min-heap of sorted slices (iterators). Instantiate with the
 **element** type; all slice/heap types are derived automatically.
 
 ```c
-fun void u64csSwap(u64cs *a, u64cs *b) { /* swap two slices */ }
-
 #define X(M, name) M##u64##name
 #include "HITx.h"
 #undef X
 ```
 
-The only prerequisite is `X(,csSwap)` (e.g. `u64csSwap`) since array
-types can't go through Sx.h.
+There are no prerequisites beyond Sx (DOG-027: the heap permutes entry
+POINTERS, so `X(,csSwap)` is no longer needed).
+
+The entry points take an oldest-first `X(,css)` of runs, whose entries
+never move; each builds its own 64-slot `X(,csps)` pointer heap.  Equal
+head elements (a keyed lane's genuine ties) resolve to the highest
+entry pointer — the youngest run — in Merge, Seek, SeekRange's drain
+and Compact alike.
 
 ## Types
 
 | Derived type | Example   | Meaning                          |
 |-------------|-----------|----------------------------------|
 | X(,cs)      | u64cs     | Entry = const slice (iterator)   |
-| X(,css)     | u64css    | Heap = slice of entries          |
+| X(,css)     | u64css    | Oldest-first slice of entries    |
+| X(,csps)    | u64csps   | Heap = slice of entry pointers (internal) |
 | X(,csss)    | u64csss   | Slice of heaps (for IntersectMerge) |
 
 ## Functions
@@ -28,7 +33,7 @@ types can't go through Sx.h.
 
 | Function            | Description                            |
 |--------------------|----------------------------------------|
-| `HITTStart(heap)`  | Filter empties, compact, heapify       |
+| `HITTStart(heap)`  | Filter empties, compact (keeps age order) |
 | `HITTStep(heap)`   | Advance top, eject if done, sift down  |
 | `HITTMerge(heap, &out)` | Sorted deduplicated drain         |
 | `HITTIntersect(heap, &out, n)` | Emit only values in all N entries |
