@@ -25,10 +25,6 @@
 #undef X
 
 #define X(M, name) M##u32##name
-#include "MSETx.h"
-#undef X
-
-#define X(M, name) M##u32##name
 #include "SKIPx.h"
 #undef X
 #ifdef SKIP_BLK_HI
@@ -99,7 +95,8 @@ ok64 TEMPL2() {
     u32css iter = {runs, runs + 2};
     u32 out[6];
     $u32 into = {out, out + 6};
-    call(MSETu32Merge, into, iter);
+    // DOG-027: MSET retired — the same u32 multiway merge, now via HIT.
+    call(HITu32Merge, iter, into);
     for (int i = 0; i < 6; i++) testeqv((long long)(out[i]), (long long)(i + 1), "%lld");
     done;
 }

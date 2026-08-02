@@ -50,7 +50,6 @@ is damaged or foreign; the cure is to drop the runs and re-derive.
 
 | Function            | Description                            |
 |--------------------|----------------------------------------|
-| `HITTStart(heap)`  | Filter empties, compact (keeps age order) |
 | `HITTStep(heap)`   | Advance top, eject if done, sift down  |
 | `HITTMerge(heap, &out)` | Sorted deduplicated drain         |
 | `HITTIntersect(heap, &out, n)` | Emit only values in all N entries |
@@ -72,7 +71,6 @@ remaining duplicates.
 ```c
 u64cs runs[3] = {{a, a+4}, {b, b+3}, {c, c+5}};
 u64css heap = {runs, runs + 3};
-HITu64Start(heap);
 u64 buf[64]; u64p out = buf;
 HITu64Merge(heap, &out);
 // buf[0..out-buf) contains sorted deduplicated merge
@@ -83,7 +81,6 @@ HITu64Merge(heap, &out);
 Like Merge, but only emits values present in ALL N iterators.
 
 ```c
-HITu64Start(heap);
 u64 buf[64]; u64p out = buf;
 HITu64Intersect(heap, &out, 3);  // 3 = number of runs
 ```
@@ -98,7 +95,6 @@ all inner HITs produce it.
 ```c
 u64cs *outers[N][2];   // N inner HITs
 outers[i][0] = runs_i; outers[i][1] = runs_i + nruns_i;
-HITu64Start(outers[i]);  // start each inner HIT
 
 u64csss oh = {outers, outers + N};
 u64 buf[...]; u64p out = buf;

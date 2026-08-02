@@ -115,7 +115,7 @@ fun ok64 X(HEAP, EjectAtZ)(X(, bp) buf, size_t at, X(, z) z) {
 fun ok64 X(, sTopsZ)(X(, sc) heap, X(, sp) eqs, X(, z) z) {
     size_t l = $len(heap);
     // ABC-015: an empty heap has no tops; fabricating a 1-element slice
-    // over nothing sent consumers out of bounds (twin MSETTopZ MISSes)
+    // over nothing sent consumers out of bounds (DOG-027: HITTops returns 0)
     if (l == 0) return MISS;
     size_t eqlen = 1;
     size_t lim = 2;

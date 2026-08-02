@@ -72,29 +72,22 @@ fun void X(HIT, Eject)(X(, csps) heap, size_t at) {
     --heap[1];
 }
 
-// --- Start: filter empty entries, compact keeping oldest-first order ---
-// DOG-027: no longer heapifies — entry points build their own pointer heap.
-
-fun void X(HIT, Start)(X(, css) heap) {
-    HIT_E *w = heap[0];
-    for (HIT_E *r = heap[0]; r < heap[1]; r++) {
-        if (!$empty(*r)) {
-            if (w != r) X(, csMv)(*w, *r);
-            w++;
-        }
-    }
-    heap[1] = w;
-}
-
-// --- Load: build the HIT_MAX_RUNS-slot pointer heap over the entries ---
-// DOG-027: entries stay put in the oldest-first array; only csp permute.
+// --- Load: compact `runs` in place, build the pointer heap over it ---
+// DOG-027: SIDE EFFECT on `runs` — empty entries are dropped, survivors
+// shift down keeping age order, runs[1] moves back; the heap aims at those.
 // Past HIT_MAX_RUNS the stack is damaged or foreign: HITTOOMANY, no window.
 
 fun ok64 X(HIT, Load)(X(, csps) heap, X(, csp) *slots, X(, css) runs) {
     if ($len(runs) > HIT_MAX_RUNS) return HITTOOMANY;
     heap[0] = heap[1] = slots;
-    for (HIT_E *r = runs[0]; r < runs[1]; r++)
-        if (!$empty(*r)) *heap[1]++ = *r;
+    HIT_E *w = runs[0];
+    for (HIT_E *r = runs[0]; r < runs[1]; r++) {
+        if ($empty(*r)) continue;
+        if (w != r) X(, csMv)(*w, *r);
+        *heap[1]++ = *w;
+        w++;
+    }
+    runs[1] = w;
     X(HIT, Heap)(heap);
     return OK;
 }
@@ -151,7 +144,7 @@ fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
 
 // --- MergeBag: drain heap producing sorted output (keeps duplicates) ---
 // ABC-015: drains write into a bounded slice (head advances past the
-// output) and return OKNOROOM when it fills, like MSETMerge.
+// output) and return OKNOROOM when it fills.
 
 fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
     X(, csp) slots[HIT_MAX_RUNS];
@@ -227,8 +220,7 @@ fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
         }
         X(HIT, Down)(heap, 0);
     }
-    X(HIT, Start)(runs);  // DOG-027: drop exhausted entries, keep age order
-    return $empty(runs) ? NODATA : OK;
+    return $empty(heap) ? NODATA : OK;  // DOG-027: the heap is the live set
 }
 
 // --- SeekRange: trim all entries to [lo, hi), eject empty ---
@@ -269,8 +261,9 @@ fun ok64 X(HIT, SkipValue)(X(, css) runs) {
     while (!$empty(inner) && !X(, Z)((*inner[0])[0], &val)
                            && !X(, Z)(&val, (*inner[0])[0]))
         X(HIT, Step)(inner);
-    X(HIT, Start)(runs);
-    return OK;
+    // DOG-027: re-Load to compact `runs` — sIntersectMerge's cssTop reads
+    // the inner's entries directly, with no Load of its own to filter them.
+    return X(HIT, Load)(inner, slots, runs);
 }
 
 // --- IntersectMerge: intersect the merged outputs of N inner HITs ---
@@ -281,7 +274,6 @@ fun ok64 X(HIT, SkipValue)(X(, css) runs) {
 // Usage:
 //   u64cs *outers[N][2];   // N inner HITs
 //   outers[i][0] = runs_i; outers[i][1] = runs_i + nruns_i;
-//   HITu64Start(outers[i]);  // start each inner HIT
 //   u64csss oh = {outers, outers + N};
 //   u64 buf[...]; u64p out = buf;
 //   HITu64sIntersectMerge(oh, &out);
@@ -387,11 +379,11 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
 // than 1/8 of its predecessor).  IsCompact is the predicate; Compact
 // merges the youngest runs that violate it into a single sorted+
 // dedup'd run, cascading until the invariant holds again.  The merge
-// uses HIT's stream-merge-with-dedup (HITStart + HITMerge), so
+// uses HIT's stream-merge-with-dedup (HITMerge), so
 // identical full-element rows across runs collapse to one.
 
-// ABC-015: near-duplicate of MSETIsCompact/Compact (different NOROOM
-// codes); unifying the LSM-ladder logic into one home is a follow-up.
+// DOG-027: HIT is now the ONE ladder home — MSET is deleted, so ABC-015's
+// deferred "unify IsCompact/Compact into one home" follow-up is closed.
 fun b8 X(HIT, IsCompact)(X(, css) stack) {
     size_t n = $len(stack);
     for (size_t i = 0; i + 1 < n; i++) {

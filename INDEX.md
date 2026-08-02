@@ -190,13 +190,6 @@ A fixed multi-level staging container that flushes to a save slice when a level 
  -  `BOXOpen`/`BOXFeed1`/`BOXFlush`/`BOXClose` — open a box over a range, push records, flush a full level.
  -  `BOXLevels` — compute the per-level capacities for a byte budget.
 
-###  MSET.h, MSETx.h — merge-set / multiway iterator
-
-A heap of sorted runs presenting a single merged, deduplicated stream; seekable. The `Z`/`z` argument is the run comparator.
-
- -  `MSETStart`/`MSETStartZ`/`MSETNext`/`MSETMerge` — initialize the merge over a stack of runs, step it.
- -  `MSETSeek`/`MSETSeekZ`/`MSETTopZ`/`MSETAdvZ` — seek to a key and advance past the current equal-tops group.
-
 ###  BIT.h — `u1` bitmap (bit addressing over u64 words)
 
 A bit VALUE (`u1`, carried as a b8 0/1; no addressable `u1*`) plus bit addressing layered **directly over the real u64 families** (INT.h): a map IS a `u64s`/`u64cs` view or an owned word buffer `u1b` (== `u64b`) — no bespoke struct. Bit i lives in word `i>>6`, bit `i&63`, LSB-first within the LE word (matches the old `BitAt`). Set algebra is word-parallel; lengths are whole words (`u1sLen` == words*64). Replaces the ad-hoc `BitAt`/`BitSet`/`BitUnset` (BUF.h) — `u1sClr` is `&= ~mask`, so the broken `BitUnset` `|= ~(1<<bit)` cannot be expressed.

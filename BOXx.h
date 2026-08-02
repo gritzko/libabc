@@ -57,8 +57,7 @@
 //      #include "abc/BOX.h"
 //      #undef X
 //
-//  Required environment: X(,Z), X(,IsZero), X(,sSort), X(HIT,Start),
-//  X(HIT,Merge).
+//  Required environment: X(,Z), X(,IsZero), X(,sSort), X(HIT,Merge).
 
 #include "B.h"
 #include "BOX.h"
@@ -234,7 +233,6 @@ fun ok64 X(BOX, Feed1)(X(, sb) box, BOX_T const *rec) {
     //  bounded slice (the chunk, fenced by the next level's head) and
     //  advances its head; we then read back the new data extent.
     X(, css) heap = {runs, runs + nruns};
-    X(HIT, Start)(heap);
     X(, s) out = {data[target][0], data[target + 1][0]};
     ok64 o = X(HIT, Merge)(heap, out);
     if (o != OK) return o;
@@ -311,7 +309,6 @@ fun ok64 X(BOX, Flush)(X(, sb) box, X(, s) save) {
     if ((size_t)(save[1] - save[0]) < total) return BOXNOROOM;
 
     X(, css) heap = {runs, runs + nruns};
-    X(HIT, Start)(heap);
     X(HIT, Merge)(heap, save);
 
     //  Zero everything and reset Ts.

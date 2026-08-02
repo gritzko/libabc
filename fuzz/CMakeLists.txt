@@ -43,8 +43,6 @@ target_link_libraries(SLOGfuzz abc)
 
 add_executable(NFAfuzz NFA.c ../RON.c)
 
-add_executable(MSETfuzz MSET.c ../RON.c)
-
 add_executable(HITfuzz HIT.c ../RON.c)
 
 add_executable(BOXfuzz BOX.c ../RON.c)

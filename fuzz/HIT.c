@@ -7,13 +7,22 @@
 #include "HITx.h"
 #undef X
 
-// MSETx for cross-validation
-#define X(M, name) M##u64##name
-#include "MSETx.h"
-#undef X
-
 #define LEN 512
 #define MAXRUNS 32
+
+// DOG-027: MSET retired — naive independent oracle: gather, sort, dedup.
+static size_t hitfuzzref(u64 *out, u64cs const *runs, size_t nruns, u64 from) {
+    size_t len = 0;
+    for (size_t r = 0; r < nruns; r++)
+        for (u64c *p = runs[r][0]; p < runs[r][1]; p++)
+            if (*p >= from) out[len++] = *p;
+    u64s all = {out, out + len};
+    u64sSort(all);
+    size_t w = 0;
+    for (size_t i = 0; i < len; i++)
+        if (w == 0 || out[w - 1] != out[i]) out[w++] = out[i];
+    return w;
+}
 
 FUZZ(u64, HITfuzz) {
     sane(1);
@@ -33,7 +42,7 @@ FUZZ(u64, HITfuzz) {
             if (v != 0) swork[wpos++] = v;
             if (wpos > rstart && nruns < MAXRUNS) {
                 u64s run = {swork + rstart, swork + wpos};
-                MSETu64Sort(run);
+                u64sSort(run);
                 runs[nruns][0] = swork + rstart;
                 runs[nruns][1] = swork + wpos;
                 nruns++;
@@ -45,14 +54,13 @@ FUZZ(u64, HITfuzz) {
     }
     if (nruns < 1) done;
 
-    // --- Test A: Merge via HIT, cross-check vs MSET ---
+    // --- Test A: Merge via HIT, cross-check vs the naive oracle ---
     u64cs uruns[MAXRUNS];
     for (size_t i = 0; i < nruns; i++) {
         uruns[i][0] = runs[i][0];
         uruns[i][1] = runs[i][1];
     }
     u64css uheap = {uruns, uruns + nruns};
-    HITu64Start(uheap);
     u64 ubuf[LEN];
     u64s uout = {ubuf, ubuf + sizeof(ubuf) / sizeof(u64)};
     call(HITu64Merge, uheap, uout);
@@ -60,17 +68,9 @@ FUZZ(u64, HITfuzz) {
     for (size_t i = 0; i + 1 < ulen; i++)
         must(ubuf[i] < ubuf[i + 1], "merge not sorted");
 
-    // Cross-check vs MSET Merge
-    u64cs mruns[MAXRUNS];
-    for (size_t i = 0; i < nruns; i++) {
-        mruns[i][0] = runs[i][0];
-        mruns[i][1] = runs[i][1];
-    }
-    u64css miter = {mruns, mruns + nruns};
+    // Cross-check vs sort + dedup of every element
     u64 mbuf[LEN];
-    u64s minto = {mbuf, mbuf + LEN};
-    call(MSETu64Merge, minto, miter);
-    size_t mlen = minto[0] - mbuf;
+    size_t mlen = hitfuzzref(mbuf, runs, nruns, 0);
     must(mlen == ulen, "merge length mismatch");
     for (size_t i = 0; i < mlen; i++)
         must(mbuf[i] == ubuf[i], "merge value mismatch");
@@ -82,7 +82,6 @@ FUZZ(u64, HITfuzz) {
         iruns[i][1] = runs[i][1];
     }
     u64css iheap = {iruns, iruns + nruns};
-    HITu64Start(iheap);
     u64 ibuf[LEN];
     u64s iout = {ibuf, ibuf + sizeof(ibuf) / sizeof(u64)};
     call(HITu64Intersect, iheap, iout, nruns);
@@ -120,7 +119,7 @@ FUZZ(u64, HITfuzz) {
         }
     }
 
-    // --- Test C: Seek + Merge cross-validation vs MSET ---
+    // --- Test C: Seek + Merge cross-validation vs the naive oracle ---
     u64 seekkey = input[0][0];
 
     u64cs sruns[MAXRUNS];
@@ -129,7 +128,6 @@ FUZZ(u64, HITfuzz) {
         sruns[i][1] = runs[i][1];
     }
     u64css sheap = {sruns, sruns + nruns};
-    HITu64Start(sheap);
     if (!$empty(sheap))
         HITu64Seek(sheap, &seekkey);
     u64 sbuf[LEN];
@@ -141,22 +139,9 @@ FUZZ(u64, HITfuzz) {
     for (size_t i = 0; i < slen; i++)
         must(sbuf[i] >= seekkey, "seek merge element < key");
 
-    // MSET path
-    u64cs msr[MAXRUNS];
-    for (size_t i = 0; i < nruns; i++) {
-        msr[i][0] = runs[i][0];
-        msr[i][1] = runs[i][1];
-    }
-    u64css msiter = {msr, msr + nruns};
-    MSETu64Start(msiter);
-    MSETu64Seek(msiter, seekkey);
+    // oracle path: every element >= seekkey, sorted and deduped
     u64 msbuf[LEN];
-    size_t mslen = 0;
-    while (!$empty(msiter) && mslen < LEN) {
-        u64c *p = ***msiter;
-        msbuf[mslen++] = *p;
-        MSETu64Next(msiter);
-    }
+    size_t mslen = hitfuzzref(msbuf, runs, nruns, seekkey);
     must(mslen == slen, "seek length mismatch");
     for (size_t i = 0; i < mslen; i++)
         must(msbuf[i] == sbuf[i], "seek value mismatch");
@@ -178,8 +163,6 @@ FUZZ(u64, HITfuzz) {
         u64cs *oha[2][2];
         oha[0][0] = ir1; oha[0][1] = ir1 + half;
         oha[1][0] = ir2; oha[1][1] = ir2 + (nruns - half);
-        HITu64Start(oha[0]);
-        HITu64Start(oha[1]);
         u64csss imh = {oha, oha + 2};
         u64 imbuf[LEN]; u64s imout = {imbuf, imbuf + sizeof(imbuf) / sizeof(u64)};
         call(HITu64sIntersectMerge, imh, imout);
@@ -197,7 +180,6 @@ FUZZ(u64, HITfuzz) {
         }
         u64css mh1 = {mr1, mr1 + half};
         u64css mh2 = {mr2, mr2 + (nruns - half)};
-        HITu64Start(mh1); HITu64Start(mh2);
         u64 m1[LEN]; u64s m1o = {m1, m1 + sizeof(m1) / sizeof(u64)};
         u64 m2[LEN]; u64s m2o = {m2, m2 + sizeof(m2) / sizeof(u64)};
         call(HITu64Merge, mh1, m1o);

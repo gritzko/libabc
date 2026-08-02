@@ -8,11 +8,6 @@
 #include "HITx.h"
 #undef X
 
-// MSETx for cross-validation
-#define X(M, name) M##u64##name
-#include "MSETx.h"
-#undef X
-
 // DOG-027: keyed lane — kv64Z compares keys only, so equal keys are
 // genuine ties and the tie winner is observable in the merged output.
 // No csSwap needed: the heap swaps entry pointers now.
@@ -28,7 +23,6 @@ ok64 HIT0() {
     u64 c[] = {1, 4, 7, 10};
     u64cs runs[3] = {{a, a + 4}, {b, b + 4}, {c, c + 4}};
     u64css heap = {runs, runs + 3};
-    HITu64Start(heap);
     u64 buf[12];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
     call(HITu64Merge, heap, out);
@@ -47,33 +41,25 @@ ok64 HIT0() {
     done;
 }
 
-// HIT1: cross-validate merge vs MSETu64Merge
+// HIT1: merge 3 runs with cross-run duplicates -> sorted deduped
 ok64 HIT1() {
     sane(1);
     u64 a[] = {1, 3, 5, 7, 9};
     u64 b[] = {2, 3, 6, 8, 10};
     u64 c[] = {1, 4, 5, 9, 11};
 
-    // MSET merge
-    u64cs mruns[3] = {{a, a + 5}, {b, b + 5}, {c, c + 5}};
-    u64css miter = {mruns, mruns + 3};
-    u64 mbuf[15];
-    u64s minto = {mbuf, mbuf + 15};
-    call(MSETu64Merge, minto, miter);
-    size_t mlen = minto[0] - mbuf;
-
     // HIT merge
     u64cs hruns[3] = {{a, a + 5}, {b, b + 5}, {c, c + 5}};
     u64css hheap = {hruns, hruns + 3};
-    HITu64Start(hheap);
     u64 hbuf[15];
     u64s hout = {hbuf, hbuf + sizeof(hbuf) / sizeof(u64)};
     call(HITu64Merge, hheap, hout);
     size_t hlen = hout[0] - hbuf;
 
-    testeqv((long long)(hlen), (long long)(mlen), "%lld");
-    for (size_t i = 0; i < mlen; i++)
-        testeqv((long long)(hbuf[i]), (long long)(mbuf[i]), "%lld");
+    // DOG-027: MSET retired — the expected union {1..11}, spelled out.
+    testeqv((long long)(hlen), (long long)((size_t)11), "%lld");
+    for (size_t i = 0; i < 11; i++)
+        testeqv((long long)(hbuf[i]), (long long)((u64)(i + 1)), "%lld");
     done;
 }
 
@@ -85,7 +71,6 @@ ok64 HIT2() {
     u64 c[] = {1, 3, 5, 6, 9};
     u64cs runs[3] = {{a, a + 5}, {b, b + 5}, {c, c + 5}};
     u64css heap = {runs, runs + 3};
-    HITu64Start(heap);
     u64 buf[15];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
     call(HITu64Intersect, heap, out, 3);
@@ -97,7 +82,7 @@ ok64 HIT2() {
     done;
 }
 
-// HIT3: Start filters empties, heap is correct
+// HIT3: Load filters empties, heap is correct
 ok64 HIT3() {
     sane(1);
     u64 a[] = {1, 3, 5};
@@ -109,14 +94,17 @@ ok64 HIT3() {
         {a + 3, a + 3},    // empty (begin == end)
     };
     u64css heap = {runs, runs + 4};
-    HITu64Start(heap);
+    u64csp slots[HIT_MAX_RUNS];
+    u64csps ptrs;
+    call(HITu64Load, ptrs, slots, heap);
+    testeqv((long long)($len(ptrs)), (long long)((size_t)2), "%lld");
     testeqv((long long)($len(heap)), (long long)((size_t)2), "%lld");
-    // top should be minimum (1)
+    // first (oldest) surviving entry is run a, head 1
     testeqv((long long)(*(*heap[0])[0]), (long long)((u64)1), "%lld");
     done;
 }
 
-// HIT4: Start with empties + merge, cross-validate vs MSET
+// HIT4: empties interspersed + merge, against the expected union
 ok64 HIT4() {
     sane(1);
     u64 a[] = {1, 5, 9};
@@ -132,23 +120,16 @@ ok64 HIT4() {
         {c, c + 3},
     };
     u64css hheap = {hruns, hruns + 5};
-    HITu64Start(hheap);
     u64 hbuf[12];
     u64s hout = {hbuf, hbuf + sizeof(hbuf) / sizeof(u64)};
     call(HITu64Merge, hheap, hout);
     size_t hlen = hout[0] - hbuf;
 
-    // MSET: same data, no empties
-    u64cs mruns[3] = {{a, a + 3}, {b, b + 3}, {c, c + 3}};
-    u64css miter = {mruns, mruns + 3};
-    u64 mbuf[12];
-    u64s minto = {mbuf, mbuf + 12};
-    call(MSETu64Merge, minto, miter);
-    size_t mlen = minto[0] - mbuf;
-
-    testeqv((long long)(hlen), (long long)(mlen), "%lld");
-    for (size_t i = 0; i < mlen; i++)
-        testeqv((long long)(hbuf[i]), (long long)(mbuf[i]), "%lld");
+    // DOG-027: MSET retired — the same union the empties must not disturb.
+    static u64 const want[8] = {1, 2, 3, 5, 6, 7, 8, 9};
+    testeqv((long long)(hlen), (long long)((size_t)8), "%lld");
+    for (size_t i = 0; i < 8; i++)
+        testeqv((long long)(hbuf[i]), (long long)(want[i]), "%lld");
     done;
 }
 
@@ -160,7 +141,6 @@ ok64 HIT5() {
     u64 c[] = {3, 5, 7, 11, 13};
     u64cs runs[3] = {{a, a + 5}, {b, b + 5}, {c, c + 5}};
     u64css heap = {runs, runs + 3};
-    HITu64Start(heap);
     u64 key = 5;
     ok64 o = HITu64Seek(heap, &key);
     testeqv((long long)(o), (long long)(OK), "%lld");
@@ -178,17 +158,16 @@ ok64 HIT5() {
     done;
 }
 
-// HIT6: Seek + merge, cross-validate vs MSET Seek
+// HIT6: Seek + merge, against the expected tail of the union
 ok64 HIT6() {
     sane(1);
     u64 a[] = {10, 20, 30, 40, 50};
     u64 b[] = {15, 25, 35, 45, 55};
     u64 c[] = {12, 22, 32, 42, 52};
 
-    // HIT: Start + Seek + merge
+    // HIT: Seek + merge
     u64cs hruns[3] = {{a, a + 5}, {b, b + 5}, {c, c + 5}};
     u64css hheap = {hruns, hruns + 3};
-    HITu64Start(hheap);
     u64 key = 25;
     HITu64Seek(hheap, &key);
     u64 hbuf[15];
@@ -196,21 +175,11 @@ ok64 HIT6() {
     call(HITu64Merge, hheap, hout);
     size_t hlen = hout[0] - hbuf;
 
-    // MSET: Start + Seek + drain
-    u64cs mruns[3] = {{a, a + 5}, {b, b + 5}, {c, c + 5}};
-    u64css miter = {mruns, mruns + 3};
-    MSETu64Start(miter);
-    MSETu64Seek(miter, 25);
-    u64 mbuf[15];
-    size_t mlen = 0;
-    while (!$empty(miter)) {
-        mbuf[mlen++] = ****miter;
-        MSETu64Next(miter);
-    }
-
-    testeqv((long long)(hlen), (long long)(mlen), "%lld");
-    for (size_t i = 0; i < mlen; i++)
-        testeqv((long long)(hbuf[i]), (long long)(mbuf[i]), "%lld");
+    // DOG-027: MSET retired — every element >= 25, in order, spelled out.
+    static u64 const want[10] = {25, 30, 32, 35, 40, 42, 45, 50, 52, 55};
+    testeqv((long long)(hlen), (long long)((size_t)10), "%lld");
+    for (size_t i = 0; i < 10; i++)
+        testeqv((long long)(hbuf[i]), (long long)(want[i]), "%lld");
     done;
 }
 
@@ -221,10 +190,14 @@ ok64 HIT7() {
     u64 b[] = {4, 5, 6};
     u64cs runs[2] = {{a, a + 3}, {b, b + 3}};
     u64css heap = {runs, runs + 2};
-    HITu64Start(heap);
     u64 key = 100;
     ok64 o = HITu64Seek(heap, &key);
     testeqv((long long)(o), (long long)(NODATA), "%lld");
+    // DOG-027: Seek no longer compacts — the next Load drops the exhausted
+    // entries, so the same emptiness claim is asserted through one.
+    u64csp slots[HIT_MAX_RUNS];
+    u64csps ptrs;
+    call(HITu64Load, ptrs, slots, heap);
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     done;
 }
@@ -236,11 +209,10 @@ ok64 HIT8() {
     u64 b[] = {7, 12, 20};
     u64cs runs[2] = {{a, a + 3}, {b, b + 3}};
     u64css heap = {runs, runs + 2};
-    HITu64Start(heap);
     u64 key = 1;
     ok64 o = HITu64Seek(heap, &key);
     testeqv((long long)(o), (long long)(OK), "%lld");
-    // top should still be 5 (unchanged)
+    // first (oldest) entry's head is still 5 (unchanged)
     testeqv((long long)(*(*heap[0])[0]), (long long)((u64)5), "%lld");
     done;
 }
@@ -252,7 +224,6 @@ ok64 HIT9() {
     u64 b[] = {2, 4, 6, 8};
     u64cs runs[2] = {{a, a + 4}, {b, b + 4}};
     u64css heap = {runs, runs + 2};
-    HITu64Start(heap);
     u64 key = 4;
     HITu64Seek(heap, &key);
     // DOG-027: entries stay oldest-first (heap[0] is the FIRST run, not the
@@ -273,7 +244,7 @@ ok64 HIT9() {
     done;
 }
 
-// HIT10: Start on all-empty → empty heap
+// HIT10: Load on all-empty → empty heap
 ok64 HIT10() {
     sane(1);
     u64cs runs[3] = {
@@ -282,7 +253,10 @@ ok64 HIT10() {
         {NULL, NULL},
     };
     u64css heap = {runs, runs + 3};
-    HITu64Start(heap);
+    u64csp slots[HIT_MAX_RUNS];
+    u64csps ptrs;
+    call(HITu64Load, ptrs, slots, heap);
+    testeqv((long long)($len(ptrs)), (long long)((size_t)0), "%lld");
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     u64 key = 1;
     ok64 o = HITu64Seek(heap, &key);
@@ -305,8 +279,6 @@ ok64 HIT11() {
     u64cs *oh[2][2];
     oh[0][0] = ra; oh[0][1] = ra + 2;
     oh[1][0] = rb; oh[1][1] = rb + 2;
-    HITu64Start(oh[0]);
-    HITu64Start(oh[1]);
 
     u64csss heap = {oh, oh + 2};
     u64 buf[20]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -333,9 +305,6 @@ ok64 HIT12() {
     oh[0][0] = ra; oh[0][1] = ra + 1;
     oh[1][0] = rb; oh[1][1] = rb + 1;
     oh[2][0] = rc; oh[2][1] = rc + 1;
-    HITu64Start(oh[0]);
-    HITu64Start(oh[1]);
-    HITu64Start(oh[2]);
 
     u64csss heap = {oh, oh + 3};
     u64 buf[20]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -358,8 +327,6 @@ ok64 HIT13() {
     u64cs *oh[2][2];
     oh[0][0] = ra; oh[0][1] = ra + 1;
     oh[1][0] = rb; oh[1][1] = rb + 1;
-    HITu64Start(oh[0]);
-    HITu64Start(oh[1]);
 
     u64csss heap = {oh, oh + 2};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -377,7 +344,6 @@ ok64 HIT14() {
 
     u64cs *oh[1][2];
     oh[0][0] = ra; oh[0][1] = ra + 2;
-    HITu64Start(oh[0]);
 
     u64csss heap = {oh, oh + 1};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -403,8 +369,6 @@ ok64 HIT15() {
     u64cs *oh[2][2];
     oh[0][0] = ra; oh[0][1] = ra + 2;
     oh[1][0] = rb; oh[1][1] = rb + 2;
-    HITu64Start(oh[0]);
-    HITu64Start(oh[1]);
 
     u64csss heap = {oh, oh + 2};
     u64 buf[20]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -430,8 +394,6 @@ ok64 HIT16() {
     u64cs *oh[2][2];
     oh[0][0] = ra1; oh[0][1] = ra1 + 2;
     oh[1][0] = rb1; oh[1][1] = rb1 + 2;
-    HITu64Start(oh[0]);
-    HITu64Start(oh[1]);
     u64csss heap = {oh, oh + 2};
     u64 rbuf[20]; u64s rout = {rbuf, rbuf + sizeof(rbuf) / sizeof(u64)};
     call(HITu64sIntersectMerge, heap, rout);
@@ -440,14 +402,12 @@ ok64 HIT16() {
     // Method 2: separate Merge each, then two-pointer intersect
     u64cs ra2[] = {{a1, a1 + 4}, {a2, a2 + 4}};
     u64css ha = {ra2, ra2 + 2};
-    HITu64Start(ha);
     u64 ma[20]; u64s mao = {ma, ma + sizeof(ma) / sizeof(u64)};
     call(HITu64Merge, ha, mao);
     size_t malen = mao[0] - ma;
 
     u64cs rb2[] = {{b1, b1 + 6}, {b2, b2 + 3}};
     u64css hb = {rb2, rb2 + 2};
-    HITu64Start(hb);
     u64 mb[20]; u64s mbo = {mb, mb + sizeof(mb) / sizeof(u64)};
     call(HITu64Merge, hb, mbo);
     size_t mblen = mbo[0] - mb;
@@ -476,7 +436,6 @@ ok64 HIT17() {
     oh[0][0] = ra; oh[0][1] = ra + 1;
     oh[1][0] = NULL; oh[1][1] = NULL;  // empty
     oh[2][0] = ra; oh[2][1] = ra + 0;  // empty (head==tail)
-    HITu64Start(oh[0]);
 
     u64csss heap = {oh, oh + 3};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -499,8 +458,6 @@ ok64 HIT18() {
     u64cs *oh[2][2];
     oh[0][0] = r1; oh[0][1] = r1 + 2;
     oh[1][0] = r2; oh[1][1] = r2 + 2;
-    HITu64Start(oh[0]);
-    HITu64Start(oh[1]);
 
     u64csss heap = {oh, oh + 2};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
@@ -600,7 +557,7 @@ ok64 HIT22() {
     done;
 }
 
-// HIT23: cross-validate Compact's output against MSETCompact on the same input.
+// HIT23: Compact's shape and merged contents on a cascading 3-run stack.
 ok64 HIT23() {
     sane(1);
     u64 a[] = {1, 4, 7, 10, 13, 16, 19, 22};
@@ -613,21 +570,15 @@ ok64 HIT23() {
     u64s h_into = {h_buf, h_buf + 15};
     call(HITu64Compact, h_stack, h_into);
 
-    u64cs m_runs[3] = {{a, a + 8}, {b, b + 3}, {c, c + 4}};
-    u64css m_stack = {m_runs, m_runs + 3};
-    u64 m_buf[15];
-    u64s m_into = {m_buf, m_buf + 15};
-    call(MSETu64Compact, m_stack, m_into);
-
-    // Both compactors produce the same shape and same merged contents.
-    testeqv((long long)($len(h_stack)), (long long)($len(m_stack)), "%lld");
-    for (i64 i = 0; i < $len(h_stack); i++) {
-        testeqv((long long)($len(h_stack[0][i])), (long long)($len(m_stack[0][i])), "%lld");
-    }
-    size_t merged = $len(h_stack[0][$len(h_stack) - 1]);
-    u64 const *h_run = h_stack[0][$len(h_stack) - 1][0];
-    u64 const *m_run = m_stack[0][$len(m_stack) - 1][0];
-    for (size_t i = 0; i < merged; i++) testeqv((long long)(h_run[i]), (long long)(m_run[i]), "%lld");
+    // DOG-027: MSET retired — the ladder cascades over all three runs,
+    // leaving one 15-element sorted, dedup'd run.
+    static u64 const want[15] = {1, 2,  3,  4,  5,  6,  7, 8,
+                                 9, 10, 12, 13, 16, 19, 22};
+    testeqv((long long)($len(h_stack)), (long long)((size_t)1), "%lld");
+    testeqv((long long)($len(h_stack[0][0])), (long long)((size_t)15), "%lld");
+    u64 const *h_run = h_stack[0][0][0];
+    for (size_t i = 0; i < 15; i++)
+        testeqv((long long)(h_run[i]), (long long)(want[i]), "%lld");
     done;
 }
 
@@ -639,7 +590,6 @@ ok64 HIT24() {
     u64 b[] = {2, 4, 6, 8};
     u64cs runs[2] = {{a, a + 4}, {b, b + 4}};
     u64css heap = {runs, runs + 2};
-    HITu64Start(heap);
     u64 buf[3];
     u64s out = {buf, buf + 3};
     testeqv((long long)(HITu64Merge(heap, out)), (long long)(OKNOROOM),
@@ -696,7 +646,6 @@ ok64 HIT25() {
             n++;
         }
         kv64css heap = {runs, runs + n};
-        HITkv64Start(heap);
         kv64 buf[8];
         kv64s out = {buf, buf + 8};
         call(HITkv64Merge, heap, out);
