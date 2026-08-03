@@ -9,16 +9,10 @@
 //             (= youngest run) wins
 // Advance:    ++(*entry)[0], eject when $empty(*entry)
 
+#include "B.h"
+#include "HIT.h"
 #include "OK.h"
 #include "S.h"
-
-// DOG-027: LSM policy as C defines — ONE run cap and ONE ladder ratio for
-// every entry point and both JS leaves.  Above the cap the caller re-derives.
-#ifndef HIT_MAX_RUNS
-#define HIT_MAX_RUNS 64   //  a strict ladder never nears it; past it = damaged
-#define HIT_LADDER_DIV 8  //  1/8 size-tiered: run i+1 < run i / HIT_LADDER_DIV
-con ok64 HITTOOMANY = 0x45275d61858a5e2;  //  "HITTOOMANY": drop + re-derive
-#endif
 
 #define HIT_T X(, )
 #define HIT_E X(, cs)    // entry = const slice
@@ -384,13 +378,13 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
 
 // DOG-027: HIT is now the ONE ladder home — MSET is deleted, so ABC-015's
 // deferred "unify IsCompact/Compact into one home" follow-up is closed.
+// The predicate itself is comparator-free (HIT.h); this measures the runs.
+// Past HIT_MAX_RUNS the stack is damaged, hence never compact.
 fun b8 X(HIT, IsCompact)(X(, css) stack) {
-    size_t n = $len(stack);
-    for (size_t i = 0; i + 1 < n; i++) {
-        if ($len(stack[0][i + 1]) * HIT_LADDER_DIV > $len(stack[0][i]))
-            return NO;
-    }
-    return YES;
+    a_pad(u64, lens, HIT_MAX_RUNS);
+    if ($len(stack) > HIT_MAX_RUNS) return NO;
+    $for(HIT_E, r, stack) u64bFeed1(lens, (u64)$len(*r));
+    return HITLadderOK(u64bDataC(lens));
 }
 
 // Merge youngest runs to restore the 1/8 invariant.  Stack is
@@ -400,17 +394,24 @@ fun b8 X(HIT, IsCompact)(X(, css) stack) {
 // space; its head advances past the merged elements.  The merged
 // run is spliced back into the stack at position n-m, and the
 // stack's idle pointer is moved up so $len(stack) drops by m-1.
+// DOG-027: the cascade count alone — how many youngest runs the ladder must
+// collapse (0 when the invariant already holds).  The arithmetic is
+// HITLadderOverRuns (HIT.h, no comparator); this only measures the runs, so a
+// length-only caller like dog's Pup calls HIT.h directly.
+fun size_t X(HIT, CompactRuns)(X(, css) stack) {
+    a_pad(u64, lens, HIT_MAX_RUNS);
+    if ($len(stack) > HIT_MAX_RUNS) return 0;
+    $for(HIT_E, r, stack) u64bFeed1(lens, (u64)$len(*r));
+    return HITLadderOverRuns(u64bDataC(lens));
+}
+
 fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     size_t n = $len(stack);
     if (n > HIT_MAX_RUNS) return HITTOOMANY;  // DOG-027: uniform cap
-    if (n < 2) return OK;
-    size_t m = 1;
-    size_t total = $len(stack[0][n - 1]);
-    while (m < n && (i64)(total * HIT_LADDER_DIV) > $len(stack[0][n - 1 - m])) {
-        total += $len(stack[0][n - 1 - m]);
-        m++;
-    }
+    size_t m = X(HIT, CompactRuns)(stack);
     if (m < 2) return OK;
+    size_t total = 0;
+    for (size_t i = n - m; i < n; i++) total += (size_t)$len(stack[0][i]);
     if ($len(into) < (i64)total) return OKNOROOM;
     HIT_T *base = *into;
     X(, css) sub = {stack[0] + (n - m), stack[0] + n};

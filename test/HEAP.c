@@ -27,7 +27,7 @@ ok64 HEAPtest1() {
     done;
 }
 // ABC-015: sTopsZ fabricated a 1-element slice over an empty heap (OOB
-// for consumers); it must MISS instead, like its twin MSETTopZ.
+// for consumers); it must MISS instead, like its twin HITTops.
 ok64 HEAPtest2() {
     sane(1);
     u32 none[1];

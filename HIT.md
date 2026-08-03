@@ -20,11 +20,22 @@ drain and Compact alike.
 
 ## Policy defines (DOG-027)
 
+The policy lives in non-templated `HIT.h`: the ladder reads run LENGTHS
+only, so it takes no element type and no comparator.  A caller that needs
+just the ladder — dog's fs-level Pup, whose "runs" are files of packed
+rows — includes `HIT.h` and passes byte lengths; it must NOT instantiate
+an element-typed HIT it would never merge with.
+
 | Define           | Value | Meaning                                   |
 |------------------|-------|-------------------------------------------|
 | `HIT_MAX_RUNS`   | 64    | runs per merge; ONE cap for every entry point and both JS leaves |
 | `HIT_LADDER_DIV` | 8     | the 1/8 size-tiered ladder ratio          |
 | `HITTOOMANY`     | —     | the `ok64` every entry point returns above the cap |
+
+| Function (HIT.h)      | Description                                  |
+|-----------------------|----------------------------------------------|
+| `HITLadderOK(lens)`   | 1/8 predicate over oldest-first run lengths  |
+| `HITLadderOverRuns(lens)` | how many youngest runs to collapse (0 = none) |
 
 `runs[]` is OLDEST-FIRST and that is positional, not checkable: a
 newest-first array silently inverts newest-wins on a keyed lane.  The
@@ -54,6 +65,9 @@ is damaged or foreign; the cure is to drop the runs and re-derive.
 | `HITTMerge(heap, &out)` | Sorted deduplicated drain         |
 | `HITTIntersect(heap, &out, n)` | Emit only values in all N entries |
 | `HITTSeek(heap, &key)` | Binary-search advance to key       |
+| `HITTIsCompact(stack)` | measures the stack, then `HITLadderOK` (NO above the cap) |
+| `HITTCompactRuns(stack)` | measures the stack, then `HITLadderOverRuns` (0 above the cap) |
+| `HITTCompact(stack, into)` | merge that tail, splice the result back |
 
 ### IntersectMerge (HIT-of-HITs)
 

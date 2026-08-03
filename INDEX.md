@@ -243,12 +243,14 @@ Compile a pattern to a Thompson NFA and simulate it over text (full or prefix ma
  -  `NFAu8Match`/`NFAu8MatchPrefix` — run the program over text, consuming all input or stopping at the first MATCH state.
  -  `NFAu8Class`/`NFAu8RAtom`/`NFAu8RCounted` — character-class and atom/counted-repeat fragment builders.
 
-###  LSM.h, Yx.h, HITx.h — multiway merge iterators
+###  LSM.h, Yx.h, HIT.h, HITx.h — multiway merge iterators
 
-`LSM` merges sorted record streams via a heap of cursors; `Yx` is the generic slicer/merger glue; `HITx` is a heap-of-iterators for set ops. Guides: [LSM.md], [HIT.md].
+`LSM` merges sorted record streams via a heap of cursors; `Yx` is the generic slicer/merger glue; `HITx` is a heap-of-iterators for set ops; `HIT.h` is its comparator-free ladder policy. Guides: [LSM.md], [HIT.md].
 
  -  `LSM`/`LSMMore`/`LSMNext`/`LSMMerge`/`LSMSort` — feed a sorted run, step the merge, drain it.
  -  `HITMerge`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union, intersection.
+ -  `HIT_MAX_RUNS`/`HIT_LADDER_DIV`/`HITTOOMANY` (HIT.h) — the one run cap, the 1/8 ratio, the past-the-cap code.
+ -  `HITLadderOK`/`HITLadderOverRuns` (HIT.h) — 1/8 predicate and cascade count over run LENGTHS, no element type; `HIT*IsCompact`/`HIT*CompactRuns` just measure a stack and call these.
  -  `Yx` (`_X(push)`/`_X(next)`/`_X(merge)`/`_X(sort)`) — the lower-level push/merge primitives the `SORT`/`LSM` users.
 
 ##  Storage & I/O
