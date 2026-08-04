@@ -287,6 +287,8 @@ POSIX file/dir wrappers returning `ok64` (errno mapped to `FILE*` codes), path m
  -  `FILEOpen`/`FILECreate`/`FILEClose`/`FILEStat`/`FILEResize`/`FILERename` — open/create/close/stat/resize/rename.
  -  `FILEDrain`/`FILEFeed`/`FILEFeedv`/`FILEEnsureSoft`/`FILEEnsureHard` — read into a slice.
  -  `FILEScan`/`FILEScanSorted`/`FILEIterOpen`/`FILENext` — directory walk (callback or iterator form).
+ -  `FILEMapRO`/`FILEMapRW`/`FILEMapCreate`/`FILEUnMap`/`FILEUnMapBase` — map a file into a booked per-fd slot; unmap by slot or by base pointer (munmap + close).
+ -  `FILEMapOnce`/`FILEUnMapOnce` — ABC-023: read-only map with the fd closed at once, into the caller's own buffer — no fd, no slot held for the mapping's life; release takes the RECORD and plain-munmaps its whole range (a slot-backed record is refused; an empty file gives the empty record and unmapping it is a noop).
  -  `path8s`/`path8b`/`PATHu8sBase`/`PATHu8sDir`/`PATHu8sExt`/`PATHu8sDrain` — NUL-terminated path slice/buffer types.
  -  `FSWInit`/`FSWDir`/`FSWPoll`/`FSWDrain` — inotify-style filesystem watcher: one wfd per tree, `FSWDir` returns the `wd` naming each dir, drain reports `(wd, basename)`; `wd == FSWOVERFLOW` means the kernel dropped events.
  -  `MIMEByExt`/`MIMEByPath` — map a file extension or path to its MIME type string (`MIMEdefault` otherwise).

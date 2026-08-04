@@ -761,6 +761,47 @@ ok64 FILEMapRO(u8bp *buf, path8s path) {
     done;
 }
 
+//  Inner worker: maps the open fd into the caller's buffer.  Borrows the fd;
+//  the wrapper closes it either way (a PROT_READ map needs no fd afterwards).
+static ok64 FILEMapOnce_(u8bp buf, int const *fd) {
+    sane(buf != NULL && FILEok(*fd));
+    size_t size;
+    call(FILESize, &size, fd);
+    u8 **b = (u8 **)buf;
+    //  mmap of length 0 is EINVAL, so an empty file maps to the empty
+    //  record: no mapping, all four pointers NULL, unmapping it a noop.
+    if (size == 0) { b[0] = b[1] = b[2] = b[3] = NULL; done; }
+    u8 *map = (u8 *)mmap(NULL, size, PROT_READ, MAP_FILE | MAP_SHARED, *fd, 0);
+    FILETestC(map != MAP_FAILED);
+    b[0] = b[1] = b[2] = b[3] = map;
+    b[2] += size;
+    b[3] += size;
+    done;
+}
+
+//  ABC-023: a read map is mapped once and keeps no fd — the fd dies here, so a
+//  reader holds neither an fd nor a FILE_MAX_OPEN slot for the mapping's life.
+ok64 FILEMapOnce(u8bp buf, path8s path) {
+    sane(buf != NULL && $ok(path) && !$empty(path));
+    int fd = FILE_CLOSED;
+    call(FILEOpen, &fd, path, O_RDONLY);
+    try(FILEMapOnce_, buf, &fd);
+    FILEClose(&fd);
+    done;
+}
+
+//  ABC-023: release a FILEMapOnce record — plain munmap of its whole range.
+//  A slot-backed record is refused: that one is FILEUnMap's, fd and all.
+ok64 FILEUnMapOnce(u8bp buf) {
+    sane(buf != NULL);
+    test(FILEBookedFD(buf) < 0, BADARG);
+    u8c **b = (u8c **)buf;
+    if (b[0] == NULL) done;  // the empty record: nothing was ever mapped
+    FILETestC(-1 != munmap((void *)b[0], (size_t)(b[3] - b[0])));
+    b[0] = b[1] = b[2] = b[3] = NULL;
+    done;
+}
+
 ok64 FILEMapROAt(u8bp *buf, int dir, path8s path) {
     sane(buf != NULL && $ok(path) && !$empty(path));
     int fd = FILE_CLOSED;

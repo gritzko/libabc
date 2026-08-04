@@ -576,6 +576,14 @@ ok64 FILEMapRO(u8bp *buf, path8s path);
 
 ok64 FILEMapROAt(u8bp *buf, int dir, path8s path);
 
+// ABC-023: map for reading and close the fd at once — fills the CALLER's own
+// buf (no FILE_WANT_BUFS slot, no fd); an empty file gives the empty record.
+ok64 FILEMapOnce(u8bp buf, path8s path);
+
+// ABC-023: release a FILEMapOnce record — plain munmap, no fd to close;
+// a slot-backed record is refused, and the empty record is a noop.
+ok64 FILEUnMapOnce(u8bp buf);
+
 // Memory-map a file for reading and writing.
 ok64 FILEMapRW(u8bp *buf, path8s path);
 
