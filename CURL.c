@@ -129,6 +129,18 @@ ok64 CURLFree() {
     return OK;
 }
 
+// MEM-010: the one release path for a request: easy handle first (it
+// borrows the header list), then the list, the url and the buffers.
+static void CURLreqFree(CURLreq *req) {
+    if (!req) return;
+    curl_easy_cleanup(req->easy);
+    curl_slist_free_all(req->hdrlist);
+    free(req->url);
+    u8bFree(req->headers);
+    u8bFree(req->response);
+    free(req);
+}
+
 // Check for completed requests
 ok64 CURLTick() {
     if (!curl_multi) return OK;
@@ -156,11 +168,7 @@ ok64 CURLTick() {
 
             // Cleanup - do this before any further curl operations
             curl_multi_remove_handle(curl_multi, easy);
-            curl_easy_cleanup(easy);
-            if (req->url) free(req->url);
-            u8bFree(req->headers);
-            u8bFree(req->response);
-            free(req);
+            CURLreqFree(req);
         }
     }
 
@@ -185,8 +193,8 @@ static ok64 CURLStart(CURLreq *req) {
 
     CURLMcode mc = curl_multi_add_handle(curl_multi, req->easy);
     if (mc != CURLM_OK) {
-        free(req->url);
-        free(req);
+        // MEM-010: the handle was never taken over; release the whole request
+        CURLreqFree(req);
         return CURLFAIL;
     }
 
@@ -204,8 +212,15 @@ ok64 CURLGetTimed(const char *url, u32 connect_ms, CURLcb cb, void *userdata) {
     if (!curl_multi) return CURLBAD;
 
     CURLreq *req = (CURLreq *)calloc(1, sizeof(CURLreq));
+    if (!req) return CURLFAIL;
     req->easy = curl_easy_init();
     req->url = strdup(url);
+    // MEM-010: out of memory or no handle - never hand a half-built request
+    // to libcurl, and never write through a NULL req
+    if (!req->easy || !req->url) {
+        CURLreqFree(req);
+        return CURLFAIL;
+    }
     req->callback = cb;
     req->userdata = userdata;
     req->connect_ms = connect_ms;
@@ -220,8 +235,15 @@ ok64 CURLPost(const char *url, u8cs body, const char *content_type,
     if (!curl_multi) return CURLBAD;
 
     CURLreq *req = (CURLreq *)calloc(1, sizeof(CURLreq));
+    if (!req) return CURLFAIL;
     req->easy = curl_easy_init();
     req->url = strdup(url);
+    // MEM-010: out of memory or no handle - never hand a half-built request
+    // to libcurl, and never write through a NULL req
+    if (!req->easy || !req->url) {
+        CURLreqFree(req);
+        return CURLFAIL;
+    }
     req->callback = cb;
     req->userdata = userdata;
 
@@ -231,12 +253,15 @@ ok64 CURLPost(const char *url, u8cs body, const char *content_type,
     curl_easy_setopt(req->easy, CURLOPT_COPYPOSTFIELDS, body[0]);
 
     if (content_type) {
-        struct curl_slist *headers = NULL;
         char ct[256];
         snprintf(ct, sizeof(ct), "Content-Type: %s", content_type);
-        headers = curl_slist_append(headers, ct);
-        curl_easy_setopt(req->easy, CURLOPT_HTTPHEADER, headers);
-        // Note: headers leak - would need to store and free in CURLTick
+        // MEM-010: the list is the request's, freed by CURLreqFree
+        req->hdrlist = curl_slist_append(NULL, ct);
+        if (!req->hdrlist) {
+            CURLreqFree(req);
+            return CURLFAIL;
+        }
+        curl_easy_setopt(req->easy, CURLOPT_HTTPHEADER, req->hdrlist);
     }
 
     return CURLStart(req);

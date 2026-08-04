@@ -16,6 +16,9 @@ typedef void (*CURLcb)(CURLreq *req, long status, u8cs body);
 typedef struct CURLreq {
     CURL *easy;
     char *url;
+    // MEM-010: the request OWNS the content-type header list libcurl only
+    // borrows; it is freed with the request, never by libcurl
+    struct curl_slist *hdrlist;
     u8b headers;
     u8b response;
     CURLcb callback;
