@@ -202,9 +202,15 @@ fun ok64 X(, bAllocate)(X(, bp) buf, size_t len) {
     // ABC-006: refuse len*sizeof(T) wraparound instead of allocating a sliver
     if (len > SIZE_MAX / sizeof(T)) return BALLOCFAIL;
     size_t sz = len * sizeof(T);
-    ok64 o = Balloc((void **)buf, sz);
-    if (o != OK) return o;
-    memset((void *)*buf, 0, sz);
+    // JAB-032: publish the block through the buffer's OWN type; Balloc's
+    // u8 ** laundering let strict aliasing zero a stale (NULL) head.
+    if (!BNULL(buf)) return BNOTNULL;
+    T *p = (T *)malloc(sz);
+    if (p == NULL) return BALLOCFAIL;
+    T **b = (T **)buf;
+    b[0] = b[1] = b[2] = p;
+    b[3] = p + len;
+    memset((void *)p, 0, sz);
     return OK;
 }
 fun ok64 X(, bAlloc)(X(, bp) buf, size_t len) {

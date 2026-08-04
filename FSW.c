@@ -27,17 +27,21 @@ ok64 FSWInit(int *wfd) {
     done;
 }
 
-ok64 FSWDir(int wfd, u8csc path) {
-    sane(wfd >= 0 && $ok(path));
+ok64 FSWDir(int wfd, u8csc path, i32 *wd) {
+    sane(wfd >= 0 && $ok(path) && wd != NULL);
     // inotify needs null-terminated path
     a_path(p);
     call(PATHu8bFeed, p, path);
 
-    int wd = inotify_add_watch(wfd, (char *)u8bDataHead(p),
+    //  JAB-032: DELETE_SELF/MOVE_SELF — a watched dir that vanishes or is
+    //  renamed away must be an event, not silence (it invalidates a cache).
+    int w = inotify_add_watch(wfd, (char *)u8bDataHead(p),
                                 IN_CREATE | IN_DELETE | IN_MODIFY |
                                     IN_MOVED_FROM | IN_MOVED_TO |
-                                    IN_CLOSE_WRITE);
-    if (wd < 0) return FSWFAIL;
+                                    IN_CLOSE_WRITE | IN_DELETE_SELF |
+                                    IN_MOVE_SELF);
+    if (w < 0) return FSWFAIL;
+    *wd = (i32)w;
     done;
 }
 
@@ -62,9 +66,18 @@ ok64 FSWDrain(int wfd, FSWcb cb, void *ctx) {
         u8 *p = buf;
         while (p < buf + n) {
             struct inotify_event *ev = (struct inotify_event *)p;
-            if (cb && ev->len > 0) {
-                u8cs name = u8scstr(ev->name);
-                ok64 o = cb(name, ctx);
+            //  JAB-032: a len-0 record is NOT noise — IN_Q_OVERFLOW (wd -1,
+            //  the kernel dropped events) and IN_IGNORED/DELETE_SELF (the
+            //  dir itself) both arrive nameless.  Report, never skip.
+            if (cb) {
+                ok64 o;
+                if (ev->len > 0) {
+                    u8cs name = u8scstr(ev->name);
+                    o = cb((i32)ev->wd, name, ctx);
+                } else {
+                    u8cs none = {(u8c *)"", (u8c *)""};
+                    o = cb((i32)ev->wd, none, ctx);
+                }
                 if (o != OK) return o;
             }
             p += sizeof(struct inotify_event) + ev->len;
@@ -94,8 +107,8 @@ ok64 FSWInit(int *wfd) {
     done;
 }
 
-ok64 FSWDir(int wfd, u8csc path) {
-    sane(wfd >= 0 && $ok(path));
+ok64 FSWDir(int wfd, u8csc path, i32 *wd) {
+    sane(wfd >= 0 && $ok(path) && wd != NULL);
     a_path(p);
     call(PATHu8bFeed, p, path);
 
@@ -113,6 +126,9 @@ ok64 FSWDir(int wfd, u8csc path) {
     }
     //  fd stays open — kqueue needs it alive.  ABC-013: no per-watch
     //  bookkeeping — the dir fd lives until process exit, FSWClose included.
+    //  JAB-032: that pinned fd IS the dir's identity here, so it is the wd —
+    //  kevent hands it back as ev.ident, the same role inotify's wd plays.
+    *wd = (i32)fd;
     done;
 }
 
@@ -136,10 +152,11 @@ ok64 FSWDrain(int wfd, FSWcb cb, void *ctx) {
         int n = kevent(wfd, NULL, 0, evs, 64, &zero);
         if (n <= 0) break;
         if (cb) {
-            // kqueue doesn't provide filenames — report empty path
+            // kqueue doesn't provide filenames — report empty path.
+            // JAB-032: ev.ident is the pinned dir fd FSWDir returned as wd.
             u8cs empty = {(u8c *)"", (u8c *)""};
             for (int i = 0; i < n; i++) {
-                ok64 o = cb(empty, ctx);
+                ok64 o = cb((i32)evs[i].ident, empty, ctx);
                 if (o != OK) return o;
             }
         }

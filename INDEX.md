@@ -288,7 +288,7 @@ POSIX file/dir wrappers returning `ok64` (errno mapped to `FILE*` codes), path m
  -  `FILEDrain`/`FILEFeed`/`FILEFeedv`/`FILEEnsureSoft`/`FILEEnsureHard` — read into a slice.
  -  `FILEScan`/`FILEScanSorted`/`FILEIterOpen`/`FILENext` — directory walk (callback or iterator form).
  -  `path8s`/`path8b`/`PATHu8sBase`/`PATHu8sDir`/`PATHu8sExt`/`PATHu8sDrain` — NUL-terminated path slice/buffer types.
- -  `FSWInit`/`FSWDir`/`FSWPoll`/`FSWDrain` — inotify-style filesystem watcher: watch a dir, poll.
+ -  `FSWInit`/`FSWDir`/`FSWPoll`/`FSWDrain` — inotify-style filesystem watcher: one wfd per tree, `FSWDir` returns the `wd` naming each dir, drain reports `(wd, basename)`; `wd == FSWOVERFLOW` means the kernel dropped events.
  -  `MIMEByExt`/`MIMEByPath` — map a file extension or path to its MIME type string (`MIMEdefault` otherwise).
 
 ###  ROCK.h, ROCKMERGE.h — RocksDB wrapper
