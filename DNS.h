@@ -230,7 +230,8 @@ fun ok64 DNSNameText(u8s into, u8csc wire) {
             u8sFeed1(into, '.');
         }
         a_head(u8c, label, src, len);
-        u8sFeed(into, label);
+        // MEM-021: an ignored NOROOM here truncated the name silently
+        if (u8sFeed(into, label) != OK) return DNSNOROOM;
         *src += len;
     }
     return OK;

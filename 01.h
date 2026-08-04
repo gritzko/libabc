@@ -257,6 +257,9 @@ fun b8 u64is2power(u64 w) { return w != 0 && 0 == ((w - 1U) & w); }
 fun u64 round_power_of_2(u64 a) {
     if (a == 0 || u64is2power(a)) return a;
     int p = clz64(a);
+    // MEM-021: no power of two fits above 2^63; `1UL << 64` was UB and
+    // returned 1 on x86, silently shrinking whatever it sized
+    if (p == 0) return 0;
     return 1UL << (64 - p);
 }
 

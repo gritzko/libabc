@@ -398,3 +398,24 @@ target_compile_options(CURLmemtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(CURLmemtest abc)
 add_test(NAME CURLmemtest COMMAND CURLmemtest)
 set_tests_properties(CURLmemtest PROPERTIES TIMEOUT 20)
+
+# MEM-021: mmap grow sizers must refuse an oversize request, never shrink
+add_executable(MMAPgrowtest MMAPgrow.c)
+target_link_options(MMAPgrowtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(MMAPgrowtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(MMAPgrowtest abc)
+add_test(NAME MMAPgrowtest COMMAND MMAPgrowtest)
+
+# MEM-021: DNSNameText must report NOROOM, not truncate silently
+add_executable(DNStexttest DNStext.c)
+target_link_options(DNStexttest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(DNStexttest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(DNStexttest abc)
+add_test(NAME DNStexttest COMMAND DNStexttest)
+
+# MEM-021: i64 formatting round trip, INT64_MIN included (no negation UB)
+add_executable(UTF8inttest UTF8int.c)
+target_link_options(UTF8inttest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(UTF8inttest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(UTF8inttest abc)
+add_test(NAME UTF8inttest COMMAND UTF8inttest)

@@ -118,7 +118,9 @@ ok64 utf8sFeedInt(utf8s txt, i64cp i) {
     u64 u;
     if (*i < 0) {
         call(u8sFeed1, txt, '-');
-        u = -*i;
+        // MEM-021: negating INT64_MIN is signed-overflow UB; take the
+        // magnitude unsigned, the way utf8sDrainInt already does
+        u = -(u64)*i;
     } else {
         u = *i;
     }
