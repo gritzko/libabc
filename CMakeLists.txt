@@ -46,7 +46,13 @@ include_directories(.. . ryu)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 find_library(sodium NAMES sodium HINTS /usr /usr/local /opt/homebrew)
 find_path(SODIUM_INCLUDE_DIR NAMES sodium.h HINTS /usr/include /usr/local/include /opt/homebrew/include)
-find_package(CURL QUIET)
+#  curl is a HARD dependency: CURL.c is part of the full `abc`, and the test
+#  tree links `abc` unconditionally.  A QUIET find turned a missing
+#  libcurl-dev into ~45 `cannot find -labc` link errors, with the real cause
+#  buried in one STATUS line.  Fail at configure time, naming the package.
+#  Ubuntu/Debian: libcurl4-gnutls-dev (CI) or libcurl4-openssl-dev.
+#  macOS: brew install curl.
+find_package(CURL REQUIRED)
 find_package(PkgConfig QUIET)
 if (PkgConfig_FOUND)
     pkg_check_modules(LZ4 liblz4)
@@ -154,8 +160,8 @@ set(ABC_CORE_SOURCES ${ABC_SOURCES})
 list(REMOVE_ITEM ABC_CORE_SOURCES CURL.c NET.c HTTP.c HTTP.rl.c TCP.c UDP.c POL.c PACK.c ROCK.c)
 add_library(abc-core STATIC ${ABC_HEADERS} ${ABC_CORE_SOURCES})
 
-# Full abc with all deps (only if sodium+curl+lz4 found)
-if (sodium AND CURL_FOUND AND LZ4_FOUND)
+# Full abc with all deps (curl is required above; sodium+lz4 still gate it)
+if (sodium AND LZ4_FOUND)
     add_library(abc STATIC ${ABC_HEADERS} ${ABC_SOURCES})
     target_include_directories(abc PUBLIC ${LZ4_INCLUDE_DIRS} ${SODIUM_INCLUDE_DIR})
     target_link_directories(abc PUBLIC ${LZ4_LIBRARY_DIRS})
@@ -166,7 +172,7 @@ if (sodium AND CURL_FOUND AND LZ4_FOUND)
         target_link_libraries(abc ${ROCKSDB_LIBRARIES})
     endif()
 else()
-    message(STATUS "abc: full build skipped (missing sodium/curl/lz4)")
+    message(STATUS "abc: full build skipped (missing sodium/lz4)")
 endif()
 
 add_executable(ok64 OK.cli.c)
