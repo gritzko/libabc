@@ -26,7 +26,9 @@ ok64 MMAPgrowRound() {
 
 ok64 MMAPgrowWrap() {
     sane(1);
-    u8b buf = {};
+    // Bu8, not u8b: u8b is `u8 *const [4]`, so clang folds Bsize(buf)
+    // back to the {} initializer and the grow check dies on a constant
+    Bu8 buf = {};
     call(u8bMap, buf, 4096);
     a_cstr(txt, "0123456789abcdef");
     call(u8bFeed, buf, txt);

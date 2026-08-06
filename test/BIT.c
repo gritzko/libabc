@@ -38,7 +38,7 @@ fun b8 refEq(ref const *r, u64cs s) {
 //  256-bit map (4 words); a scattered pattern that straddles word edges.
 ok64 BITelem_test() {
     sane(1);
-    u1b b = {};
+    Bu1 b = {};
     call(u1bMap, b, 256);
     u64s s; u64sDup(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 256LL, "%lld");
@@ -69,7 +69,7 @@ ok64 BITelem_test() {
 ok64 BITclr_regression_test() {
     sane(1);
     enum { N = 200 };
-    u1b b = {};
+    Bu1 b = {};
     call(u1bMap, b, N);
     u64s s; u64sDup(s, u1bData(b));
     for (u32 i = 0; i < N; i++) u1sSet(s, i);
@@ -88,7 +88,7 @@ ok64 BITclr_regression_test() {
 //  ---- unused tail bits stay zero: set only low bits, count is exact ----
 ok64 BITtail_test() {
     sane(1);
-    u1b b = {};
+    Bu1 b = {};
     call(u1bMap, b, 10);  // rounds up to one 64-bit word
     u64s s; u64sDup(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 64LL, "%lld");
@@ -106,7 +106,7 @@ ok64 BITtail_test() {
 ok64 BITalgebra_test() {
     sane(1);
     enum { N = 192 };  // 3 whole words
-    u1b ba = {}, bb = {};
+    Bu1 ba = {}, bb = {};
     call(u1bMap, ba, N);
     call(u1bMap, bb, N);
     u64s a; u64sDup(a, u1bData(ba));
@@ -122,7 +122,7 @@ ok64 BITalgebra_test() {
 
 #define ALG(opfn, expr)                                                   \
     do {                                                                  \
-        u1b bd = {};                                                      \
+        Bu1 bd = {};                                                      \
         call(u1bMap, bd, N);                                              \
         u64s d; u64sDup(d, u1bData(bd));                                  \
         call(u1sOr, d, u1sConst(a));                                      \
@@ -148,7 +148,7 @@ ok64 BITalgebra_test() {
     testeqv((long long)seen, (long long)rc, "%lld");
 
     //  Word-length mismatch guard: 3-word dst vs 2-word src -> BITLEN.
-    u1b bs = {};
+    Bu1 bs = {};
     call(u1bMap, bs, 128);  // 2 words
     u64s shorter; u64sDup(shorter, u1bData(bs));
     testeqv((long long)u1sOr(a, u1sConst(shorter)), (long long)BITLEN, "%lld");
@@ -163,7 +163,7 @@ ok64 BITalgebra_test() {
 //  ---- buffer family: Map presents a zeroed map; Reset re-zeros --------
 ok64 BITbuf_test() {
     sane(1);
-    u1b b = {};
+    Bu1 b = {};
     call(u1bMap, b, 128);  // 2 words, all zero
     u64s s; u64sDup(s, u1bData(b));
     testeqv((long long)u1sCount(u1sConst(s)), 0LL, "%lld");
@@ -182,7 +182,7 @@ ok64 BITbuf_test() {
 //  ---- arena Acquire yields a zeroed, addressable map ------------------
 ok64 BITacquire_test() {
     sane(1);
-    u1b b = {};
+    Bu1 b = {};
     call(u1bAcquire, ABC_BASS, b, 130);  // -> 3 words
     u64s s; u64sDup(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 192LL, "%lld");

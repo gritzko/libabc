@@ -14,7 +14,7 @@ FUZZ(u8, BITfuzz) {
     sane(1);
     size_t n = $len(input);
 
-    u1b ba = {}, bb = {};
+    Bu1 ba = {}, bb = {};
     must(u1bMap(ba, NBITS) == OK, "map a");
     must(u1bMap(bb, NBITS) == OK, "map b");
     u64s a; u64sDup(a, u1bData(ba));
@@ -53,7 +53,7 @@ FUZZ(u8, BITfuzz) {
     //  Algebra: seed a fresh dst with `a`, apply op, compare to ref.
 #define CHECK_OP(opfn, expr)                                             \
     do {                                                                 \
-        u1b bd = {};                                                     \
+        Bu1 bd = {};                                                     \
         must(u1bMap(bd, NBITS) == OK, "map d");                          \
         u64s d; u64sDup(d, u1bData(bd));                                 \
         must(u1sOr(d, u1sConst(a)) == OK, "seed d = a");                 \
@@ -73,7 +73,7 @@ FUZZ(u8, BITfuzz) {
 
     //  Eq: a copy equals, a tweaked one differs.
     {
-        u1b bc = {};
+        Bu1 bc = {};
         must(u1bMap(bc, NBITS) == OK, "map c");
         u64s c; u64sDup(c, u1bData(bc));
         must(u1sOr(c, u1sConst(a)) == OK, "copy a");

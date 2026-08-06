@@ -157,7 +157,7 @@ fun ok64 DNSNameFeed(u8s into, u8csc text) {
         // find next dot or end
         u8c *dot = *src;
         while (dot < src[1] && *dot != '.') ++dot;
-        size_t llen = dot - *src;
+        i64 llen = dot - *src;  //  i64, not size_t: $len(into) is signed
         if (llen == 0) {
             // trailing dot or double dot — skip
             ++*src;

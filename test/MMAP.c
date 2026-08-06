@@ -6,7 +6,7 @@
 
 ok64 MMAPtest1() {
     sane(1);
-    u8b buf8 = {};
+    Bu8 buf8 = {};
     call(u8bMap, buf8, 4096);
     aB(u32, word);
     call(u32bMap, wordbuf, 1024);

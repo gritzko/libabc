@@ -388,6 +388,8 @@ add_test(NAME ROCKMERGEtest COMMAND ROCKMERGEtest)
 # MEM-010: request-lifecycle regression - unchecked calloc/curl_easy_init/
 # strdup and the leaked easy handle + content-type curl_slist. Link-time
 # fault injection (--wrap), no sockets and no DNS, so it is NOT WITH_INET.
+# Apple ld64 has no --wrap, so the target is GNU-ld/lld only.
+if (NOT APPLE)
 add_executable(CURLmemtest CURLmem.c)
 target_link_options(CURLmemtest PRIVATE ${TEST_LDD_FLAGS}
     -Wl,--wrap=calloc -Wl,--wrap=strdup
@@ -398,6 +400,7 @@ target_compile_options(CURLmemtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(CURLmemtest abc)
 add_test(NAME CURLmemtest COMMAND CURLmemtest)
 set_tests_properties(CURLmemtest PROPERTIES TIMEOUT 20)
+endif()
 
 # MEM-021: mmap grow sizers must refuse an oversize request, never shrink
 add_executable(MMAPgrowtest MMAPgrow.c)

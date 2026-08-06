@@ -19,6 +19,7 @@ typedef b8 u1;
 typedef u64s  u1s;    //  bit-map view (writable)
 typedef u64cs u1cs;   //  bit-map view (const)
 typedef u64b  u1b;    //  owned bit map; DATA cursor counts whole WORDS
+typedef Bu64  Bu1;    //  MEM-021: the local/definition form, u1b is const
 
 //  u64 words needed to hold `bits` bits.
 fun u32 u1Words(u32 bits) { return (bits + 63) >> 6; }
