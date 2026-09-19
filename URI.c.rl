@@ -7,22 +7,22 @@
 enum {
 	URISegment = URIenum+14,
 	URISegment_nz = URIenum+15,
-	URIPath = URIenum+17,
-	URIPathNoscheme = URIenum+18,
-	URIScheme = URIenum+20,
-	URIIPv4address = URIenum+22,
-	URIIPvFuture = URIenum+23,
-	URIIPv6address = URIenum+24,
-	URIIP_literal = URIenum+25,
-	URIUser = URIenum+27,
-	URIHost = URIenum+28,
-	URIPort = URIenum+29,
-	URIAuthority = URIenum+30,
-	URIFragment = URIenum+31,
-	URIQuery = URIenum+32,
-	URIPathRootless = URIenum+33,
-	URIURI = URIenum+37,
-	URIRoot = URIenum+38,
+	URIPath = URIenum+18,
+	URIPathNoscheme = URIenum+19,
+	URIScheme = URIenum+21,
+	URIIPv4address = URIenum+23,
+	URIIPvFuture = URIenum+24,
+	URIIPv6address = URIenum+25,
+	URIIP_literal = URIenum+26,
+	URIUser = URIenum+28,
+	URIHost = URIenum+29,
+	URIPort = URIenum+30,
+	URIAuthority = URIenum+31,
+	URIFragment = URIenum+32,
+	URIQuery = URIenum+33,
+	URIPathRootless = URIenum+34,
+	URIURI = URIenum+38,
+	URIRoot = URIenum+39,
 };
 
 // user functions (callbacks) for the parser
@@ -234,10 +234,11 @@ URIpath_char = (   URIpchar  -  ("?"  |  "#") ); # no path_char callback
 URISegment = (   URIpath_char* )  >URISegment0 %URISegment1;
 URISegment_nz = (   URIpath_char+ )  >URISegment_nz0 %URISegment_nz1;
 URIsegment_nz_nc = (   (URIpath_char  -  ":")+ ); # no segment_nz_nc callback
+URIsegment_nz_dc = (   (URIpath_char  -  (":"  |  "."))*  "."  (URIpath_char  -  ":")*  ":"  URIpath_char* ); # no segment_nz_dc callback
 URIPath = (   URIslash  (  URISegment_nz  (  URIslash  URISegment  )*  )?   )  >URIPath0 %URIPath1;
-URIPathNoscheme = (   URIsegment_nz_nc  (  URIslash  URISegment  )* )  >URIPathNoscheme0 %URIPathNoscheme1;
+URIPathNoscheme = (   (  URIsegment_nz_nc  |  URIsegment_nz_dc  )  (  URIslash  URISegment  )* )  >URIPathNoscheme0 %URIPathNoscheme1;
 URIdrivePath = (   (URIslash|(URIalpha  ":"  URIslash))  (  URIpath_char+  (  URIslash  URIpath_char*  )*  )?   ); # no drivePath callback
-URIScheme = (   (URIalpha  (  URIalpha  |  URIdigit  |  "+"  |  "-"  |  "."  )*)  ':'   )  >URIScheme0 %URIScheme1;
+URIScheme = (   (URIalpha  (  URIalpha  |  URIdigit  |  "+"  |  "-"  )*)  ':'   )  >URIScheme0 %URIScheme1;
 URIdec_octet = (   URIdigit{1,3} ); # no dec_octet callback
 URIIPv4address = (   URIdec_octet  "."  URIdec_octet  "."  URIdec_octet  "."  URIdec_octet )  >URIIPv4address0 %URIIPv4address1;
 URIIPvFuture = (   "v"  URIxdigit+  "."  (  URIunreserved  |  URIsub_delims  |  ":"  )+ )  >URIIPvFuture0 %URIIPvFuture1;

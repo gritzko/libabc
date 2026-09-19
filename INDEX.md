@@ -323,8 +323,10 @@ An fd+timer event poller (`POL`), its read/write buffer layer (`POLL`), and an a
 ###  URI.h, URI.rl.h — URI parsing
 
 A `uri` is eight slice views into the original text (scheme … fragment); walk path segments via `PATH`. Guide: [URI.md].
+A scheme takes NO dot (DOG-051), unlike RFC 3986 §3.1: `x.c:12` is a path, never the scheme `x.c` plus the path `12`.
 
  -  `uri` — the parsed struct: `data` (the original text) plus the eight component slices.
+ -  `URI.lex:28` `segment_nz_dc` — a first segment holding a `.` before its first `:` is no scheme, so it keeps the colon.
  -  `URIutf8Drain`/`URIutf8Feed`/`URIutf8FeedSafe`/`URILexer` — parse text into a `uri`, serialize one back.
  -  `URIRelative`/`URIAbsolute` — resolve a relative reference against a base and the inverse (compute the relative form).
  -  `URIu8sEsc`/`URIu8sUnesc` — percent-encode and decode a component.

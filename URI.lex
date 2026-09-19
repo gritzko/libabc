@@ -25,13 +25,14 @@ path_char = pchar - ("?" | "#");
 Segment = path_char*;
 Segment_nz = path_char+;
 segment_nz_nc = (path_char - ":")+;
+segment_nz_dc = (path_char - (":" | "."))* "." (path_char - ":")* ":" path_char*;
 
 Path = slash ( Segment_nz ( slash Segment )* )? ;
-PathNoscheme = segment_nz_nc ( slash Segment )*;
+PathNoscheme = ( segment_nz_nc | segment_nz_dc ) ( slash Segment )*;
 
 drivePath = (slash|(alpha ":" slash)) ( path_char+ ( slash path_char* )* )? ;
 
-Scheme = (alpha ( alpha | digit | "+" | "-" | "." )*) ':' ;
+Scheme = (alpha ( alpha | digit | "+" | "-" )*) ':' ;
 
 dec_octet = digit{1,3};
 IPv4address = dec_octet "." dec_octet "." dec_octet "." dec_octet;

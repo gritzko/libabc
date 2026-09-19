@@ -621,6 +621,65 @@ ok64 URITestDotSegments() {
     done;
 }
 
+static ok64 URIfield(size_t i, char const* name, u8cs got, char const* want) {
+    a_cstr(exp, want);
+    if ($len(got) == $len(exp) && ($empty(exp) || 0 == memcmp(*got, *exp, $size(exp))))
+        return OK;
+    fprintf(stderr, "FAIL dotless[%zu] %s: want '%s' got '%.*s'\n", i, name,
+            want, (int)$len(got), $empty(got) ? "" : (char const*)*got);
+    return URIFAIL;
+}
+
+// DOG-051: a URI scheme takes no dots, so a bare `x.c:12` is a PATH
+// holding the whole text, never the scheme `x.c` plus the path `12`.
+// A first segment with a `.` before its first `:` can be no scheme, so
+// it may keep the colon (`URI.lex:28`); the undotted rows below pin the
+// forms that must not shift (DOG-051:26).
+ok64 URITestDotlessScheme() {
+    sane(1);
+    static struct {
+        char const *uri, *scheme, *host, *path, *query, *fragment;
+    } cases[] = {
+        // pinned first: every undotted form parses exactly as before
+        {"foo:bar", "foo", "", "bar", "", ""},
+        {"mailto:x@y.z", "mailto", "", "x@y.z", "", ""},
+        {"spot:.c#body", "spot", "", ".c", "", "body"},
+        {"grep:src/#body", "grep", "", "src/", "", "body"},
+        {"be://host/x?ref", "be", "host", "/x", "ref", ""},
+        {"http://h:80/p", "http", "h", "/p", "", ""},
+        {"//host/repo?ref", "", "host", "/repo", "ref", ""},
+        {"./x.c:12", "", "", "./x.c:12", "", ""},
+        {"dir/x.c:12", "", "", "dir/x.c:12", "", ""},
+        {"?ref", "", "", "", "ref", ""},
+        {"#frag", "", "", "", "", "frag"},
+        // a dotted head is a path, whole and undivided
+        {"x.c:12", "", "", "x.c:12", "", ""},
+        {"HUNK.c:HUNKu8sMakeURI", "", "", "HUNK.c:HUNKu8sMakeURI", "", ""},
+        {"a.b.c:'x'", "", "", "a.b.c:'x'", "", ""},
+        {"x.c:name", "", "", "x.c:name", "", ""},
+        {"x.c:12?ref", "", "", "x.c:12", "ref", ""},
+        {"x.c:12#f", "", "", "x.c:12", "", "f"},
+        // a dotted head owns the `//` too: no scheme means no authority
+        {"a.b://host/p", "", "", "a.b://host/p", "", ""},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        a_cstr(text, cases[i].uri);
+        uri u = {};
+        ok64 o = URIutf8Drain(text, &u);
+        if (o != OK) {
+            fprintf(stderr, "FAIL dotless[%zu]: '%s' is malformed\n", i,
+                    cases[i].uri);
+            return URIFAIL;
+        }
+        call(URIfield, i, "scheme", u.scheme, cases[i].scheme);
+        call(URIfield, i, "host", u.host, cases[i].host);
+        call(URIfield, i, "path", u.path, cases[i].path);
+        call(URIfield, i, "query", u.query, cases[i].query);
+        call(URIfield, i, "fragment", u.fragment, cases[i].fragment);
+    }
+    done;
+}
+
 ok64 URItest() {
     sane(1);
     call(URItest1);
@@ -636,6 +695,7 @@ ok64 URItest() {
     call(URITestFeedSafe);
     call(URITestNoschemeRoundTrip);
     call(URITestDotSegments);
+    call(URITestDotlessScheme);
     done;
 }
 
