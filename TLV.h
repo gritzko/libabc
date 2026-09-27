@@ -61,10 +61,11 @@ fun ok64 TLVu8bOuto(u8bp into, u8 type) {
     u8 t = 0;
     u64 l = 0;
     u8sDrain1(hdr, &t);
-    u32p lp = (u32p)*hdr;
+    u8* lp = (u8*)*hdr;
     u8sDrain32(hdr, (u32p)&l);
     ((u8**)into)[1] = into[1] - 5 - l;
-    *lp = ndl;
+    u32 ndl32 = ndl;
+    memcpy(lp, &ndl32, 4);
     u8cs empty = {};
     if (ndl <= 0xff) {
         u8bSplice(into, l + 2, 3, empty);
