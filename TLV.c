@@ -14,13 +14,15 @@ fun ok64 TLVprobe(u8* t, u8* hlen, u64* blen, $cu8c data) {
         if ($len(data) < 5) return TLVNODATA;
         *t = **data;
         *hlen = 5;
-        *blen = $at(data, 1) | ($at(data, 2) << 8) | ($at(data, 3) << 16) |
-                ($at(data, 4) << 24);
+        *blen = (u32)$at(data, 1) | ((u32)$at(data, 2) << 8) |
+                ((u32)$at(data, 3) << 16) | ((u32)$at(data, 4) << 24);
     } else if (TLVhuge(**data)) {
         if ($len(data) < 9) return TLVNODATA;
         *t = **data + TLVaA;
         *hlen = 9;
-        *blen = *(u64*)(*data + 1);
+        u64 l;
+        memcpy(&l, *data + 1, sizeof(l));
+        *blen = l;
     } else {
         return TLVBADREC;
     }
