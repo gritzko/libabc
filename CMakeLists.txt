@@ -20,6 +20,13 @@ enable_testing()
 # inet-asan lane turns it on — loopback-only, no live-internet deps
 option(WITH_INET "build network (loopback) tests" OFF)
 
+# wasm32-wasi build: abc-core only, emulated mman/signal/clocks/getpid,
+# no sodium/curl/lz4, no CLIs, tests, bench or fuzz
+option(WASM_MODE "build abc-core only, for wasm32-wasi" OFF)
+if (WASM_MODE)
+    add_compile_definitions(_WASI_EMULATED_MMAN _WASI_EMULATED_SIGNAL _WASI_EMULATED_PROCESS_CLOCKS _WASI_EMULATED_GETPID)
+endif()
+
 option(WITH_ASAN "build with ASAN" OFF)
 if (WITH_ASAN)
     set(ASAN_FLAGS "-g -O1 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
@@ -44,6 +51,7 @@ set(DOG_BIN_DIR ${CMAKE_BINARY_DIR}/bin)
 include_directories(.. . ryu)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+if (NOT WASM_MODE)
 find_library(sodium NAMES sodium HINTS /usr /usr/local /opt/homebrew)
 find_path(SODIUM_INCLUDE_DIR NAMES sodium.h HINTS /usr/include /usr/local/include /opt/homebrew/include)
 #  curl is a HARD dependency: CURL.c is part of the full `abc`, and the test
@@ -68,6 +76,7 @@ if (NOT LZ4_FOUND)
         set(LZ4_FOUND TRUE)
     endif()
 endif()
+endif() # NOT WASM_MODE
 
 list(APPEND ABC_HEADERS
 S.h
@@ -158,7 +167,16 @@ endif()
 # Minimal abc-core: no heavy deps — for standalone tools like spot
 set(ABC_CORE_SOURCES ${ABC_SOURCES})
 list(REMOVE_ITEM ABC_CORE_SOURCES CURL.c NET.c HTTP.c HTTP.rl.c TCP.c UDP.c POL.c PACK.c ROCK.c)
+if (WASM_MODE)  # WASI has no sys/wait.h, termios.h
+    list(REMOVE_ITEM ABC_CORE_SOURCES FILE.c ANSI.c)
+endif()
 add_library(abc-core STATIC ${ABC_HEADERS} ${ABC_CORE_SOURCES})
+if (WASM_MODE)
+    # users of abc-core include B.h etc., so they need the same defines
+    target_compile_definitions(abc-core INTERFACE _WASI_EMULATED_MMAN _WASI_EMULATED_SIGNAL _WASI_EMULATED_PROCESS_CLOCKS _WASI_EMULATED_GETPID)
+    target_link_libraries(abc-core INTERFACE wasi-emulated-mman wasi-emulated-signal wasi-emulated-process-clocks wasi-emulated-getpid)
+    return()
+endif()
 
 # Full abc with all deps (curl is required above; sodium+lz4 still gate it)
 if (sodium AND LZ4_FOUND)
