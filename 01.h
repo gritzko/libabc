@@ -415,9 +415,8 @@ fun ok64 u64decdrain(u64 *x, u8c **dec) {
     u64 a = **dec - '0';
     ++*dec;
     while (*dec < dec[1]) {
-        a *= 10;
         if (**dec > '9' || **dec < '0') break;
-        a += **dec - '0';
+        a = a * 10 + (**dec - '0');
         ++*dec;
     }
     *x = a;

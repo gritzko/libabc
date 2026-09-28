@@ -100,12 +100,31 @@ ok64 BADdec() {
     done;
 }
 
+// u64decdrain stops at the first non-digit without scaling by it:
+// "7 limit" is 7 and "30\n" is 30, the cursor left on the stopper.
+ok64 STOPdec() {
+    sane(1);
+    char const *in[] = {"7 limit", "30\n", "123"};
+    u64 const want[] = {7, 30, 123};
+    size_t const used[] = {1, 2, 3};
+    for (int n = 0; n < 3; ++n) {
+        a$str(dec, in[n]);
+        u8c *from = dec[0];
+        u64 x = 0;
+        call(u64decdrain, &x, dec);
+        testeqv((long long)(x), (long long)(want[n]), "%lld");
+        testeqv((long long)(dec[0] - from), (long long)(used[n]), "%lld");
+    }
+    done;
+}
+
 ok64 Utest() {
     sane(1);
     call(Utest1);
     call(Utest2);
     call(OKdec);
     call(BADdec);
+    call(STOPdec);
     done;
 }
 
