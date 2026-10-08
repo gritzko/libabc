@@ -33,6 +33,13 @@ fun b8 u128Z(u128 const *a, u128 const *b) {
     return a->_64[0] < b->_64[0];
 }
 
+//  n128: first u64 most significant, then the second — a (key, val) record
+//  ordered by key, then val.
+fun b8 n128Z(n128 const *a, n128 const *b) {
+    if (a->_64[0] != b->_64[0]) return a->_64[0] < b->_64[0];
+    return a->_64[1] < b->_64[1];
+}
+
 fun b8 u256Z(u256 const *a, u256 const *b) {
     for (int i = 3; i >= 0; --i) {
         if (a->_64[i] != b->_64[i]) return a->_64[i] < b->_64[i];
@@ -94,6 +101,10 @@ fun ok64 u64bDigup(u64bp buf) {
 }
 
 #define X(M, name) M##u128##name
+#include "Bx.h"
+#undef X
+
+#define X(M, name) M##n128##name
 #include "Bx.h"
 #undef X
 
@@ -216,6 +227,15 @@ fun u64 u128hash(u128cp val) {
     u64 low = val->_64[0];
     u64 high = val->_64[1];
     return u64hash2(low, high);
+}
+
+fun b8 u128hashEq(u128cp a, u128cp b) {
+    return a->_64[0] == b->_64[0] && a->_64[1] == b->_64[1];
+}
+
+fun u64 n128hash(n128cp val) { return mix64(val->_64[0] ^ val->_64[1]); }
+fun b8 n128hashEq(n128cp a, n128cp b) {
+    return a->_64[0] == b->_64[0] && a->_64[1] == b->_64[1];
 }
 
 #endif  // ABC_INT_H

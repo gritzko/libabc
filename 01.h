@@ -139,6 +139,9 @@ typedef WORDS(2) w128;
 typedef WORDS(4) w256;
 typedef WORDS(8) w512;
 typedef w128 u128;
+//  n128: the same 128 bits as u128, ordered the other way round — the FIRST u64
+//  is most significant (u128Z puts the second one first).  A (key, val) record.
+typedef w128 n128;
 typedef w256 u256;
 typedef w512 u512;
 

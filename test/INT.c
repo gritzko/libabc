@@ -118,8 +118,24 @@ ok64 STOPdec() {
     done;
 }
 
+//  u128 puts the SECOND u64 first, n128 the FIRST: same bits, two orders.
+ok64 ORDER128() {
+    sane(1);
+    u128 a = {._64 = {1, 9}}, b = {._64 = {2, 1}};
+    want(u128Z(&b, &a));    //  second u64: 1 < 9
+    want(!u128Z(&a, &b));
+    n128 c = {._64 = {1, 9}}, d = {._64 = {2, 1}};
+    want(n128Z(&c, &d));    //  first u64: 1 < 2
+    want(!n128Z(&d, &c));
+    n128 e = {._64 = {1, 10}};
+    want(n128Z(&c, &e));    //  equal first u64: the second breaks the tie
+    want(!n128Z(&c, &c) && n128hashEq(&c, &c) && !n128hashEq(&c, &e));
+    done;
+}
+
 ok64 Utest() {
     sane(1);
+    call(ORDER128);
     call(Utest1);
     call(Utest2);
     call(OKdec);
