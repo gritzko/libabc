@@ -1,0 +1,1168 @@
+#include "PUPS.h"
+
+#include <dirent.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "FILE.h"
+#include "PRO.h"
+#include "TEST.h"
+
+#include "TESTBE.h"
+
+// DOG-027: keyed type for the memtable tests — kv64Z compares keys only,
+// so keep-last dedup and younger-wins ties are observable in the output.
+#define X(M, name) M##kv64##name
+#include "HITx.h"
+#undef X
+
+// --- MEM-043: PUP error-path leaks --------------------------------
+//
+//  REPRO-FIRST (CLAUDE.md §17).  Two leaks live in the puppy-stack
+//  helpers, neither of which LSan catches (the leaked fd/mmap/DIR
+//  handle is reachable from no live pointer but its kernel resource
+//  outlives the call).  We make them observable by counting open file
+//  descriptors across many iterations: a leak grows the fd table
+//  monotonically, a fixed function keeps it flat.
+//
+//    (1) pups-overflow — PUPOpenAll FILEMapRO+books a puppy file,
+//        then pushes (key, fd) into the bounded `pups`.  When that push
+//        overflows, the early return drops the just-mapped fd+mmap on
+//        the floor (it was never recorded in `pups`, so PUPClose
+//        cannot reclaim it).
+//    (2) non-END FILENext — when the directory scan aborts with a real
+//        error (PATHu8bPush BNOROOM on a path that overflows the 1024-
+//        byte path buffer), `seen(END)` short-circuits the return and
+//        SKIPS the following FILEIterClose, leaking the DIR handle.
+
+//  Portable live open-fd count: probe with fcntl(F_GETFD).  Works on
+//  Linux, FreeBSD (including linuxulator where /proc/self/fd is stubby)
+//  and macOS — no /proc dependency.
+static int dog_open_fd_count(void) {
+    long max_fd = sysconf(_SC_OPEN_MAX);
+    if (max_fd <= 0 || max_fd > 4096) max_fd = 4096;
+    int n = 0;
+    for (int fd = 0; fd < (int)max_fd; fd++) {
+        if (fcntl(fd, F_GETFD) != -1) n++;
+    }
+    return n;
+}
+
+//  (1) Force a pups-overflow and assert no fd/mmap leak.
+//
+//  Create N puppy files in a scratch dir, then repeatedly re-open them
+//  into a `pups` buffer too small to hold them all (cap < N): each
+//  PUPOpenAll maps every file in key order and pushes until the
+//  buffer fills — the (cap+1)-th FILEMapRO is the one whose fd+mmap
+//  leaks on the failed push.  Before the fix the fd table grows by
+//  (N-cap) per iteration; after the fix it is flat.
+static ok64 PUPTestOverflowLeak(void) {
+    sane(1);
+    call(FILEInit);
+
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+
+    a_cstr(ext, ".test.idx");
+    enum { NPUP = 8, PUPCAP = 3, ITERS = 32 };
+
+    //  Materialize NPUP puppy files on disk via PUPCreate (roomy pups).
+    {
+        a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+        Bkv64 mk = {};
+        call(kv64bAllocate, mk, NPUP + 2);
+        for (int i = 0; i < NPUP; i++) {
+            a_cstr(body, "puppy-bytes");
+            a_dup(u8c, b, body);
+            //  distinct explicit keys so all NPUP files coexist
+            try(PUPCreateAt, mk, $path(dir), ext, b, (u64)(1000 + i));
+            if (__ != OK) { PUPClose(mk); want(0); }
+        }
+        PUPClose(mk);  //  unmaps all, frees mk — disk files remain
+    }
+
+    int fd0 = dog_open_fd_count();
+    want(fd0 > 0);
+
+    for (int it = 0; it < ITERS; it++) {
+        a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+        Bkv64 pups = {};
+        call(kv64bAllocate, pups, PUPCAP);  //  too small for NPUP
+        try(PUPOpenAll, pups, $path(dir), ext);
+        //  overflow → SNOROOM expected; the leak (if any) already happened
+        b8 overflowed = (__ == SNOROOM);
+        PUPClose(pups);
+        if (!overflowed) {        //  repro precondition not met
+            TESTBErmrf(tmp);
+            fprintf(stderr, "PupOverflowLeak: no overflow on iter %d\n", it);
+            fail(TESTFAIL);
+        }
+    }
+
+    int fd1 = dog_open_fd_count();
+    TESTBErmrf(tmp);
+    if (fd1 > fd0) {
+        fprintf(stderr,
+            "PupOverflowLeak: fd count grew %d -> %d across %d iters "
+            "(leaked ~%d fds/iter)\n",
+            fd0, fd1, ITERS, (fd1 - fd0) / ITERS);
+        fail(TESTFAIL);
+    }
+    __ = OK;  //  the expected overflow status must not leak out as failure
+    done;
+}
+
+//  (2) Force a non-END FILENext error and assert no DIR-handle leak.
+//
+//  PUPOpenAll's FILEIter shares a 1024-byte path buffer seeded with
+//  `dir`.  Make `dir` long enough that appending ANY entry name
+//  overflows the buffer: PATHu8bPush then returns BNOROOM (a non-END,
+//  non-PATHBAD error), the scan aborts, and the pre-fix `seen(END)`
+//  returns BEFORE FILEIterClose — leaking the opendir() handle.  One
+//  leaked DIR fd per iteration; the loop makes it unmistakable.
+static ok64 PUPTestIterErrLeak(void) {
+    sane(1);
+#if defined(__FreeBSD__) || defined(__APPLE__)
+    //  This repro needs OS PATH_MAX > FILE_PATH_MAX_LEN (1024) so the
+    //  on-disk file can be created while the iterator's bounded push
+    //  still overflows.  FreeBSD's and Darwin's kernel MAXPATHLEN is
+    //  1024, so the precondition cannot be reached — open(ENAMETOOLONG)s
+    //  before the scan ever observes an entry.  The leak fix itself is
+    //  platform-agnostic and PupOverflowLeak above still exercises the
+    //  close path.
+    done;
+#endif
+    call(FILEInit);
+
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+
+    //  Build a deeply-nested dir whose path is within a few bytes of
+    //  FILE_PATH_MAX_LEN (1024), so any entry name push overflows.
+    char deep[1100];
+    int dlen = snprintf(deep, sizeof deep, "%s", tmp);
+    //  255-byte segments (NAME_MAX) until we are ~within an entry-name of cap.
+    char seg[256];
+    memset(seg, 'a', 200);
+    seg[200] = 0;
+    while (dlen + 1 + 200 < 1015) {
+        char path[1100];
+        snprintf(path, sizeof path, "%s/%s", deep, seg);
+        if (mkdir(path, 0755) != 0) { TESTBErmrf(tmp); want(0); }
+        dlen = snprintf(deep, sizeof deep, "%s", path);
+    }
+    //  Put a regular file inside so the scan visits an entry and the
+    //  push (deep-path + filename) overflows the 1024 buffer.
+    {
+        char fpath[1200];
+        snprintf(fpath, sizeof fpath, "%s/%s", deep, seg);
+        int fd = open(fpath, O_CREAT | O_WRONLY, 0644);
+        if (fd >= 0) close(fd);
+    }
+
+    a_cstr(ext, ".test.idx");
+    enum { ITERS = 64 };
+
+    int fd0 = dog_open_fd_count();
+    want(fd0 > 0);
+
+    for (int it = 0; it < ITERS; it++) {
+        a_path(dir, ((u8cs){(u8 *)deep, (u8 *)deep + strlen(deep)}));
+        Bkv64 pups = {};
+        call(kv64bAllocate, pups, 16);
+        try(PUPOpenAll, pups, $path(dir), ext);
+        //  expect a non-END iterator error (PATHNOROOM) to have aborted
+        //  the scan; OK/END would mean the precondition wasn't met
+        b8 iter_erred = (__ != OK);
+        PUPClose(pups);
+        if (!iter_erred) {
+            TESTBErmrf(tmp);
+            fprintf(stderr, "PupIterErrLeak: no iter error on iter %d\n", it);
+            fail(TESTFAIL);
+        }
+    }
+
+    int fd1 = dog_open_fd_count();
+    TESTBErmrf(tmp);
+    if (fd1 > fd0) {
+        fprintf(stderr,
+            "PupIterErrLeak: fd count grew %d -> %d across %d iters "
+            "(leaked DIR handles)\n",
+            fd0, fd1, ITERS);
+        fail(TESTFAIL);
+    }
+    __ = OK;  //  the expected iterator error must not leak out as failure
+    done;
+}
+
+ok64 PUPTestLeaks(void) {
+    sane(1);
+    call(PUPTestOverflowLeak);
+    call(PUPTestIterErrLeak);
+    done;
+}
+
+// --- DOG-027: Pup memtable — put / sync / collapse / flush / commit ---
+
+// The typed sort/merge and entry points come from the template.  kv64Z compares
+// keys only, so PUPx_WHOLE_ROW stays unset (stable sort, newest wins).
+#define X(M, name) M##kv64##name
+#include "PUPx.h"
+#undef X
+
+// The core takes (sync, merge, row).  T_PLAIN: no ToC; T_TOC: row-width ToC.
+#define T_PLAIN PUPkv64Sync, PUPkv64Merge, 0
+#define T_TOC PUPkv64Sync, PUPkv64Merge, (u32)sizeof(kv64)
+
+// DOG-027: put one (key,val) row through PUPPut.
+static ok64 dog_mem_put(kv64b pups, path8s dir, u8cs ext, u64 key, u64 val) {
+    sane(1);
+    kv64 row = {key, val};
+    u8cs rec = {(u8c *)&row, (u8c *)(&row + 1)};
+    call(PUPPut, pups, dir, ext, rec, T_PLAIN);
+    done;
+}
+
+// DOG-027: query the stack — AllRuns sources fed to HITkv64Merge; merged
+// rows land in `out` (head advances), source count in *nsrc.
+// DOG-035: `row` picks the width, so one helper serves both twins.
+static ok64 pup_query(kv64s out, u32 *nsrc, kv64b pups, u32 row) {
+    sane(out != NULL && nsrc != NULL);
+    Bu8cs srcs = {};
+    call(u8csbAllocate, srcs, HIT_MAX_RUNS);
+    try(PUPAllRuns, srcs, pups, PUPkv64Sync, row);
+    nedo { u8csbFree(srcs); fail(__); }
+    u32 n = (u32)u8csbDataLen(srcs);
+    *nsrc = n;
+    kv64cs runs[HIT_MAX_RUNS];
+    u8cs *sl = u8csbDataHead(srcs);
+    for (u32 i = 0; i < n; i++) {
+        runs[i][0] = (kv64 const *)sl[i][0];
+        runs[i][1] = (kv64 const *)sl[i][1];
+    }
+    kv64css hp = {runs, runs + n};
+    try(HITkv64Merge, hp, out);
+    u8csbFree(srcs);
+    done;
+}
+
+static ok64 dog_mem_query(kv64s out, u32 *nsrc, kv64b pups) {
+    return pup_query(out, nsrc, pups, 0);
+}
+
+// DOG-027: round-trip — unsorted arrivals, keep-last dup; a second read
+// sees the same rows (sync idempotent), memtable keyed ALL-ONES.
+static ok64 PUPTestMemRoundTrip(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 8);
+
+    // DOG-027: no sync passed down — the memtable API refuses, never crashes
+    kv64 pre = {1, 1};
+    u8cs prerec = {(u8c *)&pre, (u8c *)(&pre + 1)};
+    want(PUPPut(pups, $path(dir), ext, prerec, NULL, NULL, 0) == PUPFAIL);
+
+    call(dog_mem_put, pups, $path(dir), ext, 7, 70);
+    call(dog_mem_put, pups, $path(dir), ext, 3, 30);
+    call(dog_mem_put, pups, $path(dir), ext, 5, 50);
+    call(dog_mem_put, pups, $path(dir), ext, 3, 31);
+
+    kv64 got[16];
+    kv64s out = {got, got + 16};
+    u32 nsrc = 0;
+    call(dog_mem_query, out, &nsrc, pups);
+    testeqv((long long)(out[0] - got), 3LL, "%lld");
+    testeqv((long long)nsrc, 1LL, "%lld");
+    want(got[0].key == 3 && got[0].val == 31);
+    want(got[1].key == 5 && got[1].val == 50);
+    want(got[2].key == 7 && got[2].val == 70);
+
+    kv64 got2[16];
+    kv64s out2 = {got2, got2 + 16};
+    call(dog_mem_query, out2, &nsrc, pups);
+    testeqv((long long)(out2[0] - got2), 3LL, "%lld");
+    want(got2[0].val == 31 && got2[1].val == 50 && got2[2].val == 70);
+
+    want(PUPCount(pups) == 0);  //  reserved entries are not runs
+    want(PUPSeqno(pups, (u32)kv64bDataLen(pups) - 1) == PUP_MEM_KEY);
+    want(PUPSeqno(pups, 99) == 0);
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: DATA past 512 collapses to ONE slice on read; smaller DATA
+// reads as TWO slices (PAST+DATA); a PAST/DATA key tie goes to DATA.
+static ok64 PUPTestMemCollapse(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 8);
+
+    // DOG-027: 40 rows = 640 B > PUP_COLLAPSE — first read collapses
+    for (u64 i = 0; i < 40; i++)
+        call(dog_mem_put, pups, $path(dir), ext, 1000 - i, i);
+    kv64 got[64];
+    kv64s out = {got, got + 64};
+    u32 nsrc = 0;
+    call(dog_mem_query, out, &nsrc, pups);
+    testeqv((long long)nsrc, 1LL, "%lld");
+    testeqv((long long)(out[0] - got), 40LL, "%lld");
+    for (int i = 1; i < 40; i++) want(got[i - 1].key < got[i].key);
+
+    call(dog_mem_put, pups, $path(dir), ext, 5000, 1);
+    call(dog_mem_put, pups, $path(dir), ext, 970, 777);
+    kv64 got2[64];
+    kv64s out2 = {got2, got2 + 64};
+    call(dog_mem_query, out2, &nsrc, pups);
+    testeqv((long long)nsrc, 2LL, "%lld");
+    testeqv((long long)(out2[0] - got2), 41LL, "%lld");
+    b8 hit = NO;
+    for (kv64 *p = got2; p < out2[0]; p++)
+        if (p->key == 970) { hit = YES; want(p->val == 777); }
+    want(hit);
+
+    // DOG-027: 32 B DATA stays two-slice — reads alone never re-collapse
+    kv64 got3[64];
+    kv64s out3 = {got3, got3 + 64};
+    call(dog_mem_query, out3, &nsrc, pups);
+    testeqv((long long)nsrc, 2LL, "%lld");
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: a full one-page buffer flushes into a run under a fresh monotonic
+// pup_key; a new `<ext>` memtable takes over and the run is scan-visible.
+// DOG-032:1054 the page is the OS's, so the fill count is measured, not 256.
+static ok64 PUPTestMemFlush(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    u64 fill = FILESysPage() / sizeof(kv64);
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 8);
+
+    for (u64 i = 0; i < fill; i++)
+        call(dog_mem_put, pups, $path(dir), ext, 10000 - i, i);
+    want(PUPCount(pups) == 0);
+    call(dog_mem_put, pups, $path(dir), ext, 42, 4242);
+    want(PUPCount(pups) == 1);
+    u64 runkey = PUPSeqno(pups, 0);
+    want(runkey != 0 && runkey != PUP_MEM_KEY);
+    want(PUPSeqno(pups, (u32)kv64bDataLen(pups) - 1) == PUP_MEM_KEY);
+
+    // DOG-027: fresh scan sees the run, never the dot-file
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 8);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    want(PUPCount(fresh) == 1);
+    want(PUPSeqno(fresh, 0) == runkey);
+    u8cs run = {};
+    PUPData(run, fresh, 0);
+    testeqv((long long)(run[1] - run[0]), (long long)(fill * sizeof(kv64)),
+            "%lld");
+    kv64 const *rr = (kv64 const *)run[0];
+    for (u64 i = 1; i < fill; i++) want(rr[i - 1].key < rr[i].key);
+    call(PUPClose, fresh);
+
+    Bkv64 gotb = {};
+    call(kv64bAllocate, gotb, (u32)fill + 64);
+    kv64 *got = kv64bIdleHead(gotb);
+    kv64s out = {got, kv64bTerm(gotb)};
+    u32 nsrc = 0;
+    try(dog_mem_query, out, &nsrc, pups);
+    nedo { kv64bFree(gotb); fail(__); }
+    testeqv((long long)nsrc, 2LL, "%lld");
+    testeqv((long long)(out[0] - got), (long long)(fill + 1), "%lld");
+    b8 hit = NO;
+    for (kv64 *p = got; p < out[0]; p++)
+        if (p->key == 42) { hit = YES; want(p->val == 4242); }
+    want(hit);
+    kv64bFree(gotb);
+
+    // DOG-027: ThinTail drops the RUN, never the reserved tail — and the
+    // hook survives the slide, so the memtable still takes puts.
+    call(PUPThinTail, pups, $path(dir), ext, 1);
+    want(PUPCount(pups) == 0);
+    want(PUPSeqno(pups, (u32)kv64bDataLen(pups) - 1) == PUP_MEM_KEY);
+    call(dog_mem_put, pups, $path(dir), ext, 9, 99);
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: commit collapses, trims and renames `<ext>` into
+// `<10-RON64><ext>`; the dot-file is gone, the run is complete.
+static ok64 PUPTestMemCommit(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 8);
+
+    call(dog_mem_put, pups, $path(dir), ext, 2, 20);
+    call(dog_mem_put, pups, $path(dir), ext, 1, 10);
+    call(dog_mem_put, pups, $path(dir), ext, 1, 11);
+    call(PUPCommit, pups, $path(dir), ext, T_PLAIN);
+
+    want(PUPCount(pups) == 1);
+    u64 runkey = PUPSeqno(pups, 0);
+    want(runkey != 0 && runkey != PUP_MEM_KEY);
+
+    char mp[300];
+    snprintf(mp, sizeof mp, "%s/%s", tmp, ".mem.idx");
+    struct stat st = {};
+    want(stat(mp, &st) != 0);
+
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 8);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    want(PUPCount(fresh) == 1);
+    u8cs run = {};
+    PUPData(run, fresh, 0);
+    testeqv((long long)(run[1] - run[0]), (long long)(2 * sizeof(kv64)),
+            "%lld");
+    kv64 const *rr = (kv64 const *)run[0];
+    want(rr[0].key == 1 && rr[0].val == 11);
+    want(rr[1].key == 2 && rr[1].val == 20);
+    call(PUPClose, fresh);
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: a crashed `<ext>` memtable (raw dot-file of unsorted bytes) is
+// invisible to PUPOpenAll — only real `<10-RON64><ext>` runs load.
+static ok64 PUPTestMemCrashInvisible(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+
+    {
+        Bkv64 mk = {};
+        call(kv64bAllocate, mk, 4);
+        a_cstr(body, "sixteen-byte-row");
+        a_dup(u8c, b, body);
+        try(PUPCreateAt, mk, $path(dir), ext, b, (u64)1000);
+        nedo { PUPClose(mk); want(0); }
+        call(PUPClose, mk);
+    }
+    {
+        char mp[300];
+        snprintf(mp, sizeof mp, "%s/%s", tmp, ".mem.idx");
+        int fd = open(mp, O_CREAT | O_WRONLY, 0600);
+        want(fd >= 0);
+        want(write(fd, "garbage unsorted crash bytes", 28) == 28);
+        close(fd);
+    }
+    //  DOG-027: and a run named the way the retired JS writer named them —
+    //  8 zero-padded chars.  It is not a run to the 10-char scan, so the open
+    //  IGNORES it; an open never deletes what it cannot read.
+    char legacy[300];
+    snprintf(legacy, sizeof legacy, "%s/%s", tmp, "00000001.mem.idx");
+    {
+        int fd = open(legacy, O_CREAT | O_WRONLY, 0600);
+        want(fd >= 0);
+        want(write(fd, "sixteen-byte-row", 16) == 16);
+        close(fd);
+    }
+
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 8);
+    call(PUPOpenAll, pups, $path(dir), ext);
+    want(PUPCount(pups) == 1);
+    want(PUPSeqno(pups, 0) == 1000);
+    struct stat lst = {};
+    want(stat(legacy, &lst) == 0);  //  the legacy run is left on disk
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: several page-full flushes drive the ladder in C — the on-disk
+// stack keeps the 1/8 invariant and queries still answer newest-wins.
+static ok64 PUPTestLadder(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 64);
+
+    //  2048 distinct keys = 8 full pages; every seal ends in the ladder
+    for (u64 i = 0; i < 2048; i++)
+        call(dog_mem_put, pups, $path(dir), ext, 100000 - i, i);
+    //  the 2049th put seals page 8, then lands in a fresh memtable and
+    //  shadows a key that already sits in the committed run
+    call(dog_mem_put, pups, $path(dir), ext, 99999, 7777);
+    call(PUPCommit, pups, $path(dir), ext, T_PLAIN);
+
+    //  the ladder collapsed the 8 pages into ONE run; the 16-byte tail run
+    //  is under a 1/8 of it, so the stack is compact and stays two deep
+    u32 n = PUPCount(pups);
+    testeqv((long long)n, 2LL, "%lld");
+    for (u32 i = 0; i + 1 < n; i++) {
+        u8cs a = {}, b = {};
+        PUPData(a, pups, i);
+        PUPData(b, pups, i + 1);
+        want(u8csLen(b) * HIT_LADDER_DIV <= u8csLen(a));
+    }
+    u8cs big = {};
+    PUPData(big, pups, 0);
+    testeqv((long long)u8csLen(big), (long long)(2048 * sizeof(kv64)), "%lld");
+
+    //  a fresh scan sees exactly those two files — the collapsed sources
+    //  were unlinked, and no dot-file survived
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 64);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    testeqv((long long)PUPCount(fresh), 2LL, "%lld");
+    call(PUPClose, fresh);
+
+    Bkv64 got = {};
+    call(kv64bAllocate, got, 4096);
+    kv64 *gb = kv64bIdleHead(got);
+    kv64s out = {gb, kv64bTerm(got)};
+    u32 nsrc = 0;
+    try(dog_mem_query, out, &nsrc, pups);
+    nedo { kv64bFree(got); PUPClose(pups); fail(__); }
+    testeqv((long long)(out[0] - gb), 2048LL, "%lld");
+    for (kv64 *p = gb + 1; p < out[0]; p++) want(p[-1].key < p->key);
+    b8 hit = NO;
+    for (kv64 *p = gb; p < out[0]; p++)
+        if (p->key == 99999) { hit = YES; want(p->val == 7777); }
+    want(hit);
+    kv64bFree(got);
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: drop the i-th run — the file goes, the dict closes the gap, and
+// the reserved tail stays put.
+static ok64 PUPTestDropAt(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mem.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+
+    //  three runs booked straight (a commit each would collapse them: three
+    //  equal-size runs violate the 1/8 ladder by construction)
+    for (u64 r = 0; r < 3; r++) {
+        kv64 row = {10 + r, 100 + r};
+        a_dup(u8c, rec, ((u8cs){(u8c *)&row, (u8c *)(&row + 1)}));
+        call(PUPCreateAt, pups, $path(dir), ext, rec, 1000 + r);
+    }
+    testeqv((long long)PUPCount(pups), 3LL, "%lld");
+    u64 mid = PUPSeqno(pups, 1), young = PUPSeqno(pups, 2);
+
+    call(PUPDropAt, pups, $path(dir), ext, 1);
+    testeqv((long long)PUPCount(pups), 2LL, "%lld");
+    want(PUPSeqno(pups, 1) == young);
+    want(PUPCount(pups) == (u32)kv64bDataLen(pups));  //  no memtable
+    want(PUPDropAt(pups, $path(dir), ext, 9) == PUPFAIL);
+
+    //  gone from disk too
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 16);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    testeqv((long long)PUPCount(fresh), 2LL, "%lld");
+    want(PUPSeqno(fresh, 0) != mid && PUPSeqno(fresh, 1) != mid);
+    call(PUPClose, fresh);
+
+    kv64 got[16];
+    kv64s out = {got, got + 16};
+    u32 nsrc = 0;
+    call(dog_mem_query, out, &nsrc, pups);
+    testeqv((long long)(out[0] - got), 2LL, "%lld");
+    want(got[0].key == 10 && got[1].key == 12);
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-027: a key whose NAME is taken is stepped over, never written through.
+// Case folding can't be staged on ext4 — squatting the exact name can.
+static ok64 PUPTestNameTaken(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".take.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+
+    //  A key above RONNow, so the next pick is exactly M+1 (DATA's max wins).
+    u64 const M = 0x0FFFFFFFFFFFF00ULL;
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 8);
+    a_cstr(first, "sixteen-byte-row");
+    a_dup(u8c, fb, first);
+    call(PUPCreateAt, pups, $path(dir), ext, fb, M);
+
+    //  Squat M+1's name with bytes of our own — the run dog is about to seal.
+    a_pad(u8, name, PUP_SEQNO_W + 32);
+    call(RONu8sFeedPad, u8bIdle(name), (ok64)(M + 1), PUP_SEQNO_W);
+    call(u8bFeed, name, ext);
+    a_path(squat, $path(dir), u8bDataC(name));
+    int sfd = open((char *)u8bDataHead(squat), O_CREAT | O_WRONLY, 0600);
+    want(sfd >= 0);
+    want(write(sfd, "squatter--------", 16) == 16);
+    close(sfd);
+
+    //  The create must step to M+2 and leave the squatter's bytes alone.
+    a_cstr(second, "another-16-bytes");
+    a_dup(u8c, sb, second);
+    call(PUPCreate, pups, $path(dir), ext, sb);
+    want(PUPCount(pups) == 2);
+    want(PUPSeqno(pups, 0) == M);
+    want(PUPSeqno(pups, 1) == M + 2);
+    {
+        char back[17] = "";
+        int rfd = open((char *)u8bDataHead(squat), O_RDONLY);
+        want(rfd >= 0);
+        want(read(rfd, back, 16) == 16);
+        close(rfd);
+        want(memcmp(back, "squatter--------", 16) == 0);
+    }
+    //  A caller-pinned key on a taken name is refused, not written through.
+    want(PUPCreateAt(pups, $path(dir), ext, sb, M + 1) != OK);
+    want(PUPCount(pups) == 2);
+
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-046: two rw stacks on ONE dir.  The memtable used to be the fixed file
+// `<dir>/<ext>`, opened O_TRUNC, so B's open wiped A's rows and A's seal then
+// renamed B's inode away — every row must survive, both commits must succeed.
+static ok64 PUPTestTwoWriters(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".two.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 A = {}, B = {};
+    call(kv64bAllocate, A, 16);
+    call(kv64bAllocate, B, 16);
+
+    //  DOG-046:two.js — A's rows, B's rows over the same dir, A's mark last.
+    for (u64 i = 1; i <= 5; i++) call(dog_mem_put, A, $path(dir), ext, i, i);
+    for (u64 i = 100; i <= 105; i++)
+        call(dog_mem_put, B, $path(dir), ext, i, i);
+    call(dog_mem_put, A, $path(dir), ext, 6, 6);
+
+    //  DOG-046: two live memtables, each `~<10-RON64><ext>` — they still END
+    //  in `<ext>`, so bee's sweep spares them, yet no run scan ever sees one.
+    {
+        u32 mems = 0;
+        DIR *dh = opendir(tmp);
+        want(dh != NULL);
+        for (struct dirent *e; (e = readdir(dh));) {
+            size_t n = strlen(e->d_name);
+            if (n < 8 || strcmp(e->d_name + n - 8, ".two.idx") != 0) continue;
+            want(e->d_name[0] == '~');
+            testeqv((long long)n, (long long)(PUP_SEQNO_W + 1 + 8), "%lld");
+            mems++;
+        }
+        closedir(dh);
+        testeqv((long long)mems, 2LL, "%lld");
+        Bkv64 peek = {};
+        call(kv64bAllocate, peek, 16);
+        call(PUPOpenAll, peek, $path(dir), ext);
+        testeqv((long long)PUPCount(peek), 0LL, "%lld");
+        call(PUPClose, peek);
+    }
+
+    want(PUPCommit(A, $path(dir), ext, T_PLAIN) == OK);
+    want(PUPCommit(B, $path(dir), ext, T_PLAIN) == OK);
+    call(PUPClose, A);
+    call(PUPClose, B);
+
+    //  a fresh stack reads all 12 rows back, in key order
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 16);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    kv64 got[32];
+    kv64s out = {got, got + 32};
+    u32 nsrc = 0;
+    try(dog_mem_query, out, &nsrc, fresh);
+    nedo { PUPClose(fresh); fail(__); }
+    testeqv((long long)(out[0] - got), 12LL, "%lld");
+    for (u64 i = 1; i <= 6; i++)
+        want(got[i - 1].key == i && got[i - 1].val == i);
+    for (u64 i = 100; i <= 105; i++)
+        want(got[i - 94].key == i && got[i - 94].val == i);
+    call(PUPClose, fresh);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-046: a run sealed by ANOTHER handle while this one is open.  The dict is
+// re-scanned before every seal and ladder, so A's commit maps B's run in and
+// A's read view answers over both.
+static ok64 PUPTestForeignRun(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".fgn.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 A = {}, B = {};
+    call(kv64bAllocate, A, 16);
+    call(kv64bAllocate, B, 16);
+
+    //  A holds rows in its memtable; B seals a run 8x bigger under it, so the
+    //  1/8 ladder leaves BOTH runs standing and the count is the assertion.
+    for (u64 i = 1; i <= 3; i++) call(dog_mem_put, A, $path(dir), ext, i, i);
+    for (u64 i = 1000; i < 1064; i++)
+        call(dog_mem_put, B, $path(dir), ext, i, i);
+    want(PUPCommit(B, $path(dir), ext, T_PLAIN) == OK);
+    testeqv((long long)PUPCount(B), 1LL, "%lld");
+    u64 bkey = PUPSeqno(B, 0);
+
+    //  Before its own commit A knows nothing of B's run; after it, B's run
+    //  is the OLDER of the two A carries.
+    testeqv((long long)PUPCount(A), 0LL, "%lld");
+    want(PUPCommit(A, $path(dir), ext, T_PLAIN) == OK);
+    testeqv((long long)PUPCount(A), 2LL, "%lld");
+    want(PUPSeqno(A, 0) == bkey);
+    want(PUPSeqno(A, 1) > bkey);
+
+    kv64 got[128];
+    kv64s out = {got, got + 128};
+    u32 nsrc = 0;
+    try(dog_mem_query, out, &nsrc, A);
+    nedo { PUPClose(A); PUPClose(B); fail(__); }
+    testeqv((long long)(out[0] - got), 67LL, "%lld");
+    for (u64 i = 1; i <= 3; i++) want(got[i - 1].key == i);
+    for (u64 i = 1000; i < 1064; i++) want(got[i - 997].key == i);
+
+    call(PUPClose, A);
+    call(PUPClose, B);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// --- DOG-035: the run ToC — [data][toc][len:5]["TC"] -----------------
+
+// DOG-035: put one row into a `pages`-page memtable, record width `width`.
+static ok64 dog_toc_put(kv64b pups, path8s dir, u8cs ext, u32 width,
+                        u32 pages, u64 key, u64 val) {
+    sane(1);
+    kv64 row = {key, val};
+    u8cs rec = {(u8c *)&row, (u8c *)(&row + 1)};
+    call(PUPPutMem, pups, dir, ext, rec, PUPkv64Sync, PUPkv64Merge, width,
+         pages);
+    done;
+}
+
+// DOG-035: compose `<tmp>/<10-RON64 key><ext>` — the ON-DISK run, read back
+// with plain IO, since a seal leaves its own mapping trimmed to the data.
+static ok64 dog_toc_path(char *out, size_t cap, char const *tmp, u64 key,
+                         char const *ext) {
+    sane(out != NULL);
+    a_pad(u8, name, PUP_SEQNO_W + 32);
+    call(RONu8sFeedPad, u8bIdle(name), (ok64)key, PUP_SEQNO_W);
+    snprintf(out, cap, "%s/%.*s%s", tmp, (int)u8bDataLen(name),
+             (char const *)u8bDataHead(name), ext);
+    done;
+}
+
+// DOG-035: seal a `pages`-page run of descending keys, record width `row`; the run's
+// pup_key lands in *key, the row count is the return of the caller's `n`.
+static ok64 dog_toc_seal(kv64b pups, path8s dir, u8cs ext, u32 row,
+                         u32 pages, u64 base, u64 n, u64 *key) {
+    sane(key != NULL);
+    for (u64 i = 0; i < n; i++)
+        call(dog_toc_put, pups, dir, ext, row, pages, base - i, i);
+    call(PUPCommitAs, pups, dir, ext, PUPkv64Sync, PUPkv64Merge, row, YES);
+    *key = PUPSeqno(pups, 0);
+    done;
+}
+
+// DOG-035: a sealed run ends in `[len:5]["TC"]`; the clipped data is exactly
+// the pre-ToC bytes, and cell `i` is page `i`'s first record verbatim.
+static ok64 PUPTestTocSeal(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".toc.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    size_t per = PUPTocRows((u32)sizeof(kv64));
+    want(per > 0);
+    u64 n = (u64)per * 4;  //  exactly four pages -> four ToC cells
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    u64 key = 0;
+    call(dog_toc_seal, pups, $path(dir), ext, (u32)sizeof(kv64), 4, 1000000,
+         n, &key);
+    testeqv((long long)PUPCount(pups), 1LL, "%lld");
+    call(PUPClose, pups);
+
+    //  the on-disk trailer: the ToC block's BYTES, little-endian, then "TC"
+    char path[512];
+    call(dog_toc_path, path, sizeof path, tmp, key, ".toc.idx");
+    struct stat st = {};
+    want(stat(path, &st) == 0);
+    u8 tail[PUP_TOC_TAIL_W] = {};
+    int fd = open(path, O_RDONLY);
+    want(fd >= 0);
+    want(pread(fd, tail, sizeof tail,
+               (off_t)st.st_size - (off_t)sizeof tail) == (ssize_t)sizeof tail);
+    close(fd);
+    want(tail[PUP_TOC_LEN_W] == 'T' && tail[PUP_TOC_LEN_W + 1] == 'C');
+    u64 tb = 0;
+    for (u32 k = 0; k < PUP_TOC_LEN_W; k++) tb |= (u64)tail[k] << (8 * k);
+    testeqv((long long)tb, (long long)(4 * sizeof(kv64)), "%lld");
+    testeqv((long long)st.st_size,
+            (long long)(n * sizeof(kv64) + tb + PUP_TOC_TAIL_W), "%lld");
+
+    //  a fresh open maps the WHOLE file — the clip is what hides the block
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 16);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    u8cs raw = {}, data = {}, toc = {};
+    PUPData(raw, fresh, 0);  //  row 0 — a caller that never opts in
+    PUPDataRow(data, fresh, 0, (u32)sizeof(kv64));
+    PUPToc(toc, fresh, 0, (u32)sizeof(kv64));
+    testeqv((long long)u8csLen(raw), (long long)st.st_size, "%lld");
+    testeqv((long long)u8csLen(data), (long long)(n * sizeof(kv64)), "%lld");
+    testeqv((long long)u8csLen(toc), (long long)tb, "%lld");
+
+    kv64 const *rows = (kv64 const *)data[0];
+    kv64 const *cells = (kv64 const *)toc[0];
+    for (size_t i = 0; i < 4; i++) {
+        kv64 const *first = rows + i * per;
+        want(cells[i].key == first->key && cells[i].val == first->val);
+    }
+    for (u64 i = 1; i < n; i++) want(rows[i - 1].key < rows[i].key);
+    want(rows[0].key == 1000000 - (n - 1) && rows[n - 1].key == 1000000);
+
+    //  and the merged query answers exactly what a plain run's would
+    Bkv64 got = {};
+    call(kv64bAllocate, got, n + 16);
+    kv64 *gb = kv64bIdleHead(got);
+    kv64s out = {gb, kv64bTerm(got)};
+    u32 nsrc = 0;
+    try(pup_query, out, &nsrc, fresh, (u32)sizeof(kv64));
+    nedo { kv64bFree(got); PUPClose(fresh); fail(__); }
+    testeqv((long long)(out[0] - gb), (long long)n, "%lld");
+    for (u64 i = 0; i < n; i++) want(gb[i].key == 1000000 - (n - 1) + i);
+    kv64bFree(got);
+    call(PUPClose, fresh);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-035: `row = 0` seals no ToC at all, and a run whose raw bytes
+// merely END in "TC" is refused — presence is checked, never inferred.
+static ok64 PUPTestTocOptOut(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".plain.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    size_t per = PUPTocRows((u32)sizeof(kv64));
+    u64 n = (u64)per * 4;
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    u64 key = 0;
+    call(dog_toc_seal, pups, $path(dir), ext, 0, 4, 2000000,
+         n, &key);
+    call(PUPClose, pups);
+
+    //  four pages of rows and not one byte more
+    char path[512];
+    call(dog_toc_path, path, sizeof path, tmp, key, ".plain.idx");
+    struct stat st = {};
+    want(stat(path, &st) == 0);
+    testeqv((long long)st.st_size, (long long)(n * sizeof(kv64)), "%lld");
+
+    //  a booked run whose last bytes read `\0\0\0\0\0TC`: the magic matches
+    //  and the length fits, but 32 - 7 - 0 is 9 mod 16, so the residue check
+    //  refuses it — and a row-0 reader never looks in the first place.
+    Bkv64 raw = {};
+    call(kv64bAllocate, raw, 8);
+    u8 fake[32] = {};
+    fake[30] = 'T';
+    fake[31] = 'C';
+    a_dup(u8c, fb, ((u8cs){fake, fake + sizeof fake}));
+    call(PUPCreateAt, raw, $path(dir), ext, fb, (u64)1000);
+    u8cs whole = {}, data = {}, toc = {};
+    PUPData(whole, raw, 0);
+    PUPDataRow(data, raw, 0, (u32)sizeof(kv64));
+    PUPToc(toc, raw, 0, (u32)sizeof(kv64));
+    testeqv((long long)u8csLen(whole), (long long)sizeof fake, "%lld");
+    testeqv((long long)u8csLen(data), (long long)sizeof fake, "%lld");
+    want(u8csEmpty(toc));
+    call(PUPClose, raw);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-035: one stack, a ToC'd run and a plain one side by side — no migration,
+// the merge never learns which is which, and newest still wins.
+static ok64 PUPTestTocMixed(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".mix.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    size_t per = PUPTocRows((u32)sizeof(kv64));
+    u64 n = (u64)per * 4;
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    u64 old = 0;
+    //  older: a ToC'd four-page seal over keys 1..n, val = key
+    for (u64 i = 0; i < n; i++)
+        call(dog_toc_put, pups, $path(dir), ext, (u32)sizeof(kv64), 4, n - i,
+             n - i);
+    call(PUPCommitAs, pups, $path(dir), ext, T_TOC, YES);
+    old = PUPSeqno(pups, 0);
+
+    //  younger: a caller-booked PLAIN run over the even keys, val 999.  A
+    //  booked run never runs the ladder, so the two stay side by side.
+    Bkv64 flat = {};
+    call(kv64bAllocate, flat, (u32)per + 4);
+    kv64 *fb = kv64bIdleHead(flat);
+    for (size_t i = 0; i < per; i++) fb[i] = (kv64){(u64)(i + 1) * 2, 999};
+    a_dup(u8c, body, ((u8cs){(u8c *)fb, (u8c *)(fb + per)}));
+    call(PUPCreateAt, pups, $path(dir), ext, body, old + 1);
+    kv64bFree(flat);
+    call(PUPClose, pups);
+
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 16);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    testeqv((long long)PUPCount(fresh), 2LL, "%lld");
+    u8cs t0 = {}, t1 = {}, d0 = {}, d1 = {};
+    PUPToc(t0, fresh, 0, (u32)sizeof(kv64));
+    PUPToc(t1, fresh, 1, (u32)sizeof(kv64));
+    PUPDataRow(d0, fresh, 0, (u32)sizeof(kv64));
+    PUPDataRow(d1, fresh, 1, (u32)sizeof(kv64));
+    want(!u8csEmpty(t0) && u8csEmpty(t1));
+    testeqv((long long)u8csLen(d0), (long long)(n * sizeof(kv64)), "%lld");
+    testeqv((long long)u8csLen(d1), (long long)(per * sizeof(kv64)), "%lld");
+
+    Bkv64 got = {};
+    call(kv64bAllocate, got, n + 16);
+    kv64 *gb = kv64bIdleHead(got);
+    kv64s out = {gb, kv64bTerm(got)};
+    u32 nsrc = 0;
+    try(pup_query, out, &nsrc, fresh, (u32)sizeof(kv64));
+    nedo { kv64bFree(got); PUPClose(fresh); fail(__); }
+    testeqv((long long)(out[0] - gb), (long long)n, "%lld");
+    for (u64 i = 0; i < n; i++) {
+        u64 k = i + 1;
+        want(gb[i].key == k);
+        //  the younger plain run shadows the even keys it covers
+        want(gb[i].val == ((k % 2 == 0 && k <= per * 2) ? 999 : k));
+    }
+    kv64bFree(got);
+    call(PUPClose, fresh);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-035: a TOTAL row order — what `wh128Z`/`u64Z` are, and the order that
+// makes a `{k, 0}` needle sort BEFORE its own key's row.  `kv64Z` is key-only,
+// so it cannot express the boundary this test pins.
+static b8 dog_kv64_full(kv64 const *a, kv64 const *b) {
+    return a->key != b->key ? a->key < b->key : a->val < b->val;
+}
+
+// DOG-035: the ToC's contract — cell `i` covers page `i`, so the searched span
+// is EXACTLY one page, and a needle whose row is a page's FIRST record is
+// answered from the cell itself (that row sorts AFTER the needle, so the page
+// search alone would miss it).  The oracle is a linear scan over the cells,
+// not a second copy of the search rule.
+static ok64 PUPTestTocNarrow(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".narrow.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    size_t per = PUPTocRows((u32)sizeof(kv64));
+    u64 n = (u64)per * 4;
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    u64 key = 0;
+    //  even keys only (every odd probe is a genuine miss) and every val
+    //  NON-ZERO, so a `{k, 0}` needle sorts strictly BEFORE its own row
+    for (u64 i = 0; i < n; i++)
+        call(dog_toc_put, pups, $path(dir), ext, (u32)sizeof(kv64), 4,
+             (n - i) * 2, n - i);
+    call(PUPCommitAs, pups, $path(dir), ext, T_TOC, YES);
+    key = PUPSeqno(pups, 0);
+    want(key != 0);
+    call(PUPClose, pups);
+
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 16);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    u8cs data = {}, toc = {};
+    PUPDataRow(data, fresh, 0, (u32)sizeof(kv64));
+    PUPToc(toc, fresh, 0, (u32)sizeof(kv64));
+    kv64cs rows = {(kv64 const *)data[0], (kv64 const *)data[1]};
+    kv64cs cells = {(kv64 const *)toc[0], (kv64 const *)toc[1]};
+    size_t nc = (size_t)$len(cells);
+    testeqv((long long)nc, 4LL, "%lld");
+
+    u32 fromcell = 0;
+    for (u64 k = 1; k <= n * 2 + 2; k++) {
+        kv64 needle = {k, 0};
+        kv64 const *whole = kv64sFindGEZ(rows, &needle, dog_kv64_full);
+        b8 present = whole < rows[1] && whole->key == k;
+        //  oracle: the last cell NOT GREATER than the probe, by linear scan
+        size_t idx = 0;
+        for (size_t i = 0; i < nc; i++)
+            if (!dog_kv64_full(&needle, cells[0] + i)) idx = i;
+        if (idx + 1 < nc && cells[0][idx + 1].key == k) {
+            //  the boundary: cell idx+1 IS page idx+1's first record and IS
+            //  the answer, straight from the ToC — no record search at all
+            want(present && whole == rows[0] + (idx + 1) * per);
+            want(cells[0][idx + 1].val == whole->val);
+            fromcell++;
+            continue;
+        }
+        //  otherwise the searched span is EXACTLY page idx, never wider
+        kv64cs page = {rows[0] + idx * per, rows[1]};
+        if ((size_t)$len(page) > per) page[1] = page[0] + per;
+        kv64 const *narrow = kv64sFindGEZ(page, &needle, dog_kv64_full);
+        if (present) {
+            want(narrow < page[1] && narrow == whole);
+        } else {
+            want(narrow == page[1] || narrow->key != k);
+        }
+    }
+    //  the boundary is REAL, not a dead branch: one probe per page but the first
+    testeqv((long long)fromcell, (long long)(nc - 1), "%lld");
+    call(PUPClose, fresh);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// DOG-035: the ladder's output is ToC'd too, and the collapse weighs CLIPPED
+// lengths — an unclipped source would feed dedup real-looking duplicates.
+static ok64 PUPTestTocLadder(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".ladder.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    size_t per = PUPTocRows((u32)sizeof(kv64));
+    u64 n = (u64)per * 8;  //  eight one-page seals -> the ladder collapses
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 64);
+    for (u64 i = 0; i < n; i++)
+        call(dog_toc_put, pups, $path(dir), ext, (u32)sizeof(kv64), 1,
+             100000 - i, i);
+    call(PUPCommitAs, pups, $path(dir), ext, T_TOC, YES);
+
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 64);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    u32 runs = PUPCount(fresh);
+    want(runs >= 1);
+    u8cs big = {}, tocbig = {};
+    PUPDataRow(big, fresh, 0, (u32)sizeof(kv64));
+    PUPToc(tocbig, fresh, 0, (u32)sizeof(kv64));
+    //  the collapsed run holds whole rows and carries its own block
+    want(u8csLen(big) % (long)sizeof(kv64) == 0);
+    want(u8csLen(big) >= (long)(2 * per * sizeof(kv64)));
+    testeqv((long long)u8csLen(tocbig),
+            (long long)(((size_t)u8csLen(big) / (per * sizeof(kv64))) *
+                        sizeof(kv64)),
+            "%lld");
+
+    Bkv64 got = {};
+    call(kv64bAllocate, got, n + 64);
+    kv64 *gb = kv64bIdleHead(got);
+    kv64s out = {gb, kv64bTerm(got)};
+    u32 nsrc = 0;
+    try(pup_query, out, &nsrc, fresh, (u32)sizeof(kv64));
+    nedo { kv64bFree(got); PUPClose(fresh); fail(__); }
+    testeqv((long long)(out[0] - gb), (long long)n, "%lld");
+    for (u64 i = 1; i < n; i++) want(gb[i - 1].key < gb[i].key);
+    want(gb[0].key == 100000 - (n - 1) && gb[n - 1].key == 100000);
+    kv64bFree(got);
+    call(PUPClose, fresh);
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+ok64 PUPTestToc(void) {
+    sane(1);
+    call(PUPTestTocSeal);
+    call(PUPTestTocOptOut);
+    call(PUPTestTocMixed);
+    call(PUPTestTocNarrow);
+    call(PUPTestTocLadder);
+    done;
+}
+
+ok64 PUPTestMem(void) {
+    sane(1);
+    call(PUPTestNameTaken);
+    call(PUPTestLadder);
+    call(PUPTestDropAt);
+    call(PUPTestMemRoundTrip);
+    call(PUPTestMemCollapse);
+    call(PUPTestMemFlush);
+    call(PUPTestMemCommit);
+    call(PUPTestMemCrashInvisible);
+    call(PUPTestTwoWriters);
+    call(PUPTestForeignRun);
+    done;
+}
+ok64 PUPStest() {
+    sane(1);
+    call(PUPTestLeaks);
+    call(PUPTestMem);
+    call(PUPTestToc);
+    done;
+}
+
+TEST(PUPStest);

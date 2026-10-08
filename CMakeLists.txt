@@ -92,6 +92,8 @@ FILE.h
 HASH.h
 HASHx.h
 HEAPx.h
+PUPS.h
+PUPx.h
 HEX.h
 HEXx.h
 INT.h
@@ -138,6 +140,7 @@ LSM.c
 MMAP.c
 PAGE.c
 POL.c
+PUPS.c
 RON.c
 SLOG.c
 SORT.c
@@ -168,7 +171,7 @@ endif()
 set(ABC_CORE_SOURCES ${ABC_SOURCES})
 list(REMOVE_ITEM ABC_CORE_SOURCES CURL.c NET.c HTTP.c HTTP.rl.c TCP.c UDP.c POL.c PACK.c ROCK.c)
 if (WASM_MODE)  # WASI has no sys/wait.h, termios.h
-    list(REMOVE_ITEM ABC_CORE_SOURCES FILE.c ANSI.c)
+    list(REMOVE_ITEM ABC_CORE_SOURCES FILE.c ANSI.c PUPS.c)  # PUPS needs FILE.c (mmap)
 endif()
 add_library(abc-core STATIC ${ABC_HEADERS} ${ABC_CORE_SOURCES})
 if (WASM_MODE)
