@@ -97,7 +97,7 @@ static u64 pup_parse_seqno(u8csc name, u8csc ext) {
 //  PUPS-001: the dict entry for `key` maps an inode; when the file now on its
 //  name is another inode (a merge from another writer replaced it), map the
 //  new one in place.  A file that is gone keeps its old mapping, as before.
-static void pup_remap(kv64b pups, path8sc fpath, u64 key) {
+static void pup_remap(kv64b pups, path8s fpath, u64 key) {
     kv64 *base = (kv64 *)kv64bDataHead(pups);
     u32 n = (u32)kv64bDataLen(pups);
     for (u32 i = 0; i < n; i++) {
