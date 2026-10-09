@@ -1,8 +1,10 @@
 #include "PUPS.h"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "B.h"
@@ -30,6 +32,56 @@ static ok64 pup_path(path8b out, path8s dir, u64 pup_key, u8cs ext) {
     done;
 }
 
+//  Write lock: ONE advisory lock per DIRECTORY, the file `<dir>/.lock` (not a
+//  run: a scan skips it).  A directory is one store's unit of update: a
+//  forward stack and its reverse stack change together, so a lock per stack
+//  could not keep the pair consistent.  flock(2): the kernel drops it when the
+//  process dies, so a crash leaves no stale lock; reads never take it.  It
+//  guards what a rescan cannot: picking a key, then renaming onto it, and a
+//  ladder merge (two writers collapsing one tail).
+//  Reentrant within a process (a depth count per directory), so a caller may
+//  hold it across several stacks (PUPLock) while the entry points take it
+//  again.  Not thread-safe, and a forked child must not inherit a held lock.
+#define PUP_LOCKS 8
+static struct {
+    char path[FILE_PATH_MAX_LEN];
+    int fd, depth;
+} pup_held[PUP_LOCKS];
+
+ok64 PUPLock(int *slot, path8s dir) {
+    sane(slot != NULL && $ok(dir));
+    *slot = -1;
+    a_path(lp);
+    call(PATHu8bDup, lp, dir);
+    a_cstr(name, ".lock");
+    call(PATHu8bPush, lp, name);
+    char const *path = (char const *)u8bDataHead(lp);
+    int free_slot = -1;
+    for (int i = 0; i < PUP_LOCKS; i++) {
+        if (pup_held[i].depth == 0) { if (free_slot < 0) free_slot = i; continue; }
+        if (strcmp(pup_held[i].path, path) != 0) continue;
+        pup_held[i].depth++;
+        *slot = i;
+        done;
+    }
+    if (free_slot < 0 || strlen(path) >= sizeof pup_held[0].path) return PUPFAIL;
+    int f = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (f < 0) return PUPFAIL;
+    try(FILELock, &f, YES);
+    if (__ != OK) { close(f); fail(__); }
+    strcpy(pup_held[free_slot].path, path);
+    pup_held[free_slot].fd = f;
+    pup_held[free_slot].depth = 1;
+    *slot = free_slot;
+    done;
+}
+
+void PUPUnlock(int *slot) {
+    if (*slot < 0) return;
+    if (--pup_held[*slot].depth == 0) close(pup_held[*slot].fd);  //  drops the flock
+    *slot = -1;
+}
+
 //  Parse "<10-RON64><ext>" filename → pup_key; 0 on bad fmt.
 static u64 pup_parse_seqno(u8csc name, u8csc ext) {
     if (u8csLen(name) != PUP_SEQNO_W + u8csLen(ext)) return 0;
@@ -40,6 +92,30 @@ static u64 pup_parse_seqno(u8csc name, u8csc ext) {
     ok64 v = 0;
     if (RONutf8sDrain(&v, seqno_s) != OK) return 0;
     return (u64)v;
+}
+
+//  PUPS-001: the dict entry for `key` maps an inode; when the file now on its
+//  name is another inode (a merge from another writer replaced it), map the
+//  new one in place.  A file that is gone keeps its old mapping, as before.
+static void pup_remap(kv64b pups, path8sc fpath, u64 key) {
+    kv64 *base = (kv64 *)kv64bDataHead(pups);
+    u32 n = (u32)kv64bDataLen(pups);
+    for (u32 i = 0; i < n; i++) {
+        if (base[i].key != key || key == PUP_MEM_KEY) continue;
+        struct stat cur, mapped;
+        if (stat((char const *)fpath[0], &cur) != 0) return;
+        if (fstat((int)base[i].val, &mapped) == 0 && mapped.st_ino == cur.st_ino &&
+            mapped.st_dev == cur.st_dev)
+            return;
+        u8bp buf = NULL;
+        if (FILEMapRO(&buf, fpath) != OK) return;
+        int fd = FILEBookedFD(buf);
+        if (fd < 0) { FILEUnMap(buf); return; }
+        u8bp old = FILE_WANT_BUFS[base[i].val];
+        if (old && old[0]) FILEUnMap(old);
+        base[i].val = (u64)fd;
+        return;
+    }
 }
 
 // DOG-027: the ONE monotonic pup_key scheme — max(RONNow, max(DATA)+1),
@@ -163,7 +239,15 @@ static ok64 pup_scan(kv64b pups, path8sc dir, u8csc ext, b8 dedup) {
     //  caller's job (e.g. skip a prefix already loaded from a shared
     //  parent directory).
     $for(kv64, kp, ks) {
-        if (dedup && pup_dicted(pups, kp->key)) continue;
+        if (dedup && pup_dicted(pups, kp->key)) {
+            //  A ladder merge is renamed onto its youngest source's name, so a
+            //  dicted key may now hold ANOTHER writer's merged run: remap it.
+            u8cp nm1 = u8bDataHead(namebuf) + kp->val;
+            u8cs fn1 = {nm1, nm1 + strlen((char const *)nm1)};
+            a_path(fp1, dir, fn1);
+            pup_remap(pups, $path(fp1), kp->key);
+            continue;
+        }
         u8cp nm0 = u8bDataHead(namebuf) + kp->val;
         u8cs fn  = {nm0, nm0 + strlen((char const *)nm0)};
         a_path(fpath, dir, fn);
@@ -214,18 +298,10 @@ ok64 PUPOpenAside(kv64b pups, path8sc dir, u8csc ext) {
     return PUPOpenAll(pups, dir, ext);
 }
 
-ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
-                    u64 pup_key) {
-    sane(pups != NULL && $ok(dir) && $ok(ext) && pup_key > 0);
-
-    //  DOG-027: refuse a taken key — DATA-side (ThinTail first) or a file on
-    //  its name.  The key is the CALLER's, so dog refuses; it cannot bump it.
-    {
-        b8 taken = NO;
-        call(pup_key_taken, &taken, pups, dir, ext, pup_key);
-        if (taken) return PUPFAIL;
-    }
-
+// PUPS-004: tmp + atomic rename of `bytes` onto `<key><ext>`.  The rename
+// REPLACES a file already on the name, which is what a ladder merge wants.
+static ok64 pup_write(path8s dir, u8cs ext, u8cs bytes, u64 pup_key) {
+    sane($ok(dir) && $ok(ext));
     a_path(idxpath);
     call(pup_path, idxpath, dir, pup_key, ext);
     a_path(tmppath);
@@ -241,7 +317,14 @@ ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
         close(wfd);
     }
     call(FILERename, $path(tmppath), $path(idxpath));
+    done;
+}
 
+// PUPS-004: map the run on `<key><ext>` and push it into the dict.
+static ok64 pup_book(kv64b pups, path8s dir, u8cs ext, u64 pup_key) {
+    sane(pups != NULL && $ok(dir) && $ok(ext));
+    a_path(idxpath);
+    call(pup_path, idxpath, dir, pup_key, ext);
     u8bp buf = NULL;
     call(FILEMapRO, &buf, $path(idxpath));
     int fd = FILEBookedFD(buf);
@@ -258,8 +341,35 @@ ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
     done;
 }
 
+static ok64 pup_create_at(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
+                          u64 pup_key) {
+    sane(pups != NULL && $ok(dir) && $ok(ext) && pup_key > 0);
+
+    //  DOG-027: refuse a taken key — DATA-side (ThinTail first) or a file on
+    //  its name.  The key is the CALLER's, so dog refuses; it cannot bump it.
+    {
+        b8 taken = NO;
+        call(pup_key_taken, &taken, pups, dir, ext, pup_key);
+        if (taken) return PUPFAIL;
+    }
+    call(pup_write, dir, ext, bytes, pup_key);
+    call(pup_book, pups, dir, ext, pup_key);
+    done;
+}
+
+ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
+                    u64 pup_key) {
+    sane(pups != NULL && $ok(dir) && $ok(ext) && pup_key > 0);
+    int lk = -1;
+    call(PUPLock, &lk, dir);
+    try(pup_create_at, pups, dir, ext, bytes, pup_key);
+    PUPUnlock(&lk);
+    nedo fail(__);
+    done;
+}
+
 ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes) {
-    sane(pups != NULL);
+    sane(pups != NULL && $ok(dir) && $ok(ext));
     //  Pick `max(RONNow, max(DATA)+1)` so two writers / two parallel
     //  sub-shards collapsed into one project never accidentally pick
     //  the same key.  RONNow has 1ms granularity; tight writer loops
@@ -269,12 +379,20 @@ ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes) {
     //  ron60-shaped).
     //  DOG-027: hoisted into pup_next_key — flush/commit share it; then
     //  past any name a case-folding filesystem already has a file on.
+    //  The lock spans the pick AND the rename onto it.
+    int lk = -1;
+    call(PUPLock, &lk, dir);
     u64 new_seqno = 0;
-    call(pup_free_key, &new_seqno, pups, dir, ext);
-    return PUPCreateAt(pups, dir, ext, bytes, new_seqno);
+    try(pup_free_key, &new_seqno, pups, dir, ext);
+    then try(pup_create_at, pups, dir, ext, bytes, new_seqno);
+    PUPUnlock(&lk);
+    nedo fail(__);
+    done;
 }
 
-ok64 PUPDropAt(kv64b pups, path8s dir, u8cs ext, u32 i) {
+// PUPS-004: unmap the i-th run and close the dict gap; `rm` NO leaves the
+// file, for a ladder merge that has just renamed its output onto that name.
+static ok64 pup_drop(kv64b pups, path8s dir, u8cs ext, u32 i, b8 rm) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  DOG-027: index over RUNS, not entries — the memtable's key would unlink
     //  a file named `~0`; the memmove below keeps it last.
@@ -283,14 +401,20 @@ ok64 PUPDropAt(kv64b pups, path8s dir, u8cs ext, u32 i) {
     kv64 *base = (kv64 *)kv64bDataHead(pups);
     u8bp slot = FILE_WANT_BUFS[base[i].val];
     if (slot && slot[0]) FILEUnMap(slot);
-    a_path(ulpath);
-    call(pup_path, ulpath, dir, base[i].key, ext);
-    unlink((char *)u8bDataHead(ulpath));
+    if (rm) {
+        a_path(ulpath);
+        call(pup_path, ulpath, dir, base[i].key, ext);
+        unlink((char *)u8bDataHead(ulpath));
+    }
     memmove(base + i, base + i + 1, (size_t)(all - i - 1) * sizeof(kv64));
     //  Trim DATA end back by one record (kv64bShed rolls the DATA/IDLE
     //  boundary back into DATA — no buffer-poke).
     kv64bShed(pups, 1);
     done;
+}
+
+ok64 PUPDropAt(kv64b pups, path8s dir, u8cs ext, u32 i) {
+    return pup_drop(pups, dir, ext, i, YES);
 }
 
 ok64 PUPThinTail(kv64b pups, path8s dir, u8cs ext, u32 m) {
@@ -527,7 +651,7 @@ static ok64 pup_toc_append(int fd, u8csc block) {
 // atomic rename to `<10-RON64><ext>`, re-key the dict entry in place.
 // DOG-035: `row` (the record width, 0 = none) decides whether a ToC block
 // follows the data.
-static ok64 pup_mem_seal(kv64b pups, path8s dir, u8cs ext, u32 row,
+static ok64 pup_seal_run(kv64b pups, path8s dir, u8cs ext, u32 row,
                          b8 durable) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  DOG-046: pick the fresh key against the runs OTHER writers sealed
@@ -560,6 +684,19 @@ static ok64 pup_mem_seal(kv64b pups, path8s dir, u8cs ext, u32 row,
     done;
 }
 
+//  The seal under the stack's write lock: the key pick and the rename onto it
+//  are one critical section.
+static ok64 pup_mem_seal(kv64b pups, path8s dir, u8cs ext, u32 row,
+                         b8 durable) {
+    sane(pups != NULL && $ok(dir) && $ok(ext));
+    int lk = -1;
+    call(PUPLock, &lk, dir);
+    try(pup_seal_run, pups, dir, ext, row, durable);
+    PUPUnlock(&lk);
+    nedo fail(__);
+    done;
+}
+
 // DOG-027: merge the youngest `m` runs into one fresh run — the caller's
 // `merge` does the typed merge, Pup owns the tmp + rename seal and the
 // source unlinks.
@@ -578,25 +715,47 @@ static ok64 pup_collapse(kv64b pups, path8s dir, u8cs ext, pupmerge merge,
              PUP_TOC_TAIL_W);
     u8s into = {u8bIdleHead(scr), u8bTerm(scr)};
     u8css tail = {stack[0] + (n - m), stack[0] + n};
-    try(merge, into, tail);
+    //  PUPS-001: the merge spans the whole stack only when it takes every run
+    //  and nothing older is inherited; only then may a tombstone be dropped.
+    b8 bottom = m == n && PUPCountAll(pups) == PUPCount(pups);
+    try(merge, into, tail, bottom);
     nedo { u8bFree(scr); fail(__); }
+    a_dup(u8c, merged, ((u8cs){u8bIdleHead(scr), into[0]}));
+    //  PUPS-001: nothing survived (every row was dead): no empty run, which
+    //  could not be mapped anyway — the sources just go.
+    if (u8csEmpty(merged)) {
+        u8bFree(scr);
+        for (size_t k = 0; k < m; k++)
+            call(pup_drop, pups, dir, ext, PUPCount(pups) - 1, YES);
+        pup_tail(pups);
+        done;
+    }
     //  DOG-035: a compaction output is ToC'd exactly like a seal's — same
     //  block, appended into the scratch before the run is booked.
-    a_dup(u8c, merged, ((u8cs){u8bIdleHead(scr), into[0]}));
     try(pup_toc_feed, into, merged, row);
     nedo { u8bFree(scr); fail(__); }
     a_dup(u8c, body, ((u8cs){u8bIdleHead(scr), into[0]}));
-    try(PUPThinTail, pups, dir, ext, (u32)m);
-    then try(PUPCreate, pups, dir, ext, body);
+    //  PUPS-004: the merged run takes the YOUNGEST source's key — a key read as
+    //  tx time never jumps past later writes.  The output is renamed onto that
+    //  source's name (atomic), THEN the older sources are unlinked: a crash in
+    //  between leaves a duplicate of rows, never a loss.
+    u64 ykey = PUPSeqno(pups, PUPCount(pups) - 1);
+    try(pup_write, dir, ext, body, ykey);
+    then {
+        //  the replaced inode stays mapped until its dict slot is dropped
+        for (size_t k = 0; k < m && __ == OK; k++)
+            __ = pup_drop(pups, dir, ext, PUPCount(pups) - 1, k > 0);
+    }
+    then try(pup_book, pups, dir, ext, ykey);
     u8bFree(scr);
     nedo fail(__);
     pup_tail(pups);
     done;
 }
 
-ok64 PUPLadder(kv64b pups, path8s dir, u8cs ext, pupmerge merge, u32 row) {
+static ok64 pup_ladder(kv64b pups, path8s dir, u8cs ext, pupmerge merge,
+                       u32 row) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
-    if (merge == NULL) done;
     //  DOG-046: a ladder over a stale view collapses the wrong tail — map in
     //  what other writers sealed, then weigh.  Only merged runs are unlinked.
     call(pup_refresh, pups, dir, ext);
@@ -619,6 +778,18 @@ ok64 PUPLadder(kv64b pups, path8s dir, u8cs ext, pupmerge merge, u32 row) {
         u8csbFree(srcs);
         nedo fail(__);
     }
+}
+
+ok64 PUPLadder(kv64b pups, path8s dir, u8cs ext, pupmerge merge, u32 row) {
+    sane(pups != NULL && $ok(dir) && $ok(ext));
+    if (merge == NULL) done;
+    //  One merger per stack: the lock covers the rescan and every collapse.
+    int lk = -1;
+    call(PUPLock, &lk, dir);
+    try(pup_ladder, pups, dir, ext, merge, row);
+    PUPUnlock(&lk);
+    nedo fail(__);
+    done;
 }
 
 ok64 PUPPutMem(kv64b pups, path8s dir, u8cs ext, u8csc rec, pupsync sync,

@@ -10,6 +10,12 @@
 //                               thin typed entry points: the core's functions
 //                               with sync, merge and sizeof(T) filled in
 //
+//  PUPx_DEAD(row): optional tombstone test, a macro over a `T const *`.  Define
+//  it before including when a row can say "this key is gone" (PUPS-001).  Reads
+//  (PUP<T>Read) never surface a dead row, and a ladder merge that spans the
+//  WHOLE stack drops dead rows; a partial merge keeps them, since an older run
+//  may still hold the key.  Left undefined it is 0: nothing is ever dead.
+//
 //  Needs, instantiated BEFORE this header (abc already does kv64 and u64):
 //    T, T##Z, the T##s / T##cs / T##css slices and T##b buffer (Bx),
 //    QSORTx for T (QSORT<T>InSort, <T>sSort, <T>sDedup), HITx for T.
@@ -23,6 +29,10 @@
 #include "HIT.h"
 #include "PRO.h"
 #include "PUPS.h"
+
+#ifndef PUPx_DEAD
+#define PUPx_DEAD(r) 0
+#endif
 
 #ifndef PUPx_WHOLE_ROW
 #define PUPx_WHOLE_ROW 0
@@ -78,8 +88,8 @@ fun ok64 X(PUP, Sync)(u8bp mem, b8 collapse) {
 }
 
 //  The ladder's typed merge over oldest-first run byte slices; equal rows go to
-//  the youngest run.
-fun ok64 X(PUP, Merge)(u8s into, u8css srcs) {
+//  the youngest run.  `bottom`: the slices are the whole stack, dead rows go.
+fun ok64 X(PUP, Merge)(u8s into, u8css srcs, b8 bottom) {
     sane($ok(into));
     size_t n = (size_t)$len(srcs);
     if (n > HIT_MAX_RUNS) return HITTOOMANY;
@@ -92,6 +102,12 @@ fun ok64 X(PUP, Merge)(u8s into, u8css srcs) {
     X(, ) *base = (X(, ) *)into[0];
     X(, s) dst = {base, (X(, ) *)into[1]};
     call(X(HIT, Merge), hp, dst);
+    if (bottom) {
+        X(, ) *w = base;
+        for (X(, ) *r = base; r < dst[0]; r++)
+            if (!PUPx_DEAD(r)) *w++ = *r;
+        dst[0] = w;
+    }
     into[0] = (u8 *)dst[0];
     done;
 }
@@ -127,8 +143,35 @@ fun ok64 X(PUP, AllRuns)(u8csb out, kv64b pups) {
     return PUPAllRuns(out, pups, X(PUP, Sync), (u32)sizeof(X(, )));
 }
 
+//  The merged view of the whole stack, newest row per key, dead rows skipped.
+fun ok64 X(PUP, Read)(X(, s) into, kv64b pups) {
+    sane(into != NULL);
+    Bu8cs srcs = {};
+    call(u8csbAllocate, srcs, HIT_MAX_RUNS);
+    try(X(PUP, AllRuns), srcs, pups);
+    nedo { u8csbFree(srcs); fail(__); }
+    size_t n = u8csbDataLen(srcs);
+    X(, cs) runs[HIT_MAX_RUNS];
+    u8cs *sl = u8csbDataHead(srcs);
+    for (size_t i = 0; i < n; i++) {
+        runs[i][0] = (X(, ) const *)sl[i][0];
+        runs[i][1] = (X(, ) const *)sl[i][1];
+    }
+    X(, css) hp = {runs, runs + n};
+    X(, ) *base = into[0];
+    try(X(HIT, Merge), hp, into);
+    u8csbFree(srcs);
+    nedo fail(__);
+    X(, ) *w = base;
+    for (X(, ) *r = base; r < into[0]; r++)
+        if (!PUPx_DEAD(r)) *w++ = *r;
+    into[0] = w;
+    done;
+}
+
 fun ok64 X(PUP, AllRunsToc)(u8csb out, u8csb tocs, kv64b pups) {
     return PUPAllRunsToc(out, tocs, pups, X(PUP, Sync), (u32)sizeof(X(, )));
 }
 
 #undef PUPx_WHOLE_ROW
+#undef PUPx_DEAD

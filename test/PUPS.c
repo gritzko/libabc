@@ -2,9 +2,11 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "FILE.h"
@@ -209,6 +211,9 @@ ok64 PUPTestLeaks(void) {
 
 // The typed sort/merge and entry points come from the template.  kv64Z compares
 // keys only, so PUPx_WHOLE_ROW stays unset (stable sort, newest wins).
+//  PUPS-001: a row whose val is all ones is a tombstone.
+#define PUP_TOMB (~0ULL)
+#define PUPx_DEAD(r) ((r)->val == PUP_TOMB)
 #define X(M, name) M##kv64##name
 #include "PUPx.h"
 #undef X
@@ -563,6 +568,184 @@ static ok64 PUPTestLadder(void) {
     kv64bFree(got);
 
     call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+// PUPS-004: a ladder merge names its run by the YOUNGEST source's key, so a
+// key read as tx time never jumps past writes that landed meanwhile.
+static ok64 PUPTestLadderKey(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".key.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    //  three equal-size runs violate the 1/8 ladder by construction
+    for (u64 r = 0; r < 3; r++) {
+        kv64 row = {10 + r, 100 + r};
+        a_dup(u8c, rec, ((u8cs){(u8c *)&row, (u8c *)(&row + 1)}));
+        call(PUPCreateAt, pups, $path(dir), ext, rec, 1000 + r);
+    }
+    call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, 0);
+    testeqv((long long)PUPCount(pups), 1LL, "%lld");
+    testeqv((long long)PUPSeqno(pups, 0), 1002LL, "%lld");
+    //  a fresh scan agrees: one file, named by the youngest key
+    Bkv64 fresh = {};
+    call(kv64bAllocate, fresh, 16);
+    call(PUPOpenAll, fresh, $path(dir), ext);
+    testeqv((long long)PUPCount(fresh), 1LL, "%lld");
+    testeqv((long long)PUPSeqno(fresh, 0), 1002LL, "%lld");
+    call(PUPClose, fresh);
+    call(PUPClose, pups);
+    TESTBErmrf(tmp);
+    done;
+}
+
+
+//  PUPS-001: book a sorted run straight, bypassing the ladder.
+static ok64 tomb_run(kv64b pups, path8s dir, u8cs ext, u64 key, u64 from,
+                     u64 n, u64 val) {
+    sane(1);
+    kv64 rows[32];
+    for (u64 i = 0; i < n; i++) rows[i] = (kv64){from + i, val ? val : (from + i) * 10};
+    u8cs rec = {(u8c *)rows, (u8c *)(rows + n)};
+    call(PUPCreateAt, pups, dir, ext, rec, key);
+    done;
+}
+
+//  PUPS-001: a tombstone hides its key from reads at once, a partial ladder
+//  merge keeps it (an older run may hold the key), the merge that spans the
+//  whole stack drops it and the rows it shadowed.
+static ok64 PUPTestTomb(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".tomb.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    kv64 out[64];
+    kv64s o;
+
+    call(tomb_run, pups, $path(dir), ext, 1000, 1, 20, 0);  //  keys 1..20
+    call(tomb_run, pups, $path(dir), ext, 1001, 2, 1, PUP_TOMB);  //  delete 2
+    call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, 0);
+    testeqv((long long)PUPCount(pups), 2LL, "%lld");  //  1/20 < 1/8: no merge
+    o[0] = out; o[1] = out + 64;
+    call(PUPkv64Read, o, pups);
+    testeqv((long long)(o[0] - out), 19LL, "%lld");  //  key 2 is hidden
+    for (kv64 *r = out; r < o[0]; r++) want(r->key != 2);
+
+    //  a small put: the youngest two runs merge, the stack is NOT spanned
+    call(tomb_run, pups, $path(dir), ext, 1002, 30, 1, 0);
+    call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, 0);
+    testeqv((long long)PUPCount(pups), 2LL, "%lld");
+    u8cs sl;
+    PUPDataRow(sl, pups, 1, 0);
+    testeqv((long long)(u8csLen(sl) / sizeof(kv64)), 2LL, "%lld");  //  tomb kept
+    o[0] = out; o[1] = out + 64;
+    call(PUPkv64Read, o, pups);
+    testeqv((long long)(o[0] - out), 20LL, "%lld");
+
+    //  a bigger put reaches the oldest run: tomb + shadowed row go
+    call(tomb_run, pups, $path(dir), ext, 1003, 31, 3, 0);
+    call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, 0);
+    testeqv((long long)PUPCount(pups), 1LL, "%lld");
+    PUPDataRow(sl, pups, 0, 0);
+    testeqv((long long)(u8csLen(sl) / sizeof(kv64)), 23LL, "%lld");
+    for (kv64 const *r = (kv64 const *)sl[0]; r < (kv64 const *)sl[1]; r++)
+        want(r->val != PUP_TOMB && r->key != 2);
+    o[0] = out; o[1] = out + 64;
+    call(PUPkv64Read, o, pups);
+    testeqv((long long)(o[0] - out), 23LL, "%lld");
+    call(PUPClose, pups);
+
+    //  everything deleted: the merge leaves nothing, reads see nothing
+    Bkv64 p2 = {};
+    call(kv64bAllocate, p2, 16);
+    a_cstr(ext2, ".gone.idx");
+    call(tomb_run, p2, $path(dir), ext2, 2000, 5, 1, 50);
+    call(tomb_run, p2, $path(dir), ext2, 2001, 5, 1, PUP_TOMB);
+    call(PUPLadder, p2, $path(dir), ext2, PUPkv64Merge, 0);
+    o[0] = out; o[1] = out + 64;
+    call(PUPkv64Read, o, p2);
+    testeqv((long long)(o[0] - out), 0LL, "%lld");
+    PUPDataRow(sl, p2, 0, 0);
+    testeqv((long long)u8csLen(sl), 0LL, "%lld");
+    call(PUPClose, p2);
+    TESTBErmrf(tmp);
+    done;
+}
+
+//  Write lock: forked writers share one stack.  PUPCreate picks keys from the
+//  clock, so writers in one millisecond reach for the same name; commits make
+//  the ladder merge all the time.  Without the lock a run is eaten by a rename
+//  or a row lost in a double collapse; with it every run and every row stays.
+//  A handle keeps the mappings of runs other writers unlinked (DOG-046), and a
+//  stack view holds HIT_MAX_RUNS: the commit loop stays under that, the create
+//  loop (no ladder, no view) does not need to.
+#define LOCK_KIDS 4
+#define LOCK_N 150
+#define LOCK_COMMITS 12
+static ok64 PUPTestLock(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_cstr(ext, ".lock.idx");
+    a_cstr(ext2, ".lock2.idx");
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    pid_t kid[LOCK_KIDS];
+    for (int c = 0; c < LOCK_KIDS; c++) {
+        kid[c] = fork();
+        want(kid[c] >= 0);
+        if (kid[c] > 0) continue;
+        int bad = 0;
+        Bkv64 mine = {}, cm = {};
+        if (kv64bAllocate(mine, 1024) != OK || kv64bAllocate(cm, 1024) != OK) _exit(2);
+        for (int i = 0; i < LOCK_N; i++) {
+            kv64 row = {(u64)c * 1000 + i, 7};
+            u8cs rec = {(u8c *)&row, (u8c *)(&row + 1)};
+            if (PUPCreate(mine, $path(dir), ext, rec) != OK) bad = 1;
+            //  a second stack in the same directory, committed row by row
+            if (i >= LOCK_COMMITS) continue;
+            if (PUPPut(cm, $path(dir), ext2, rec, T_PLAIN) != OK) bad = 1;
+            if (PUPCommit(cm, $path(dir), ext2, T_PLAIN) != OK) bad = 1;
+        }
+        _exit(bad);
+    }
+    for (int c = 0; c < LOCK_KIDS; c++) {
+        int st = 0;
+        want(waitpid(kid[c], &st, 0) == kid[c]);
+        want(WIFEXITED(st) && WEXITSTATUS(st) == 0);
+    }
+    //  PUPCreate: every run is still there, none eaten by a rename
+    Bkv64 a = {};
+    call(kv64bAllocate, a, 1024);
+    call(PUPOpenAll, a, $path(dir), ext);
+    testeqv((long long)PUPCount(a), (long long)LOCK_KIDS * LOCK_N, "%lld");
+    call(PUPClose, a);
+    //  PUPCommit + ladder: every row of every writer survives the merges
+    Bkv64 b = {};
+    call(kv64bAllocate, b, 1024);
+    call(PUPOpenAll, b, $path(dir), ext2);
+    kv64 *out = malloc(LOCK_KIDS * LOCK_COMMITS * sizeof(kv64));
+    want(out != NULL);
+    kv64s o = {out, out + LOCK_KIDS * LOCK_COMMITS};
+    call(PUPkv64Read, o, b);
+    testeqv((long long)(o[0] - out), (long long)LOCK_KIDS * LOCK_COMMITS, "%lld");
+    free(out);
+    call(PUPClose, b);
+    //  the lock files are not runs, and they stay out of a rescan
+    Bkv64 c2 = {};
+    call(kv64bAllocate, c2, 1024);
+    call(PUPOpenAll, c2, $path(dir), ext2);
+    want(PUPCount(c2) < LOCK_KIDS * LOCK_COMMITS);
+    call(PUPClose, c2);
     TESTBErmrf(tmp);
     done;
 }
@@ -1153,6 +1336,9 @@ ok64 PUPTestMem(void) {
     call(PUPTestMemFlush);
     call(PUPTestMemCommit);
     call(PUPTestMemCrashInvisible);
+    call(PUPTestLadderKey);
+    call(PUPTestTomb);
+    call(PUPTestLock);
     call(PUPTestTwoWriters);
     call(PUPTestForeignRun);
     done;

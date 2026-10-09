@@ -48,7 +48,8 @@ for `T` (instantiated beforehand):
 
  -  `PUP<T>Sync`: sort the memtable and drop duplicates (newest wins); on
     `collapse`, fold the older part into the newer.
- -  `PUP<T>Merge`: merge sorted run slices into one.
+ -  `PUP<T>Merge`: merge sorted run slices into one; `bottom` says the slices
+    are the whole stack (see Deletes).
  -  Typed entry points `PUP<T>Put`, `PutMem`, `Commit`, `CommitAs`, `Ladder`,
     `AllRuns`, `AllRunsToc`. Each calls the core with `Sync`, `Merge` and
     `sizeof(T)` filled in, e.g. `PUPu64Commit(pups, dir, ext)`.
@@ -57,6 +58,40 @@ Both generated functions work on the whole range at once, so the core calls
 them through a pointer once per operation. The core functions (`PUPCommit` and
 friends) are public and take `(sync, merge, row)` directly, for byte stacks or
 a record width of 0.
+
+### Write lock
+
+Writers on one directory take an advisory `flock` on `<dir>/.lock` around what a
+rescan cannot make safe: a seal (key pick, then rename onto it), a create, and a
+whole ladder. One lock per DIRECTORY, not per stack: a forward and a reverse
+stack are one update, so `PUPLock`/`PUPUnlock` let a caller hold the lock across
+several stacks (DAT does, in `DATCommit`). The entry points take it themselves;
+it is reentrant within a process (not thread-safe), the kernel drops it when
+the process dies, and reads never take it. `.lock` is not a run: a scan skips it.
+
+A rescan also remaps a run whose file another writer replaced: a ladder merge
+is renamed onto its youngest source's name, so a key already in the dict may be
+a new inode. Known limit (DOG-046): a long-lived handle keeps the mappings of
+runs other writers unlinked, so after more than `HIT_MAX_RUNS` of them a view
+overflows (`SNOROOM`); reopen the stack.
+
+### Deletes
+
+The core has no delete; a row says "this key is gone" through a tombstone the
+record type defines. Define `PUPx_DEAD(row)` (a macro over `T const *`) before
+including `PUPx.h`. Then:
+
+ -  `PUP<T>Read` returns the merged view of the stack, newest row per key,
+    without dead rows.
+ -  A ladder merge that takes every run, with no inherited PAST (`bottom`),
+    drops dead rows and, by keep-last, the rows they shadowed. A partial merge
+    keeps them: an older run may still hold the key. A merge that leaves
+    nothing writes no run at all.
+ -  Without `PUPx_DEAD` nothing is ever dead and `bottom` changes nothing.
+
+A hand-written `pupmerge` takes the extra `bottom` argument and may ignore it.
+Dropping is safe while new runs of other writers carry younger keys than the
+runs they follow; the ladder rescans the directory first (DOG-046).
 
 Define `PUPx_WHOLE_ROW 1` before the include when `<T>Z` compares the whole
 row (equal rows are then bit-identical, so any sort will do). Leave it unset

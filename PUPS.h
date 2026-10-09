@@ -95,6 +95,14 @@ ok64 PUPClose(kv64b pups);
 // the dict holds committed runs and, on an rw stack, the memtable last.
 #define PUP_MEM_KEY   (~0ULL)
 
+// Write lock on `dir` (the file `<dir>/.lock`, flock): ONE per directory, since
+// a forward and a reverse stack change together.  Every entry point that writes
+// (seal, create, ladder) takes it itself; hold it around several calls to keep
+// them one update.  Reentrant per process, blocking, dropped by the kernel on
+// death; reads never take it.  `*slot` is the token for PUPUnlock.
+ok64 PUPLock(int *slot, path8s dir);
+void PUPUnlock(int *slot);
+
 // Number of live puppies in the stack — DATA only (the active leaf,
 // when callers use the PAST/DATA partition; see abc/Bx.h §PastDataS).  For "every loaded
 // run" reads (cross-branch lookups, LSM merges), use `PUPCountAll`.
@@ -191,7 +199,10 @@ typedef ok64 (*pupsync)(u8bp mem, b8 collapse);
 // DOG-027: family-side typed compaction merge — HIT<type>Merge over the
 // oldest-first byte slices `srcs`; `into`'s head advances past the merged
 // bytes (the ABC-015 drain convention).  Pup is generic, the record type is not.
-typedef ok64 (*pupmerge)(u8s into, u8css srcs);
+// PUPS-001: `bottom` is YES when `srcs` is the WHOLE stack — no older run, no
+// inherited PAST — so a row that marks its key dead may be dropped, there being
+// nothing left for it to shadow.  A partial merge passes NO and keeps it.
+typedef ok64 (*pupmerge)(u8s into, u8css srcs, b8 bottom);
 
 // The entry points below take the three things the record type contributes:
 // `sync`, `merge`, and `row` — the fixed record width in BYTES, which is also
