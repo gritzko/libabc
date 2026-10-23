@@ -438,6 +438,92 @@ ok64 RONTestSpliceBaseOverflow() {
     done;
 }
 
+// OID-26A23JSOnm: full 64-bit word as 11 RON64 chars (attribute dir names)
+ok64 RONTest64Cases() {
+    sane(1);
+    struct { u64 val; const char* str; } cases[] = {
+        {0, "00000000000"},
+        {1, "00000000001"},
+        {63, "0000000000~"},
+        {64, "00000000010"},
+        {ron60Max, "0~~~~~~~~~~"},
+        {1UL << 60, "10000000000"},
+        {1UL << 63, "80000000000"},
+        {~0UL, "F~~~~~~~~~~"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        u8 buf[16] = {};
+        u8s into = {buf, buf + sizeof(buf)};
+        call(RONu8sFeed64, into, cases[i].val);
+        want(into[0] == buf + RON64_WORD_LEN);
+        want(memcmp(buf, cases[i].str, RON64_WORD_LEN) == 0);
+        u8c* from[2] = {buf, buf + RON64_WORD_LEN};
+        u64 back = 0;
+        call(RONu8sDrain64, &back, from);
+        want(back == cases[i].val);
+    }
+    done;
+}
+
+fun u64 RONTest64Next(u64* x) {  // splitmix64
+    u64 z = (*x += 0x9e3779b97f4a7c15UL);
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9UL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebUL;
+    return z ^ (z >> 31);
+}
+
+ok64 RONTest64RoundTripOrder() {
+    sane(1);
+    u64 seed = 42;
+    u64 prev = 0;
+    u8 pbuf[RON64_WORD_LEN];
+    for (u32 i = 0; i < 100000; i++) {
+        u64 v;
+        if (i < 64) v = 1UL << i;               // every bit
+        else if (i < 128) v = (1UL << (i - 64)) - 1;  // every low mask
+        else if (i < 192) v = ~0UL << (i - 128);      // every high mask
+        else v = RONTest64Next(&seed) >> (seed & 63);  // all magnitudes
+        u8 buf[RON64_WORD_LEN];
+        u8s into = {buf, buf + sizeof(buf)};
+        call(RONu8sFeed64, into, v);
+        u8c* from[2] = {buf, buf + RON64_WORD_LEN};
+        u64 back = 0;
+        call(RONu8sDrain64, &back, from);
+        want(back == v);
+        if (i > 0) {
+            int c = memcmp(pbuf, buf, RON64_WORD_LEN);
+            want((c < 0) == (prev < v) && (c == 0) == (prev == v));
+        }
+        prev = v;
+        memcpy(pbuf, buf, RON64_WORD_LEN);
+    }
+    done;
+}
+
+ok64 RONTest64Reject() {
+    sane(1);
+    u64 v = 7;
+    const char* bad[] = {
+        "",
+        "0000000000",    // 10 chars
+        "000000000000",  // 12 chars
+        "G0000000000",   // top digit over 4 bits
+        "~0000000000",
+        "00000!00000",   // not RON64
+        "0000000000 ",
+    };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        u8c* from[2] = {(u8c*)bad[i], (u8c*)bad[i] + strlen(bad[i])};
+        want(RONu8sDrain64(&v, from) != OK);
+        want(v == 7);
+    }
+    u8 buf[RON64_WORD_LEN - 1] = {};
+    u8s into = {buf, buf + sizeof(buf)};
+    want(RONu8sFeed64(into, ~0UL) == SNOROOM);
+    want(into[0] == buf && buf[0] == 0);
+    done;
+}
+
 ok64 RONtest() {
     sane(1);
     call(RONTestFromTm);
@@ -456,6 +542,9 @@ ok64 RONtest() {
     call(RONTestSpliceBaseOverflow);
     call(RONTestSpliceKeyOrder);
     call(RONTestSpliceIsolation);
+    call(RONTest64Cases);
+    call(RONTest64RoundTripOrder);
+    call(RONTest64Reject);
     done;
 }
 

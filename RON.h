@@ -55,6 +55,18 @@ ok64 RONVerify(u8c** txt);
 // Fixed-width zero-padded RON64 encoding (big-endian, left-padded with '0')
 ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width);
 
+// Full 64-bit word as exactly RON64_WORD_LEN RON64 chars, big-endian,
+// zero-padded: the first char carries the top 4 bits (0..F), the other
+// ten 6 bits each.  Fixed width + ASCII-ordered alphabet make the
+// lexicographic order of the strings equal the numeric order of words.
+#define RON64_WORD_LEN 11
+
+ok64 RONu8sFeed64(u8** into, u64 val);
+
+// Parse a whole slice of exactly RON64_WORD_LEN chars; rejects any other
+// length, non-RON64 chars, and a first char above 'F' (non-canonical).
+ok64 RONu8sDrain64(u64* o, u8c* const* from);
+
 // Compute random base offset and key width for a splice of n elements
 ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n);
 

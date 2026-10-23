@@ -201,3 +201,27 @@ ok64 RONNow() {
     RONOfTime(&t, &tmbuf, ms);
     return t;
 }
+
+ok64 RONu8sFeed64(u8** into, u64 val) {
+    if ($len(into) < RON64_WORD_LEN) return SNOROOM;
+    u8p p = into[0] + RON64_WORD_LEN;
+    for (u8 i = 0; i < RON64_WORD_LEN; i++) {
+        *--p = RON64_CHARS[val & 63];
+        val >>= 6;
+    }
+    *into += RON64_WORD_LEN;
+    return OK;
+}
+
+ok64 RONu8sDrain64(u64* o, u8c* const* from) {
+    if ($len(from) != RON64_WORD_LEN) return OKBADTEXT;
+    u64 res = 0;
+    for (u8c* p = from[0]; p < from[1]; ++p) {
+        u64 v = RON64_REV[*p];
+        if (v == 0xff) return OKBADTEXT;
+        res = (res << 6) | v;
+    }
+    if (RON64_REV[*from[0]] > 15) return OKBADTEXT;
+    *o = res;
+    return OK;
+}
