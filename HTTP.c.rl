@@ -56,7 +56,7 @@ action HTTPMethod1 {
     tok[1] = p;
     o = HTTPonMethod(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPRequestURI0 { mark0[HTTPRequestURI] = p - data[0]; }
@@ -65,7 +65,7 @@ action HTTPRequestURI1 {
     tok[1] = p;
     o = HTTPonRequestURI(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPHTTPVersion0 { mark0[HTTPHTTPVersion] = p - data[0]; }
@@ -74,7 +74,7 @@ action HTTPHTTPVersion1 {
     tok[1] = p;
     o = HTTPonHTTPVersion(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPRequestLine0 { mark0[HTTPRequestLine] = p - data[0]; }
@@ -83,7 +83,7 @@ action HTTPRequestLine1 {
     tok[1] = p;
     o = HTTPonRequestLine(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPFieldName0 { mark0[HTTPFieldName] = p - data[0]; }
@@ -92,7 +92,7 @@ action HTTPFieldName1 {
     tok[1] = p;
     o = HTTPonFieldName(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPFieldValue0 { mark0[HTTPFieldValue] = p - data[0]; }
@@ -101,7 +101,7 @@ action HTTPFieldValue1 {
     tok[1] = p;
     o = HTTPonFieldValue(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPMessageHeader0 { mark0[HTTPMessageHeader] = p - data[0]; }
@@ -110,7 +110,7 @@ action HTTPMessageHeader1 {
     tok[1] = p;
     o = HTTPonMessageHeader(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPRequestHead0 { mark0[HTTPRequestHead] = p - data[0]; }
@@ -119,7 +119,7 @@ action HTTPRequestHead1 {
     tok[1] = p;
     o = HTTPonRequestHead(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPBody0 { mark0[HTTPBody] = p - data[0]; }
@@ -128,7 +128,7 @@ action HTTPBody1 {
     tok[1] = p;
     o = HTTPonBody(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPRequest0 { mark0[HTTPRequest] = p - data[0]; }
@@ -137,7 +137,7 @@ action HTTPRequest1 {
     tok[1] = p;
     o = HTTPonRequest(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPStatusCode0 { mark0[HTTPStatusCode] = p - data[0]; }
@@ -146,7 +146,7 @@ action HTTPStatusCode1 {
     tok[1] = p;
     o = HTTPonStatusCode(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPReasonPhrase0 { mark0[HTTPReasonPhrase] = p - data[0]; }
@@ -155,7 +155,7 @@ action HTTPReasonPhrase1 {
     tok[1] = p;
     o = HTTPonReasonPhrase(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPStatusLine0 { mark0[HTTPStatusLine] = p - data[0]; }
@@ -164,7 +164,7 @@ action HTTPStatusLine1 {
     tok[1] = p;
     o = HTTPonStatusLine(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPResponse0 { mark0[HTTPResponse] = p - data[0]; }
@@ -173,7 +173,7 @@ action HTTPResponse1 {
     tok[1] = p;
     o = HTTPonResponse(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPMessage0 { mark0[HTTPMessage] = p - data[0]; }
@@ -182,7 +182,7 @@ action HTTPMessage1 {
     tok[1] = p;
     o = HTTPonMessage(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action HTTPRoot0 { mark0[HTTPRoot] = p - data[0]; }
@@ -191,7 +191,7 @@ action HTTPRoot1 {
     tok[1] = p;
     o = HTTPonRoot(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 

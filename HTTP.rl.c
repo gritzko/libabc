@@ -360,7 +360,7 @@ _match:
     tok[1] = p;
     o = HTTPonMethod(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -375,7 +375,7 @@ _match:
     tok[1] = p;
     o = HTTPonRequestURI(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -390,7 +390,7 @@ _match:
     tok[1] = p;
     o = HTTPonHTTPVersion(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -405,7 +405,7 @@ _match:
     tok[1] = p;
     o = HTTPonRequestLine(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -420,7 +420,7 @@ _match:
     tok[1] = p;
     o = HTTPonFieldName(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -435,7 +435,7 @@ _match:
     tok[1] = p;
     o = HTTPonFieldValue(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -450,7 +450,7 @@ _match:
     tok[1] = p;
     o = HTTPonMessageHeader(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -465,7 +465,7 @@ _match:
     tok[1] = p;
     o = HTTPonRequestHead(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -488,7 +488,7 @@ _match:
     tok[1] = p;
     o = HTTPonStatusCode(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -503,7 +503,7 @@ _match:
     tok[1] = p;
     o = HTTPonReasonPhrase(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -518,7 +518,7 @@ _match:
     tok[1] = p;
     o = HTTPonStatusLine(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -557,7 +557,7 @@ _again:
     tok[1] = p;
     o = HTTPonRequestHead(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -572,7 +572,7 @@ _again:
     tok[1] = p;
     o = HTTPonBody(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -583,7 +583,7 @@ _again:
     tok[1] = p;
     o = HTTPonRequest(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -594,7 +594,7 @@ _again:
     tok[1] = p;
     o = HTTPonResponse(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -605,7 +605,7 @@ _again:
     tok[1] = p;
     o = HTTPonMessage(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
@@ -616,7 +616,7 @@ _again:
     tok[1] = p;
     o = HTTPonRoot(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;

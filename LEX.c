@@ -19,15 +19,17 @@
 
 const u8c *LEX_TEMPL[LEX_TEMPL_LANG_LEN][LEX_TEMPL_LEN][2] = {
     {
-        // ABC-017: goto _out, NOT fbreak — fbreak is {p++; goto _out;},
-        // over-consuming on callback failure (p=pe+1 in EOF actions)
+        // ABC-017: fbreak alone is {p++; goto _out;}, over-consuming on
+        // callback failure (p=pe+1 in EOF actions); fhold undoes the p++.
+        // LEX-002: no bare `goto _out` either, ragel only emits the _out
+        // label when it sees a use (none in a grammar accepting all input)
         $u8str("action $mod${act}0 { mark0[$mod$act] = p - data[0]; }\n"
                "action $mod${act}1 {\n"
                "    tok[0] = data[0] + mark0[$mod$act];\n"
                "    tok[1] = p;\n"
                "    o = ${mod}on$act(tok, state); \n"
                "    if (o!=OK) {\n"
-               "        goto _out;\n"
+               "        fhold; fbreak;\n"
                "    }\n"
                "}\n"),
         $u8str("\t$mod$act = ${mod}enum+$actno,\n"),

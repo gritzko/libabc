@@ -46,7 +46,7 @@ action JSONLiteral1 {
     tok[1] = p;
     o = JSONonLiteral(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONString0 { mark0[JSONString] = p - data[0]; }
@@ -55,7 +55,7 @@ action JSONString1 {
     tok[1] = p;
     o = JSONonString(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONNumber0 { mark0[JSONNumber] = p - data[0]; }
@@ -64,7 +64,7 @@ action JSONNumber1 {
     tok[1] = p;
     o = JSONonNumber(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONOpenObject0 { mark0[JSONOpenObject] = p - data[0]; }
@@ -73,7 +73,7 @@ action JSONOpenObject1 {
     tok[1] = p;
     o = JSONonOpenObject(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONCloseObject0 { mark0[JSONCloseObject] = p - data[0]; }
@@ -82,7 +82,7 @@ action JSONCloseObject1 {
     tok[1] = p;
     o = JSONonCloseObject(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONOpenArray0 { mark0[JSONOpenArray] = p - data[0]; }
@@ -91,7 +91,7 @@ action JSONOpenArray1 {
     tok[1] = p;
     o = JSONonOpenArray(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONCloseArray0 { mark0[JSONCloseArray] = p - data[0]; }
@@ -100,7 +100,7 @@ action JSONCloseArray1 {
     tok[1] = p;
     o = JSONonCloseArray(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONComma0 { mark0[JSONComma] = p - data[0]; }
@@ -109,7 +109,7 @@ action JSONComma1 {
     tok[1] = p;
     o = JSONonComma(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONColon0 { mark0[JSONColon] = p - data[0]; }
@@ -118,7 +118,7 @@ action JSONColon1 {
     tok[1] = p;
     o = JSONonColon(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONJSON0 { mark0[JSONJSON] = p - data[0]; }
@@ -127,7 +127,7 @@ action JSONJSON1 {
     tok[1] = p;
     o = JSONonJSON(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 action JSONRoot0 { mark0[JSONRoot] = p - data[0]; }
@@ -136,7 +136,7 @@ action JSONRoot1 {
     tok[1] = p;
     o = JSONonRoot(tok, state); 
     if (o!=OK) {
-        goto _out;
+        fhold; fbreak;
     }
 }
 

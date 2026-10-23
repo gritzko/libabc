@@ -1,4 +1,5 @@
-/* #line 1 "/home/gritzko/librdx/abc/JSON.c.rl" */
+
+/* #line 1 "JSON.c.rl" */
 #include "INT.h"
 #include "PRO.h"
 #include "JSON.h"
@@ -35,11 +36,11 @@ ok64 JSONonRoot (u8cs tok, JSONstate* state);
 
 
 
-/* #line 169 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 169 "JSON.c.rl" */
 
 
 
-/* #line 39 "/home/gritzko/librdx/abc/JSON.rl.c" */
+/* #line 39 "JSON.rl.c" */
 static const char _JSON_actions[] = {
 	0, 1, 0, 1, 1, 1, 2, 1, 
 	3, 1, 4, 1, 5, 1, 6, 1, 
@@ -256,7 +257,7 @@ static const int JSON_error = 0;
 static const int JSON_en_main = 20;
 
 
-/* #line 172 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 172 "JSON.c.rl" */
 
 // the public API function
 ok64 JSONLexer(JSONstate* state) {
@@ -274,14 +275,14 @@ ok64 JSONLexer(JSONstate* state) {
     u8cs tok = {p, p};
 
     
-/* #line 270 "/home/gritzko/librdx/abc/JSON.rl.c" */
+/* #line 270 "JSON.rl.c" */
 	{
 	cs = JSON_start;
 	}
 
-/* #line 189 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 189 "JSON.c.rl" */
     
-/* #line 273 "/home/gritzko/librdx/abc/JSON.rl.c" */
+/* #line 273 "JSON.rl.c" */
 	{
 	int _klen;
 	unsigned int _trans;
@@ -356,149 +357,149 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-/* #line 43 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 43 "JSON.c.rl" */
 	{ mark0[JSONLiteral] = p - data[0]; }
 	break;
 	case 1:
-/* #line 44 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 44 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONLiteral];
     tok[1] = p;
     o = JSONonLiteral(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 2:
-/* #line 52 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 52 "JSON.c.rl" */
 	{ mark0[JSONString] = p - data[0]; }
 	break;
 	case 3:
-/* #line 53 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 53 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONString];
     tok[1] = p;
     o = JSONonString(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 4:
-/* #line 61 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 61 "JSON.c.rl" */
 	{ mark0[JSONNumber] = p - data[0]; }
 	break;
 	case 5:
-/* #line 62 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 62 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONNumber];
     tok[1] = p;
     o = JSONonNumber(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 6:
-/* #line 70 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 70 "JSON.c.rl" */
 	{ mark0[JSONOpenObject] = p - data[0]; }
 	break;
 	case 7:
-/* #line 71 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 71 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONOpenObject];
     tok[1] = p;
     o = JSONonOpenObject(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 8:
-/* #line 79 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 79 "JSON.c.rl" */
 	{ mark0[JSONCloseObject] = p - data[0]; }
 	break;
 	case 9:
-/* #line 80 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 80 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONCloseObject];
     tok[1] = p;
     o = JSONonCloseObject(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 10:
-/* #line 88 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 88 "JSON.c.rl" */
 	{ mark0[JSONOpenArray] = p - data[0]; }
 	break;
 	case 11:
-/* #line 89 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 89 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONOpenArray];
     tok[1] = p;
     o = JSONonOpenArray(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 12:
-/* #line 97 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 97 "JSON.c.rl" */
 	{ mark0[JSONCloseArray] = p - data[0]; }
 	break;
 	case 13:
-/* #line 98 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 98 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONCloseArray];
     tok[1] = p;
     o = JSONonCloseArray(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 14:
-/* #line 106 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 106 "JSON.c.rl" */
 	{ mark0[JSONComma] = p - data[0]; }
 	break;
 	case 15:
-/* #line 107 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 107 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONComma];
     tok[1] = p;
     o = JSONonComma(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 16:
-/* #line 115 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 115 "JSON.c.rl" */
 	{ mark0[JSONColon] = p - data[0]; }
 	break;
 	case 17:
-/* #line 116 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 116 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONColon];
     tok[1] = p;
     o = JSONonColon(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 18:
-/* #line 124 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 124 "JSON.c.rl" */
 	{ mark0[JSONJSON] = p - data[0]; }
 	break;
 	case 20:
-/* #line 133 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 133 "JSON.c.rl" */
 	{ mark0[JSONRoot] = p - data[0]; }
 	break;
-/* #line 469 "/home/gritzko/librdx/abc/JSON.rl.c" */
+/* #line 469 "JSON.rl.c" */
 		}
 	}
 
@@ -515,135 +516,135 @@ _again:
 	while ( __nacts-- > 0 ) {
 		switch ( *__acts++ ) {
 	case 1:
-/* #line 44 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 44 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONLiteral];
     tok[1] = p;
     o = JSONonLiteral(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 3:
-/* #line 53 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 53 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONString];
     tok[1] = p;
     o = JSONonString(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 5:
-/* #line 62 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 62 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONNumber];
     tok[1] = p;
     o = JSONonNumber(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 7:
-/* #line 71 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 71 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONOpenObject];
     tok[1] = p;
     o = JSONonOpenObject(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 9:
-/* #line 80 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 80 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONCloseObject];
     tok[1] = p;
     o = JSONonCloseObject(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 11:
-/* #line 89 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 89 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONOpenArray];
     tok[1] = p;
     o = JSONonOpenArray(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 13:
-/* #line 98 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 98 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONCloseArray];
     tok[1] = p;
     o = JSONonCloseArray(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 15:
-/* #line 107 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 107 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONComma];
     tok[1] = p;
     o = JSONonComma(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 17:
-/* #line 116 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 116 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONColon];
     tok[1] = p;
     o = JSONonColon(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 18:
-/* #line 124 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 124 "JSON.c.rl" */
 	{ mark0[JSONJSON] = p - data[0]; }
 	break;
 	case 19:
-/* #line 125 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 125 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONJSON];
     tok[1] = p;
     o = JSONonJSON(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
 	case 20:
-/* #line 133 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 133 "JSON.c.rl" */
 	{ mark0[JSONRoot] = p - data[0]; }
 	break;
 	case 21:
-/* #line 134 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 134 "JSON.c.rl" */
 	{
     tok[0] = data[0] + mark0[JSONRoot];
     tok[1] = p;
     o = JSONonRoot(tok, state); 
     if (o!=OK) {
-        goto _out;
+        p--; {p++; goto _out; }
     }
 }
 	break;
-/* #line 600 "/home/gritzko/librdx/abc/JSON.rl.c" */
+/* #line 600 "JSON.rl.c" */
 		}
 	}
 	}
@@ -651,7 +652,7 @@ _again:
 	_out: {}
 	}
 
-/* #line 190 "/home/gritzko/librdx/abc/JSON.c.rl" */
+/* #line 190 "JSON.c.rl" */
 
     state->data[0] = p;
     if (o==OK && cs < JSON_first_final) 
