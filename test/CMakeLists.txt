@@ -139,11 +139,13 @@ target_compile_options(FILEtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(FILEtest abc)
 add_test(NAME FILEtest COMMAND FILEtest)
 
+if (sodium)  # BOOT-26A23Apv3i: optional dep
 add_executable(SHAtest SHA.c)
 target_link_libraries(SHAtest abc ${sodium})
 target_link_options(SHAtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(SHAtest PRIVATE ${TEST_CXX_FLAGS})
 add_test(NAME SHAtest COMMAND SHAtest)
+endif()
 
 # ABC-008: HEX and OK codec regression tests
 add_executable(HEXtest HEX.c)
@@ -306,11 +308,13 @@ target_compile_options(Ytest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(Ytest abc)
 add_test(NAME Ytest COMMAND Ytest)
 
+if (sodium)  # BOOT-26A23Apv3i: optional dep
 add_executable(NACLtest NACL.c)
 target_link_options(NACLtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(NACLtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(NACLtest abc ${sodium})
 add_test(NAME NACLtest COMMAND NACLtest)
+endif()
 
 add_executable(RONtest RON.c)
 target_link_libraries(RONtest abc)
@@ -348,11 +352,13 @@ target_compile_options(NUMtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(NUMtest abc)
 add_test(NAME NUMtest COMMAND NUMtest)
 
+if (LZ4_FOUND)  # BOOT-26A23Apv3i: optional dep
 add_executable(PACKtest PACK.c)
 target_link_options(PACKtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(PACKtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(PACKtest abc)
 add_test(NAME PACKtest COMMAND PACKtest)
+endif()
 
 add_executable(path8gtest PATH.c)
 target_link_options(path8gtest PRIVATE ${TEST_LDD_FLAGS})
