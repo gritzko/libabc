@@ -150,6 +150,7 @@ ok64 FILEReadLink(u8bp out, path8s linkpath) {
     if (n < 0) fail(FILEFAIL);
     if ((size_t)n >= cap) return NOROOM;   // truncated
     u8bFed(out, (size_t)n);
+    call(PATHu8bTerm, out);  //  n < cap: room for the NUL
     done;
 }
 

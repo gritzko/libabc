@@ -509,7 +509,8 @@ ok64 FILErmrf(path8s name);
 ok64 FILEUnLink(path8s name);
 
 // Read the target of a symbolic link into `out`.  Resets `out`,
-// feeds the link target bytes (no NUL appended).  Returns FILEFAIL on
+// feeds the link target bytes, NUL-terminated past the data like any
+// path8b (PATH.h; the NUL is not in the data).  Returns FILEFAIL on
 // readlink() failure; NOROOM if the buffer's idle space can't hold
 // the full target (and the buffer is left empty).
 ok64 FILEReadLink(u8bp out, path8s linkpath);
