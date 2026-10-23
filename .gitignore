@@ -14,3 +14,6 @@ build-*/
 
 # the hive: nested worktree cells, not part of the meta-project (BE-031)
 work/
+.fork
+.index*
+.test
