@@ -948,6 +948,62 @@ ok64 FILETrimMapPastTest() {
     done;
 }
 
+//  PORT-26A239KGXD repro: bytes written through a RW map must survive the
+//  trim that shrinks the file under that live map.  OpenBSD (no unified
+//  buffer cache) dropped the dirty page holding the new EOF on ftruncate,
+//  so a sub-page memtable sealed as a run of zeros (`be index`: no rows).
+//  Checked through a fresh fd and pread, never through the map.
+static ok64 file_trim_kept(path8s path, size_t len) {
+    sane(1);
+    int fd = open((char const *)*path, O_RDONLY);
+    test(fd >= 0, FILEFAIL);
+    u8 *got = calloc(len + 1, 1);
+    if (got == NULL) { close(fd); fail(FILEFAIL); }
+    ssize_t n = pread(fd, got, len + 1, 0);
+    close(fd);
+    size_t bad = len;
+    for (size_t i = 0; i < len && bad == len; i++)
+        if (got[i] != (u8)(0xA0 ^ (i & 0x7F))) bad = i;
+    free(got);
+    testeqv((long long)n, (long long)len, "%lld");
+    testeqv((long long)bad, (long long)len, "%lld");  // first lost byte
+    done;
+}
+
+ok64 FILETrimKeepsDirtyTest() {
+    sane(1);
+    size_t const sp = FILESysPage();
+    size_t const lens[] = {432, sp + 904};  // EOF mid page 0, mid page 1
+    for (int k = 0; k < 2; k++) {
+        size_t len = lens[k];
+        a_path(path, $cstr("/tmp"));
+        a_cstr(tmpl, "FILETrimKeeps_XXXXXX");
+        call(PATHu8bAddTmp, path, tmpl);
+        //  FILEMapCreate + FILETrimMap: the PUP memtable seal.
+        u8bp buf = NULL;
+        call(FILEMapCreate, &buf, $path(path), 2 * sp);
+        u8bReset(buf);
+        for (size_t i = 0; i < len; i++)
+            call(u8bFeed1, buf, (u8)(0xA0 ^ (i & 0x7F)));
+        call(FILETrimMap, buf);
+        call(file_trim_kept, $path(path), len);
+        call(FILEUnMap, buf);
+        call(file_trim_kept, $path(path), len);
+        call(FILEUnLink, $path(path));
+        //  FILEBookCreate + FILETrimBook: the ULOG close.
+        u8bp book = NULL;
+        call(FILEBookCreate, &book, $path(path), 64 * KB, 2 * sp);
+        for (size_t i = 0; i < len; i++)
+            call(u8bFeed1, book, (u8)(0xA0 ^ (i & 0x7F)));
+        call(FILETrimBook, book);
+        call(file_trim_kept, $path(path), len);
+        call(FILEUnBook, book);
+        call(file_trim_kept, $path(path), len);
+        call(FILEUnLink, $path(path));
+    }
+    done;
+}
+
 //  ABC-013 repro: FILE_BOOK gap entries (grown by u8psFed, never written)
 //  must read as NULL so un-booked fds fail FILENOBOOK, not mmap garbage.
 ok64 FILEBookGapTest() {
@@ -999,6 +1055,7 @@ ok64 FILEtest() {
     call(FILEFlushStreamTest);
     call(FILEFlushThresholdPipeTest);
     call(FILETrimMapPastTest);
+    call(FILETrimKeepsDirtyTest);
     call(FILEBookGapTest);
     call(FILEtest1);
     call(FILEtest2);

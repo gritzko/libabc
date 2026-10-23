@@ -691,12 +691,39 @@ ok64 FILEFindMap(int *fd, u8bp buf) {
     fail(NONE);
 }
 
+//  PORT-26A239KGXD: OpenBSD has no unified buffer cache, and an ftruncate
+//  that shrinks a file under a live MAP_SHARED mapping DISCARDS the dirty
+//  contents of the page holding the new EOF (pages wholly below it survive).
+//  A memtable/log written through the map and trimmed to its data length lost
+//  its last partial page — all of it, for a sub-page run.  The pages below it
+//  survive, but read(2)/write(2) do not see them until written back, and a
+//  trimmed run is read by pread probes and appended to by write(2) (the PUP
+//  ToC).  So, before such a trim, write the kept pages back.  Linux, FreeBSD
+//  and macOS share one page cache between mmap and read/write; there a sync
+//  would only cost a disk write.
+#if defined(__OpenBSD__)
+#define FILE_TRIM_FLUSHES 1
+#else
+#define FILE_TRIM_FLUSHES 0
+#endif
+
+static ok64 FILEFlushKept(u8c *const *b, size_t keep) {
+    sane(b != NULL);
+    if (!FILE_TRIM_FLUSHES || keep == 0) done;
+    size_t mapped = (size_t)(b[3] - b[0]);
+    size_t len = roundup2(keep, FILESysPage());
+    if (len > mapped) len = mapped;
+    FILETestC(msync((void *)b[0], len, MS_SYNC) == 0);
+    done;
+}
+
 ok64 FILETrimMap(u8bp buf) {
     sane(u8bOK(buf));
     int fd = FILE_CLOSED;
     call(FILEFindMap, &fd, buf);
     //  ABC-013: trim to PAST+DATA (b[2]-b[0]) like FILETrimBook — DATA
     //  alone shortened the file and SIGBUSed still-mapped consumed pages.
+    call(FILEFlushKept, (u8c *const *)buf, u8bBusyLen(buf));
     call(FILEResize, &fd, u8bBusyLen(buf));
     u8c **b = (u8c **)buf;
     b[3] = b[2];
@@ -1131,6 +1158,7 @@ ok64 FILETrimBook(u8bp buf) {
     //  dropping only IDLE (the page-aligned zero pad [b[2],b[3])).
     u8c **b = (u8c **)buf;
     size_t busy = (size_t)(b[2] - b[0]);
+    call(FILEFlushKept, b, busy);
     call(FILEResize, &fd, busy);
     b[3] = b[2];
     done;
