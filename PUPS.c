@@ -201,7 +201,11 @@ static ok64 pup_scan(kv64b pups, path8sc dir, u8csc ext, b8 dedup) {
     //  between the iterator's path buffer and FILEMapRO's bookkeeping.
     a_path(dpat, dir);
     fileit it = {};
-    if (FILEIterOpen(&it, dpat) != OK) done;  // dir absent → empty stack
+    //  CODE-26A23CSStk: only an ABSENT dir is an empty stack; one that exists
+    //  but cannot be listed (EMFILE, EACCES) is an unreadable one.
+    ok64 o = FILEIterOpen(&it, dpat);
+    if (o == FILENONE) done;
+    if (o != OK) fail(o);
 
     Bkv64 seqnos = {};
     call(kv64bAllocate, seqnos, FILE_MAX_OPEN);
@@ -216,12 +220,17 @@ static ok64 pup_scan(kv64b pups, path8sc dir, u8csc ext, b8 dedup) {
         //  DOG-027: anything that is not a `<10-RON64><ext>` run (a pre-ron64
         //  name, the memtable, a stray file) is skipped, never unlinked.
         if (sq == 0) continue;
-        if ($len(u8bIdleC(namebuf)) < u8csLen(base) + 1) continue;
+        //  CODE-26A23CSStk: past FILE_MAX_OPEN runs the rest would go
+        //  unscanned — fail, a stack is never read short.
         u64 name_off = (u64)u8bDataLen(namebuf);
+        kv64 kv = {.key = sq, .val = name_off};
+        if ($len(u8bIdleC(namebuf)) < u8csLen(base) + 1 ||
+            kv64bPush(seqnos, &kv) != OK) {
+            __ = PUPNOROOM;
+            break;
+        }
         u8bFeed(namebuf, base);
         u8bFeed1(namebuf, 0);
-        kv64 kv = {.key = sq, .val = name_off};
-        if (kv64bPush(seqnos, &kv) != OK) break;
     }
     //  Close the iterator UNCONDITIONALLY: a non-END FILENext error
     //  (e.g. PATHNOROOM on an over-long path) leaves `__ != END`, so a
@@ -252,9 +261,21 @@ static ok64 pup_scan(kv64b pups, path8sc dir, u8csc ext, b8 dedup) {
         u8cs fn  = {nm0, nm0 + strlen((char const *)nm0)};
         a_path(fpath, dir, fn);
         u8bp buf = NULL;
-        if (FILEMapRO(&buf, $path(fpath)) != OK) continue;
-        int fd = FILEBookedFD(buf);
-        if (fd < 0) { FILEUnMap(buf); continue; }
+        //  CODE-26A23CSStk: a run on disk that cannot be mapped fails the
+        //  open, never vanishes from it: PUPEMPTY for a 0-byte run (a crashed
+        //  non-durable create), PUPNOMAP for anything else (fds, slots, perms).
+        int fd = -1;
+        if (FILEMapRO(&buf, $path(fpath)) == OK) {
+            fd = FILEBookedFD(buf);
+            if (fd < 0) FILEUnMap(buf);
+        }
+        if (fd < 0) {
+            struct stat st;
+            b8 empty = stat((char const *)u8bDataHead(fpath), &st) == 0 &&
+                       st.st_size == 0;
+            kv64bFree(seqnos);
+            fail(empty ? PUPEMPTY : PUPNOMAP);
+        }
         kv64 kv = {.key = kp->key, .val = (u64)fd};
         //  On a `pups` overflow the just-mapped file is NOT yet recorded
         //  in `pups`, so PUPClose can never reclaim it — release the
@@ -352,7 +373,7 @@ static ok64 pup_book(kv64b pups, path8s dir, u8cs ext, u64 pup_key) {
 }
 
 static ok64 pup_create_at(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
-                          u64 pup_key) {
+                          u64 pup_key, b8 durable) {
     sane(pups != NULL && $ok(dir) && $ok(ext) && pup_key > 0);
 
     //  DOG-027: refuse a taken key — DATA-side (ThinTail first) or a file on
@@ -362,23 +383,28 @@ static ok64 pup_create_at(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
         call(pup_key_taken, &taken, pups, dir, ext, pup_key);
         if (taken) return PUPFAIL;
     }
-    call(pup_write, dir, ext, bytes, pup_key, NO);
+    call(pup_write, dir, ext, bytes, pup_key, durable);
     call(pup_book, pups, dir, ext, pup_key);
     done;
 }
 
-ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
-                    u64 pup_key) {
+ok64 PUPCreateAtAs(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
+                   u64 pup_key, b8 durable) {
     sane(pups != NULL && $ok(dir) && $ok(ext) && pup_key > 0);
     int lk = -1;
     call(PUPLock, &lk, dir);
-    try(pup_create_at, pups, dir, ext, bytes, pup_key);
+    try(pup_create_at, pups, dir, ext, bytes, pup_key, durable);
     PUPUnlock(&lk);
     nedo fail(__);
     done;
 }
 
-ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes) {
+ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
+                 u64 pup_key) {
+    return PUPCreateAtAs(pups, dir, ext, bytes, pup_key, NO);
+}
+
+ok64 PUPCreateAs(kv64b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  Pick `max(RONNow, max(DATA)+1)` so two writers / two parallel
     //  sub-shards collapsed into one project never accidentally pick
@@ -394,10 +420,14 @@ ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes) {
     call(PUPLock, &lk, dir);
     u64 new_seqno = 0;
     try(pup_free_key, &new_seqno, pups, dir, ext);
-    then try(pup_create_at, pups, dir, ext, bytes, new_seqno);
+    then try(pup_create_at, pups, dir, ext, bytes, new_seqno, durable);
     PUPUnlock(&lk);
     nedo fail(__);
     done;
+}
+
+ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes) {
+    return PUPCreateAs(pups, dir, ext, bytes, NO);
 }
 
 // PUPS-004: unmap the i-th run and close the dict gap; `rm` NO leaves the file.

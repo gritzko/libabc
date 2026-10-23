@@ -121,6 +121,12 @@ target_compile_options(PUPStest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(PUPStest abc)
 add_test(NAME PUPStest COMMAND PUPStest)
 
+add_executable(PUPDURtest PUPDUR.c)
+target_link_options(PUPDURtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(PUPDURtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(PUPDURtest abc ${CMAKE_DL_LIBS})
+add_test(NAME PUPDURtest COMMAND PUPDURtest)
+
 add_executable(BOXtest BOX.c)
 target_link_options(BOXtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(BOXtest PRIVATE ${TEST_CXX_FLAGS})

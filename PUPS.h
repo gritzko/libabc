@@ -34,10 +34,28 @@
 #define PUP_SEQNO_W 10
 
 con ok64 PUPFAIL = 0x197993ca495;
+//  CODE-26A23CSStk: PUPOpenAll found a run it cannot read.  PUPEMPTY: the run
+//  is 0 bytes, what a crash leaves of a non-durable create.  PUPNOMAP: it could
+//  not be mapped (fds, FILE_MAX_OPEN slots, perms).  PUPNOROOM: more runs than
+//  one scan holds (FILE_MAX_OPEN).
+con ok64 PUPEMPTY = 0x65e64e599762;
+con ok64 PUPNOMAP = 0x65e657616299;
+con ok64 PUPNOROOM = 0x197995d86d8616;
 
 // Scan `dir` for files matching `<10-RON64><ext>`, sort by pup_key,
-// FILEMapRO each, push (pup_key, fd) into `pups`.  Empty dir → OK with
-// pups left empty.  Caller must have allocated `pups` first.
+// FILEMapRO each, push (pup_key, fd) into `pups`.  Empty or absent dir → OK
+// with pups left empty.  Caller must have allocated `pups` first.
+// CODE-26A23CSStk: never OK with a run missing.  A run it cannot map fails the
+// open (PUPNOMAP; PUPEMPTY for a 0-byte one), more than FILE_MAX_OPEN runs
+// fail with PUPNOROOM; entries already pushed stay for PUPClose.  Every mapped
+// run holds one fd and one of the process's FILE_MAX_OPEN slots: that is a
+// hard per-process cap on open runs, across all stacks.
+// Crash policy: a 0-byte run is NOT unlinked nor skipped — PUPS cannot tell a
+// crashed create from a committed run that lost its bytes, so the owner, who
+// knows what it committed on top, decides (re-derive, unlink, or refuse).  A
+// durable create (PUPCreateAs) never leaves one.  A run truncated to a
+// non-zero length is not detected here (no row width); row-aware readers
+// check the residue.
 // Not idempotent: every file in `dir` becomes a new entry, even if a
 // matching pup_key already sits in PAST/DATA — same basename in a
 // different dir is a different file.  Avoiding double-scans is the
@@ -69,6 +87,11 @@ ok64 PUPOpenAside(kv64b pups, path8sc dir, u8csc ext);
 // DOG-027: then bumped past any key whose NAME is already on disk — RON64 is
 // case-sensitive, APFS/HFS+/NTFS are not, so two keys compose one filename.
 ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes);
+// CODE-26A23C8gS9: PUPCreate is the FAST path: no fsync, so after a power loss
+// the renamed run may be 0 bytes (see PUPOpenAll).  A caller that commits
+// anything on top of the run passes `durable`: the run is fsync'd before the
+// rename and the directory after it, so it is on disk when the call returns.
+ok64 PUPCreateAs(kv64b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable);
 
 // Same as PUPCreate but the caller picks the pup_key explicitly.
 // Refuses with PUPFAIL when a live entry with the same pup_key
@@ -79,6 +102,10 @@ ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes);
 // the key is the caller's, so the library cannot bump it the way PUPCreate does.
 ok64 PUPCreateAt(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
                     u64 pup_key);
+// CODE-26A23C8gS9: PUPCreateAt with PUPCreateAs's `durable`; the bare name is
+// the non-durable fast path.
+ok64 PUPCreateAtAs(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
+                   u64 pup_key, b8 durable);
 
 // Unmap and unlink the youngest `m` puppies; trim `pups` by `m`.
 ok64 PUPThinTail(kv64b pups, path8s dir, u8cs ext, u32 m);
