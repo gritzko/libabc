@@ -572,8 +572,9 @@ static ok64 PUPTestLadder(void) {
     done;
 }
 
-// PUPS-004: a ladder merge names its run by the YOUNGEST source's key, so a
+// PUPS-004: a ladder merge's key stays next to its YOUNGEST source's key, so a
 // key read as tx time never jumps past writes that landed meanwhile.
+// PUPS-005: youngest + 1 — a run name is never reused.
 static ok64 PUPTestLadderKey(void) {
     sane(1);
     call(FILEInit);
@@ -591,13 +592,13 @@ static ok64 PUPTestLadderKey(void) {
     }
     call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, 0);
     testeqv((long long)PUPCount(pups), 1LL, "%lld");
-    testeqv((long long)PUPSeqno(pups, 0), 1002LL, "%lld");
-    //  a fresh scan agrees: one file, named by the youngest key
+    testeqv((long long)PUPSeqno(pups, 0), 1003LL, "%lld");
+    //  a fresh scan agrees: one file, named youngest + 1
     Bkv64 fresh = {};
     call(kv64bAllocate, fresh, 16);
     call(PUPOpenAll, fresh, $path(dir), ext);
     testeqv((long long)PUPCount(fresh), 1LL, "%lld");
-    testeqv((long long)PUPSeqno(fresh, 0), 1002LL, "%lld");
+    testeqv((long long)PUPSeqno(fresh, 0), 1003LL, "%lld");
     call(PUPClose, fresh);
     call(PUPClose, pups);
     TESTBErmrf(tmp);
@@ -652,7 +653,7 @@ static ok64 PUPTestTomb(void) {
     testeqv((long long)(o[0] - out), 20LL, "%lld");
 
     //  a bigger put reaches the oldest run: tomb + shadowed row go
-    call(tomb_run, pups, $path(dir), ext, 1003, 31, 3, 0);
+    call(tomb_run, pups, $path(dir), ext, 1010, 31, 3, 0);
     call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, 0);
     testeqv((long long)PUPCount(pups), 1LL, "%lld");
     PUPDataRow(sl, pups, 0, 0);
@@ -677,6 +678,126 @@ static ok64 PUPTestTomb(void) {
     PUPDataRow(sl, p2, 0, 0);
     testeqv((long long)u8csLen(sl), 0LL, "%lld");
     call(PUPClose, p2);
+    TESTBErmrf(tmp);
+    done;
+}
+
+//  PUPS-005: crash points for a ladder merge.  The test binary interposes
+//  `rename` and `unlink`: once armed, the `pup_crash_at`-th successful one on a
+//  `pup_crash_ext` run kills the process right after it, as a crash would.
+static int pup_crash_at = 0, pup_crash_ops = 0;
+static char const *pup_crash_ext = "";
+#define PUP_CRASHED 77
+
+static void pup_crash_tick(char const *path) {
+    if (pup_crash_at == 0) return;
+    size_t l = strlen(path), e = strlen(pup_crash_ext);
+    if (l < e || strcmp(path + l - e, pup_crash_ext) != 0) return;
+    if (++pup_crash_ops == pup_crash_at) _exit(PUP_CRASHED);
+}
+
+int unlink(char const *path) {
+    int rc = unlinkat(AT_FDCWD, path, 0);
+    if (rc == 0) pup_crash_tick(path);
+    return rc;
+}
+
+int rename(char const *from, char const *to) {
+    int rc = renameat(AT_FDCWD, from, AT_FDCWD, to);
+    if (rc == 0) pup_crash_tick(to);
+    return rc;
+}
+
+//  PUPS-005: three equal runs (the ladder merges them all, a bottom merge that
+//  drops tombstones): rows 1..4, then deletes of 2 and 3 plus a new 4 and 5,
+//  then 6..9.  `gone` deletes everything instead: the merge output is empty.
+static ok64 crash_stack(path8s dir, u8cs ext, b8 gone) {
+    sane(1);
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    kv64 runs[3][4] = {
+        {{1, 10}, {2, 20}, {3, 30}, {4, 40}},
+        {{2, PUP_TOMB}, {3, PUP_TOMB}, {4, 41}, {5, 50}},
+        {{6, 60}, {7, 70}, {8, 80}, {9, 90}},
+    };
+    kv64 dead[2][4] = {
+        {{1, 10}, {2, 20}, {3, 30}, {4, 40}},
+        {{1, PUP_TOMB}, {2, PUP_TOMB}, {3, PUP_TOMB}, {4, PUP_TOMB}},
+    };
+    u32 n = gone ? 2 : 3;
+    for (u32 r = 0; r < n; r++) {
+        kv64 *rows = gone ? dead[r] : runs[r];
+        u8cs rec = {(u8c *)rows, (u8c *)(rows + 4)};
+        call(PUPCreateAt, pups, dir, ext, rec, 1000 + r);
+    }
+    call(PUPClose, pups);
+    done;
+}
+
+//  PUPS-005: a fresh handle's read of the stack in `dir`.
+static ok64 crash_read(kv64s out, u32 *nruns, path8s dir, u8cs ext) {
+    sane(1);
+    Bkv64 pups = {};
+    call(kv64bAllocate, pups, 16);
+    call(PUPOpenAll, pups, dir, ext);
+    *nruns = PUPCount(pups);
+    call(PUPkv64Read, out, pups);
+    call(PUPClose, pups);
+    done;
+}
+
+//  PUPS-005: a ladder merge killed after its rename and after each unlink
+//  leaves a directory that reads exactly as before the merge — deleted rows
+//  stay deleted.  The pre-PUPS-005 order (rename onto the youngest source's
+//  name, unlink youngest-first) brought deleted rows back.
+static ok64 PUPTestCrashLadder(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    char extc[16];
+    for (int gone = 0; gone < 2; gone++) {
+        //  the view before the merge, from an untouched copy of the stack
+        snprintf(extc, sizeof extc, ".r%d.idx", gone);
+        a_cstr(rext, extc);
+        call(crash_stack, $path(dir), rext, gone);
+        kv64 want_rows[16], got[16];
+        kv64s w = {want_rows, want_rows + 16};
+        u32 nr = 0;
+        call(crash_read, w, &nr, $path(dir), rext);
+        size_t nwant = (size_t)(w[0] - want_rows);
+        testeqv((long long)nwant, gone ? 0LL : 7LL, "%lld");
+        //  crash after step k: the rename, then each unlink (k = 9: never)
+        int steps = gone ? 2 : 4;
+        for (int k = 1; k <= steps + 1; k++) {
+            int at = k > steps ? 9 : k;
+            snprintf(extc, sizeof extc, ".c%d%d.idx", gone, k);
+            a_cstr(ext, extc);
+            call(crash_stack, $path(dir), ext, gone);
+            pid_t pid = fork();
+            want(pid >= 0);
+            if (pid == 0) {
+                Bkv64 pups = {};
+                pup_crash_ext = extc;
+                pup_crash_at = at;
+                if (kv64bAllocate(pups, 16) != OK) _exit(1);
+                if (PUPOpenAll(pups, $path(dir), ext) != OK) _exit(2);
+                if (PUPLadder(pups, $path(dir), ext, PUPkv64Merge, 0) != OK)
+                    _exit(3);
+                _exit(0);
+            }
+            int st = 0;
+            want(waitpid(pid, &st, 0) == pid && WIFEXITED(st));
+            testeqv(WEXITSTATUS(st), k > steps ? 0 : PUP_CRASHED, "%d");
+            kv64s g = {got, got + 16};
+            u32 runs = 0;
+            call(crash_read, g, &runs, $path(dir), ext);
+            testeqv((long long)(g[0] - got), (long long)nwant, "%lld");
+            want(memcmp(got, want_rows, nwant * sizeof(kv64)) == 0);
+            if (k > steps) testeqv(runs, gone ? 0u : 1u, "%u");
+        }
+    }
     TESTBErmrf(tmp);
     done;
 }
@@ -1338,6 +1459,7 @@ ok64 PUPTestMem(void) {
     call(PUPTestMemCrashInvisible);
     call(PUPTestLadderKey);
     call(PUPTestTomb);
+    call(PUPTestCrashLadder);
     call(PUPTestLock);
     call(PUPTestTwoWriters);
     call(PUPTestForeignRun);

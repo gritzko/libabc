@@ -240,8 +240,8 @@ static ok64 pup_scan(kv64b pups, path8sc dir, u8csc ext, b8 dedup) {
     //  parent directory).
     $for(kv64, kp, ks) {
         if (dedup && pup_dicted(pups, kp->key)) {
-            //  A ladder merge is renamed onto its youngest source's name, so a
-            //  dicted key may now hold ANOTHER writer's merged run: remap it.
+            //  A pre-PUPS-005 ladder merge renamed onto its youngest source's
+            //  name, so a dicted key may hold another writer's merged run.
             u8cp nm1 = u8bDataHead(namebuf) + kp->val;
             u8cs fn1 = {nm1, nm1 + strlen((char const *)nm1)};
             a_path(fp1, dir, fn1);
@@ -298,9 +298,12 @@ ok64 PUPOpenAside(kv64b pups, path8sc dir, u8csc ext) {
     return PUPOpenAll(pups, dir, ext);
 }
 
-// PUPS-004: tmp + atomic rename of `bytes` onto `<key><ext>`.  The rename
-// REPLACES a file already on the name, which is what a ladder merge wants.
-static ok64 pup_write(path8s dir, u8cs ext, u8cs bytes, u64 pup_key) {
+// PUPS-004: tmp + atomic rename of `bytes` onto `<key><ext>`.
+// PUPS-005: callers pick a free key; nothing renames onto a live run.  With
+// `durable` the tmp is fsync'd before the rename and the directory after it,
+// so the run is on disk before a ladder merge unlinks its sources.
+static ok64 pup_write(path8s dir, u8cs ext, u8cs bytes, u64 pup_key,
+                      b8 durable) {
     sane($ok(dir) && $ok(ext));
     a_path(idxpath);
     call(pup_path, idxpath, dir, pup_key, ext);
@@ -314,9 +317,16 @@ static ok64 pup_write(path8s dir, u8cs ext, u8cs bytes, u64 pup_key) {
     call(FILECreate, &wfd, $path(tmppath));
     if (wfd >= 0) {
         callsafe(FILEFeedAll(wfd, bytes), close(wfd));
+        if (durable) callsafe(FILESync(&wfd), close(wfd));
         close(wfd);
     }
     call(FILERename, $path(tmppath), $path(idxpath));
+    if (durable) {
+        int dfd = -1;
+        call(FILEOpenDir, &dfd, dir);
+        callsafe(FILESync(&dfd), close(dfd));
+        close(dfd);
+    }
     done;
 }
 
@@ -352,7 +362,7 @@ static ok64 pup_create_at(kv64b pups, path8s dir, u8cs ext, u8cs bytes,
         call(pup_key_taken, &taken, pups, dir, ext, pup_key);
         if (taken) return PUPFAIL;
     }
-    call(pup_write, dir, ext, bytes, pup_key);
+    call(pup_write, dir, ext, bytes, pup_key, NO);
     call(pup_book, pups, dir, ext, pup_key);
     done;
 }
@@ -390,8 +400,7 @@ ok64 PUPCreate(kv64b pups, path8s dir, u8cs ext, u8cs bytes) {
     done;
 }
 
-// PUPS-004: unmap the i-th run and close the dict gap; `rm` NO leaves the
-// file, for a ladder merge that has just renamed its output onto that name.
+// PUPS-004: unmap the i-th run and close the dict gap; `rm` NO leaves the file.
 static ok64 pup_drop(kv64b pups, path8s dir, u8cs ext, u32 i, b8 rm) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  DOG-027: index over RUNS, not entries — the memtable's key would unlink
@@ -721,12 +730,16 @@ static ok64 pup_collapse(kv64b pups, path8s dir, u8cs ext, pupmerge merge,
     try(merge, into, tail, bottom);
     nedo { u8bFree(scr); fail(__); }
     a_dup(u8c, merged, ((u8cs){u8bIdleHead(scr), into[0]}));
+    //  PUPS-005: the sources go OLDEST first.  A crash part way leaves the
+    //  merged run (if any) plus a YOUNGEST suffix of the sources: every
+    //  tombstone outlives the rows it shadows, so the stack reads as before.
+    u32 oldest = PUPCount(pups) - (u32)m;
     //  PUPS-001: nothing survived (every row was dead): no empty run, which
     //  could not be mapped anyway — the sources just go.
     if (u8csEmpty(merged)) {
         u8bFree(scr);
         for (size_t k = 0; k < m; k++)
-            call(pup_drop, pups, dir, ext, PUPCount(pups) - 1, YES);
+            call(pup_drop, pups, dir, ext, oldest, YES);
         pup_tail(pups);
         done;
     }
@@ -735,18 +748,20 @@ static ok64 pup_collapse(kv64b pups, path8s dir, u8cs ext, pupmerge merge,
     try(pup_toc_feed, into, merged, row);
     nedo { u8bFree(scr); fail(__); }
     a_dup(u8c, body, ((u8cs){u8bIdleHead(scr), into[0]}));
-    //  PUPS-004: the merged run takes the YOUNGEST source's key — a key read as
-    //  tx time never jumps past later writes.  The output is renamed onto that
-    //  source's name (atomic), THEN the older sources are unlinked: a crash in
-    //  between leaves a duplicate of rows, never a loss.
-    u64 ykey = PUPSeqno(pups, PUPCount(pups) - 1);
-    try(pup_write, dir, ext, body, ykey);
-    then {
-        //  the replaced inode stays mapped until its dict slot is dropped
-        for (size_t k = 0; k < m && __ == OK; k++)
-            __ = pup_drop(pups, dir, ext, PUPCount(pups) - 1, k > 0);
+    //  PUPS-005: a run name is never reused — renaming onto the youngest
+    //  source (PUPS-004) let a crash keep older sources whose tombstones the
+    //  bottom merge had dropped.  The merged run takes the next free key past
+    //  the youngest source (sequential; the ladder holds the write lock), is
+    //  made durable, booked, and only then are the sources unlinked.
+    u64 key = PUPSeqno(pups, PUPCount(pups) - 1) + 1;
+    for (b8 taken = YES; __ == OK; key++) {
+        __ = pup_key_taken(&taken, pups, dir, ext, key);
+        if (__ == OK && !taken) break;
     }
-    then try(pup_book, pups, dir, ext, ykey);
+    then try(pup_write, dir, ext, body, key, YES);
+    then try(pup_book, pups, dir, ext, key);
+    for (size_t k = 0; k < m && __ == OK; k++)
+        __ = pup_drop(pups, dir, ext, oldest, YES);
     u8bFree(scr);
     nedo fail(__);
     pup_tail(pups);

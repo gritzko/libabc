@@ -21,7 +21,9 @@ and uses only abc's own pieces (`HIT`, `QSORTx`, `RON`, `FILE`).
     `PUPCommitAs` leaves the fsync to the caller.
  -  **Ladder.** Every seal ends in `PUPLadder`, which keeps run sizes in a
     1/8 ladder by merging runs that fall out of proportion, so the run count
-    stays small.
+    stays small. A merged run never reuses a name: it takes the next free key
+    past its youngest source (fsync'd tmp, atomic rename), then the sources
+    are unlinked oldest first, so a crash at any step reads the same.
  -  **Reads.** `PUPAllRuns` lists the committed runs oldest to newest, then
     the memtable; the caller merges them (newest wins). The stack is
     re-scanned on commit, so concurrent writers on one directory see each
@@ -69,9 +71,8 @@ several stacks (DAT does, in `DATCommit`). The entry points take it themselves;
 it is reentrant within a process (not thread-safe), the kernel drops it when
 the process dies, and reads never take it. `.lock` is not a run: a scan skips it.
 
-A rescan also remaps a run whose file another writer replaced: a ladder merge
-is renamed onto its youngest source's name, so a key already in the dict may be
-a new inode. Known limit (DOG-046): a long-lived handle keeps the mappings of
+A rescan also remaps a run whose file another writer replaced (an older ladder
+renamed its merge onto the youngest source's name; since PUPS-005 none does). Known limit (DOG-046): a long-lived handle keeps the mappings of
 runs other writers unlinked, so after more than `HIT_MAX_RUNS` of them a view
 overflows (`SNOROOM`); reopen the stack.
 
@@ -109,6 +110,7 @@ many stacks.
 libpups is part of abc (`PUPS.c` is in `abc-core`; `PUPS.h` and `PUPx.h`
 are installed with the other headers). Tests are in `test/PUPS.c`
 (`PUPStest`): error-path fd leaks, memtable round trips, collapse, flush,
-commit, crash-invisibility, the ladder, drop, name clashes, two writers,
+commit, crash-invisibility, the ladder, ladder crash points, drop, name
+clashes, two writers,
 foreign runs and the ToC.
 
