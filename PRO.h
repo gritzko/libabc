@@ -83,6 +83,7 @@ __attribute__((unused)) con char *_pro_indent =
         ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
+            _PRO_LIFT(__, __depth);                                     \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
                   __LINE__);                                            \
             return __;                                                  \
@@ -103,6 +104,7 @@ __attribute__((unused)) con char *_pro_indent =
         ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
+            _PRO_LIFT(__, __depth);                                     \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
                   __LINE__);                                            \
         }                                                               \
@@ -123,6 +125,7 @@ __attribute__((unused)) con char *_pro_indent =
         ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
+            _PRO_LIFT(__, __depth);                                     \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
                   __LINE__);                                            \
             ffail;                                                      \
@@ -134,18 +137,48 @@ __attribute__((unused)) con char *_pro_indent =
 #define done return __;
 
 // Procedure fails, skip to finalizations.
-#define fail(code)                                                    \
-    {                                                                 \
-        trace("%s<%s at %s:%i\n", PROindent, ok64str(code), __func__, \
-              __LINE__);                                              \
-        return (code);                                                \
+// CODE-26A24BvaL1: the fail site record, kept whatever ABC_TRACE says,
+// so a failed TEST can name the check that failed.  fail() stamps its
+// FILE:LINE:func unless the record already holds the same code at the
+// same depth (then this fail() merely propagates it: the origin wins);
+// call/try lift a failed callee's record to the caller's depth.  Output
+// only: return paths are untouched.  Weak, so no executable defines it.
+typedef struct {
+    ok64 code;
+    char const *file;
+    char const *func;
+    int line;
+    u8 depth;
+} PROsite;
+
+__attribute__((weak)) thread_local PROsite PROfailed = {};
+
+fun void PROfailAt(ok64 code, char const *file, int line, char const *func) {
+    if (PROfailed.file && PROfailed.code == code &&
+        PROfailed.depth == _pro_depth)
+        return;
+    PROfailed = (PROsite){code, file, func, line, _pro_depth};
+}
+
+#define _PRO_LIFT(o, d) \
+    if (PROfailed.code == (o)) PROfailed.depth = (d);
+
+#define fail(code)                                                     \
+    {                                                                  \
+        __typeof__(code) __pf = (code);                                \
+        PROfailAt((ok64)__pf, __FILE__, __LINE__, __func__);           \
+        trace("%s<%s at %s:%i\n", PROindent, ok64str(__pf), __func__,  \
+              __LINE__);                                               \
+        return __pf;                                                   \
     }
 
-#define failc(code)                                                            \
-    {                                                                          \
-        trace("%s<%s errno %i %s at %s:%i\n", PROindent, ok64str(code), errno, \
-              strerror(errno), __func__, __LINE__);                            \
-        return (code);                                                         \
+#define failc(code)                                                    \
+    {                                                                  \
+        __typeof__(code) __pf = (code);                                \
+        PROfailAt((ok64)__pf, __FILE__, __LINE__, __func__);           \
+        trace("%s<%s errno %i %s at %s:%i\n", PROindent, ok64str(__pf), \
+              errno, strerror(errno), __func__, __LINE__);             \
+        return __pf;                                                   \
     }
 
 #define test(c, f) \

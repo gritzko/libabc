@@ -9,11 +9,20 @@
 con ok64 TESTFAIL = 0x74e71d3ca495;
 con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
 
-#define want(cond) \
-    if (!(cond)) fail(TESTFAIL);
+// CODE-26A24BvaL1: a failed check names itself on stderr, ABC_TRACE or not
+#define want(cond)                                                     \
+    if (!(cond)) {                                                     \
+        fprintf(stderr, "%s:%i: %s: want(%s) failed\n", __FILE__,      \
+                __LINE__, __func__, #cond);                            \
+        fail(TESTFAIL);                                                \
+    }
 
-#define same(a, b) \
-    if ((a) != (b)) fail(TESTFAILEQ);
+#define same(a, b)                                                     \
+    if ((a) != (b)) {                                                  \
+        fprintf(stderr, "%s:%i: %s: same(%s, %s) failed\n", __FILE__,  \
+                __LINE__, __func__, #a, #b);                           \
+        fail(TESTFAILEQ);                                              \
+    }
 
 #define TEST(f)                                                       \
     uint8_t _pro_depth = 0;                                           \
@@ -28,9 +37,13 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
         (void)argn; (void)args;                                       \
         ok64 ret = f();                                               \
         u8bUnMap(ABC_BASS);                                           \
-        if (ret != OK) {                                              \
-            fprintf(stderr, "%s<%s at %s:%i\ntest fail\n", PROindent, \
-                    ok64str(ret), __func__, __LINE__);                \
+        if (ret != OK && PROfailed.file && PROfailed.code == ret) {   \
+            fprintf(stderr, "%s<%s in %s at %s:%i: %s\ntest fail\n",   \
+                    PROindent, ok64str(ret), #f, PROfailed.file,      \
+                    PROfailed.line, PROfailed.func);                  \
+        } else if (ret != OK) {                                       \
+            fprintf(stderr, "%s<%s in %s\ntest fail\n", PROindent,     \
+                    ok64str(ret), #f);                                \
         }                                                             \
         /* ABC-016: raw ok64 truncates to low byte, 0x??00 == "ok" */ \
         return ret == OK ? 0 : 1;                                     \

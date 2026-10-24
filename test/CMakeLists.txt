@@ -446,3 +446,20 @@ target_link_options(UTF8inttest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(UTF8inttest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(UTF8inttest abc)
 add_test(NAME UTF8inttest COMMAND UTF8inttest)
+
+# CODE-26A24BvaL1: a failing TEST names the failing check's FILE:LINE.
+# FAILSITE is expected to fail; the wrappers check it does, and grep.
+add_executable(FAILSITE FAILSITE.c)
+target_link_options(FAILSITE PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(FAILSITE PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(FAILSITE abc-core)
+add_test(NAME FAILSITEtest COMMAND sh -c
+    "o=$(FAILSITE_MODE=test \"$0\" 2>&1) && exit 1; echo \"$o\";
+     echo \"$o\" | grep -q 'FAILSITE.c:[0-9]*:.*FAILSITEdeep' &&
+     ! echo \"$o\" | grep -q FAILSITEdecoy"
+    $<TARGET_FILE:FAILSITE>)
+add_test(NAME FAILSITEwant COMMAND sh -c
+    "o=$(FAILSITE_MODE=want \"$0\" 2>&1) && exit 1; echo \"$o\";
+     echo \"$o\" | grep -q 'FAILSITE.c:[0-9]*: FAILSITEdeep: want(x == 2) failed' &&
+     echo \"$o\" | grep -q 'in FAILSITEtest'"
+    $<TARGET_FILE:FAILSITE>)
