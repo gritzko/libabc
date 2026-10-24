@@ -20,6 +20,7 @@ ok64 TCPConnect(int *fd, u8csc address, b8 nonblocking) {
     for (rp = result; rp != NULL; rp = rp->ai_next) {
         sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (sfd == -1) continue;
+        TCPNoDelay(sfd, rp->ai_family);  // NET-26A24GSaPD
         // ABC-012: honor nonblocking; EINPROGRESS is a connect in progress
         if (nonblocking) fcntl(sfd, F_SETFL, fcntl(sfd, F_GETFL, 0) | O_NONBLOCK);
 

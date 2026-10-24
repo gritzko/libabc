@@ -209,6 +209,32 @@ ok64 TCPtestReuseAddr() {
     done;
 }
 
+// NET-26A24GSaPD: both connected and accepted TCP sockets carry TCP_NODELAY.
+ok64 TCPtestNoDelay() {
+    sane(1);
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "tcp://127.0.0.1:%d", NETRandomPort() + 5);
+    int fd = -1;
+    call(TCPListen, &fd, addr_datac);
+    int cfd = -1;
+    call(TCPConnect, &cfd, addr_datac, NO);
+    int sfd = -1;
+    aNETraw(peer);
+    call(TCPAccept, &sfd, peer, fd);
+    int v = 0;
+    socklen_t vl = sizeof(v);
+    test(getsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &v, &vl) == 0 && v != 0,
+         TCPFAIL);
+    v = 0;
+    vl = sizeof(v);
+    test(getsockopt(sfd, IPPROTO_TCP, TCP_NODELAY, &v, &vl) == 0 && v != 0,
+         TCPFAIL);
+    call(TCPClose, sfd);
+    call(TCPClose, cfd);
+    call(TCPClose, fd);
+    done;
+}
+
 ok64 TCPtest() {
     sane(1);
     call(TCPtest1);
@@ -217,6 +243,7 @@ ok64 TCPtest() {
     call(TCPtestNonblock);
     call(TCPtestBindWalk);
     call(TCPtestReuseAddr);
+    call(TCPtestNoDelay);
     done;
 }
 
