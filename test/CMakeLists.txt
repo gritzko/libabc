@@ -127,6 +127,12 @@ target_compile_options(PUPDURtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(PUPDURtest abc ${CMAKE_DL_LIBS})
 add_test(NAME PUPDURtest COMMAND PUPDURtest)
 
+add_executable(PUPNILtest PUPNIL.c)
+target_link_options(PUPNILtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(PUPNILtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(PUPNILtest abc)
+add_test(NAME PUPNILtest COMMAND PUPNILtest)
+
 add_executable(BOXtest BOX.c)
 target_link_options(BOXtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(BOXtest PRIVATE ${TEST_CXX_FLAGS})

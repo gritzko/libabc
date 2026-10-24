@@ -53,8 +53,12 @@ con ok64 PUPNOROOM = 0x197995d86d8616;
 // Crash policy: a 0-byte run is NOT unlinked nor skipped — PUPS cannot tell a
 // crashed create from a committed run that lost its bytes, so the owner, who
 // knows what it committed on top, decides (re-derive, unlink, or refuse).  A
-// durable create (PUPCreateAs) never leaves one.  A run truncated to a
-// non-zero length is not detected here (no row width); row-aware readers
+// durable create (PUPCreateAs) never leaves one.
+// PUPS-26A24FhuO9: an EMPTY run is legal: PUPCreate* of no bytes writes the
+// 7-byte trailer of an empty ToC (`len` 0, "TC"), which maps and reads as no
+// rows at every row width, so a 0-byte file still means a crashed create.  A
+// ladder merge whose output is empty still books no run (PUPS-001).
+// A run truncated to a non-zero length is not detected here (no row width); row-aware readers
 // check the residue.
 // Not idempotent: every file in `dir` becomes a new entry, even if a
 // matching pup_key already sits in PAST/DATA — same basename in a

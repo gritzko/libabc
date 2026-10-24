@@ -319,6 +319,9 @@ ok64 PUPOpenAside(kv64b pups, path8sc dir, u8csc ext) {
     return PUPOpenAll(pups, dir, ext);
 }
 
+// PUPS-26A24FhuO9: an empty run on disk, an empty ToC block's trailer.
+static u8c const PUP_NIL_RUN[PUP_TOC_TAIL_W] = {0, 0, 0, 0, 0, 'T', 'C'};
+
 // PUPS-004: tmp + atomic rename of `bytes` onto `<key><ext>`.
 // PUPS-005: callers pick a free key; nothing renames onto a live run.  With
 // `durable` the tmp is fsync'd before the rename and the directory after it,
@@ -334,10 +337,17 @@ static ok64 pup_write(path8s dir, u8cs ext, u8cs bytes, u64 pup_key,
     call(u8bFeed, tmppath, tmpsuf);
     call(PATHu8bTerm, tmppath);
 
+    //  PUPS-26A24FhuO9: an empty run is the bare trailer of an empty ToC, so
+    //  it maps, and a 0-byte file stays what a crashed create leaves.
+    u8cs body = {bytes[0], bytes[1]};
+    if (u8csEmpty(body)) {
+        body[0] = PUP_NIL_RUN;
+        body[1] = PUP_NIL_RUN + PUP_TOC_TAIL_W;
+    }
     int wfd = -1;
     call(FILECreate, &wfd, $path(tmppath));
     if (wfd >= 0) {
-        callsafe(FILEFeedAll(wfd, bytes), close(wfd));
+        callsafe(FILEFeedAll(wfd, body), close(wfd));
         if (durable) callsafe(FILESync(&wfd), close(wfd));
         close(wfd);
     }
@@ -526,6 +536,11 @@ static ok64 pup_toc_feed(u8s into, u8csc data, u32 row) {
 static void pup_toc_split(u8csp data, u8csp toc, u8csc raw, u32 row) {
     u8csMv(data, raw);
     toc[0] = toc[1] = raw[1];
+    if ((size_t)u8csLen(raw) == PUP_TOC_TAIL_W &&
+        memcmp(raw[0], PUP_NIL_RUN, PUP_TOC_TAIL_W) == 0) {
+        data[1] = raw[0];  //  an empty run, at every row width
+        return;
+    }
     if (row == 0) return;
     size_t size = (size_t)u8csLen(raw);
     if (size < PUP_TOC_TAIL_W) return;
