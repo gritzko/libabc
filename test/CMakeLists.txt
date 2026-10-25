@@ -257,6 +257,7 @@ target_compile_options(TCPtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(TCPtest abc)
 add_test(NAME TCPtest COMMAND TCPtest)
 
+if (WITH_CURL)
 add_executable(CURLtest CURL.c)
 target_link_options(CURLtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(CURLtest PRIVATE ${TEST_CXX_FLAGS})
@@ -280,6 +281,7 @@ target_compile_options(CURLfwtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(CURLfwtest abc)
 add_test(NAME CURLfwtest COMMAND CURLfwtest)
 set_tests_properties(CURLfwtest PROPERTIES TIMEOUT 30)
+endif()  # WITH_CURL
 
 endif()
 
@@ -413,7 +415,7 @@ add_test(NAME ROCKMERGEtest COMMAND ROCKMERGEtest)
 # strdup and the leaked easy handle + content-type curl_slist. Link-time
 # fault injection (--wrap), no sockets and no DNS, so it is NOT WITH_INET.
 # Apple ld64 has no --wrap, so the target is GNU-ld/lld only.
-if (NOT APPLE)
+if (WITH_CURL AND NOT APPLE)
 add_executable(CURLmemtest CURLmem.c)
 target_link_options(CURLmemtest PRIVATE ${TEST_LDD_FLAGS}
     -Wl,--wrap=calloc -Wl,--wrap=strdup

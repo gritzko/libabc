@@ -27,6 +27,10 @@ if (WASM_MODE)
     add_compile_definitions(_WASI_EMULATED_MMAN _WASI_EMULATED_SIGNAL _WASI_EMULATED_PROCESS_CLOCKS _WASI_EMULATED_GETPID)
 endif()
 
+#  BOOT-26A25Jhvsy: OFF builds abc without CURL.c/CURL.h, no libcurl
+#  needed or linked, and drops the CURL tests (POLtest drives CURL too)
+option(WITH_CURL "build CURL.c (libcurl) into abc" ON)
+
 option(WITH_ASAN "build with ASAN" OFF)
 if (WITH_ASAN)
     set(ASAN_FLAGS "-g -O1 -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
@@ -54,13 +58,16 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 if (NOT WASM_MODE)
 find_library(sodium NAMES sodium HINTS /usr /usr/local /opt/homebrew)
 find_path(SODIUM_INCLUDE_DIR NAMES sodium.h HINTS /usr/include /usr/local/include /opt/homebrew/include)
-#  curl is a HARD dependency: CURL.c is part of the full `abc`, and the test
-#  tree links `abc` unconditionally.  A QUIET find turned a missing
-#  libcurl-dev into ~45 `cannot find -labc` link errors, with the real cause
-#  buried in one STATUS line.  Fail at configure time, naming the package.
+#  curl is a HARD dependency of the full `abc` unless WITH_CURL is OFF:
+#  CURL.c is part of it, and the test tree links `abc` unconditionally.  A
+#  QUIET find turned a missing libcurl-dev into ~45 `cannot find -labc` link
+#  errors, with the real cause buried in one STATUS line.  Fail at configure
+#  time, naming the package.
 #  Ubuntu/Debian: libcurl4-gnutls-dev (CI) or libcurl4-openssl-dev.
 #  macOS: brew install curl.
-find_package(CURL REQUIRED)
+if (WITH_CURL)
+    find_package(CURL REQUIRED)
+endif()
 find_package(PkgConfig QUIET)
 if (PkgConfig_FOUND)
     pkg_check_modules(LZ4 liblz4)
@@ -162,6 +169,11 @@ BSD.c
 ryu/d2s.c
 )
 
+if (NOT WITH_CURL)
+list(REMOVE_ITEM ABC_HEADERS CURL.h)
+list(REMOVE_ITEM ABC_SOURCES CURL.c)
+endif()
+
 if (WITH_ROCKS)
 list(APPEND ABC_HEADERS ROCK.h)
 list(APPEND ABC_SOURCES ROCK.c)
@@ -181,7 +193,7 @@ if (WASM_MODE)
     return()
 endif()
 
-# Full abc: curl is required above; lz4 and sodium are optional.
+# Full abc: curl is required above (unless WITH_CURL is OFF); lz4 and sodium are optional.
 # BOOT-26A23Apv3i: without lz4 (Alpine: lz4-dev) PACK.c and the PACK
 # tests drop out; without sodium (libsodium-dev) the SHA/NACL tests do.
 # Everything else builds and tests.  ABC_SKIPPED names what was left out.
@@ -196,7 +208,11 @@ if (NOT sodium OR NOT SODIUM_INCLUDE_DIR)
     list(APPEND ABC_SKIPPED "SHA NACL (no sodium)")
 endif()
 add_library(abc STATIC ${ABC_HEADERS} ${ABC_SOURCES})
-target_link_libraries(abc CURL::libcurl)
+if (WITH_CURL)
+    target_link_libraries(abc CURL::libcurl)
+else()
+    list(APPEND ABC_SKIPPED "CURL (WITH_CURL OFF)")
+endif()
 if (LZ4_FOUND)
     target_include_directories(abc PUBLIC ${LZ4_INCLUDE_DIRS})
     target_link_directories(abc PUBLIC ${LZ4_LIBRARY_DIRS})
