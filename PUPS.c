@@ -224,7 +224,7 @@ static ok64 pup_scan(kv64b pups, path8sc dir, u8csc ext, b8 dedup) {
         //  unscanned — fail, a stack is never read short.
         u64 name_off = (u64)u8bDataLen(namebuf);
         kv64 kv = {.key = sq, .val = name_off};
-        if ($len(u8bIdleC(namebuf)) < u8csLen(base) + 1 ||
+        if ((u64)$len(u8bIdleC(namebuf)) < (u64)u8csLen(base) + 1 ||
             kv64bPush(seqnos, &kv) != OK) {
             __ = PUPNOROOM;
             break;
