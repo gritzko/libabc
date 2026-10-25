@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -127,13 +128,13 @@ static ok64 PUPTestOverflowLeak(void) {
 //  leaked DIR fd per iteration; the loop makes it unmistakable.
 static ok64 PUPTestIterErrLeak(void) {
     sane(1);
-#if defined(__FreeBSD__) || defined(__APPLE__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__)
     //  This repro needs OS PATH_MAX > FILE_PATH_MAX_LEN (1024) so the
     //  on-disk file can be created while the iterator's bounded push
-    //  still overflows.  FreeBSD's and Darwin's kernel MAXPATHLEN is
-    //  1024, so the precondition cannot be reached — open(ENAMETOOLONG)s
-    //  before the scan ever observes an entry.  The leak fix itself is
-    //  platform-agnostic and PupOverflowLeak above still exercises the
+    //  still overflows.  FreeBSD's, OpenBSD's and Darwin's kernel
+    //  MAXPATHLEN is 1024, so the precondition cannot be reached —
+    //  open(ENAMETOOLONG)s before the scan ever observes an entry.  The
+    //  leak fix itself is platform-agnostic and PupOverflowLeak above still exercises the
     //  close path.
     done;
 #endif
@@ -815,6 +816,14 @@ static ok64 PUPTestCrashLadder(void) {
 static ok64 PUPTestLock(void) {
     sane(1);
     call(FILEInit);
+    //  PUPOpenAll below maps all LOCK_KIDS*LOCK_N runs, an fd each: more
+    //  than OpenBSD's (512) or macOS's (256) default soft RLIMIT_NOFILE.
+    struct rlimit rl = {};
+    want(getrlimit(RLIMIT_NOFILE, &rl) == 0);
+    if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < 1024) {
+        rl.rlim_cur = rl.rlim_max < 1024 ? rl.rlim_max : 1024;
+        want(setrlimit(RLIMIT_NOFILE, &rl) == 0);
+    }
     char tmp[256];
     want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
     a_cstr(ext, ".lock.idx");
