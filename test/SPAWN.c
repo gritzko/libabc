@@ -1,6 +1,7 @@
 #include "FILE.h"
 
 #include <fcntl.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -189,12 +190,15 @@ ok64 SPAWNTestFdsInherit() {
     done;
 }
 
+//  The parent sends the signal: a shell's `kill -TERM $$` is not a
+//  signal death everywhere, OpenBSD ksh catches it and exits 143.
 ok64 SPAWNTestSignalDeath() {
     sane(1);
-    a_cstr(path, "sh");
-    ARGV(args, u8slit("sh"), u8slit("-c"), u8slit("kill -TERM $$"));
+    a_cstr(path, "sleep");
+    ARGV(args, u8slit("sleep"), u8slit("10"));
     pid_t pid = 0;
     call(FILESpawn, path, args, NULL, NULL, &pid);
+    test(kill(pid, SIGTERM) == 0, FAIL);
     int sig = -1;
     ok64 o = FILEReap(pid, &sig);
     test(o == FILESIGNAL, FAIL);
