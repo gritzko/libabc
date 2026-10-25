@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -754,61 +755,89 @@ static ok64 pup_mem_seal(kv64b pups, path8s dir, u8cs ext, u32 row,
 // DOG-027: merge the youngest `m` runs into one fresh run — the caller's
 // `merge` does the typed merge, Pup owns the tmp + rename seal and the
 // source unlinks.
+// PUPS-26A25EfKtr: the merge lands straight in the output run's mapping — the
+// tmp file is ftruncate'd to the bound (the OS hands out zero pages lazily),
+// mapped RW, merged + ToC'd in place, then trimmed to what was written.  No
+// heap scratch, no write() copy.
+static ok64 pup_collapse_into(u8bp out, u8css tail, u32 row, b8 bottom,
+                              pupmerge merge) {
+    sane(u8bOK(out) && merge != NULL);
+    u8s into = {u8bIdleHead(out), u8bTerm(out)};
+    call(merge, into, tail, bottom);
+    a_dup(u8c, merged, ((u8cs){u8bIdleHead(out), into[0]}));
+    //  PUPS-001: nothing survived — no ToC either; the caller sees DATA empty.
+    if (!u8csEmpty(merged)) call(pup_toc_feed, into, merged, row);
+    ((u8c **)out)[2] = into[0];
+    done;
+}
+
 static ok64 pup_collapse(kv64b pups, path8s dir, u8cs ext, pupmerge merge,
                          u32 row, u8css stack, size_t m) {
     sane(pups != NULL && $ok(dir) && $ok(ext) && merge != NULL && m > 1);
     size_t n = (size_t)$len(stack), total = 0;
     for (size_t i = n - m; i < n; i++) total += (size_t)u8csLen(stack[0][i]);
-    //  Heap, not BASS: a compaction merge is unbounded by the memtable.
     //  DOG-035: room for the merged run's own ToC block + trailer on top —
     //  one cell per page the merge can fill, and dedup only shortens it.
     size_t page = PUPTocRows(row) * row;
-    Bu8 scr = {};
-    call(u8bAllocate, scr,
-         total + (page ? (total / page + 2) * row : 0) +
-             PUP_TOC_TAIL_W);
-    u8s into = {u8bIdleHead(scr), u8bTerm(scr)};
+    size_t bound = total + (page ? (total / page + 2) * row : 0) +
+                   PUP_TOC_TAIL_W;
     u8css tail = {stack[0] + (n - m), stack[0] + n};
     //  PUPS-001: the merge spans the whole stack only when it takes every run
     //  and nothing older is inherited; only then may a tombstone be dropped.
     b8 bottom = m == n && PUPCountAll(pups) == PUPCount(pups);
-    try(merge, into, tail, bottom);
-    nedo { u8bFree(scr); fail(__); }
-    a_dup(u8c, merged, ((u8cs){u8bIdleHead(scr), into[0]}));
-    //  PUPS-005: the sources go OLDEST first.  A crash part way leaves the
-    //  merged run (if any) plus a YOUNGEST suffix of the sources: every
-    //  tombstone outlives the rows it shadows, so the stack reads as before.
-    u32 oldest = PUPCount(pups) - (u32)m;
-    //  PUPS-001: nothing survived (every row was dead): no empty run, which
-    //  could not be mapped anyway — the sources just go.
-    if (u8csEmpty(merged)) {
-        u8bFree(scr);
-        for (size_t k = 0; k < m; k++)
-            call(pup_drop, pups, dir, ext, oldest, YES);
-        pup_tail(pups);
-        done;
-    }
-    //  DOG-035: a compaction output is ToC'd exactly like a seal's — same
-    //  block, appended into the scratch before the run is booked.
-    try(pup_toc_feed, into, merged, row);
-    nedo { u8bFree(scr); fail(__); }
-    a_dup(u8c, body, ((u8cs){u8bIdleHead(scr), into[0]}));
     //  PUPS-005: a run name is never reused — renaming onto the youngest
     //  source (PUPS-004) let a crash keep older sources whose tombstones the
     //  bottom merge had dropped.  The merged run takes the next free key past
     //  the youngest source (sequential; the ladder holds the write lock), is
     //  made durable, booked, and only then are the sources unlinked.
     u64 key = PUPSeqno(pups, PUPCount(pups) - 1) + 1;
-    for (b8 taken = YES; __ == OK; key++) {
-        __ = pup_key_taken(&taken, pups, dir, ext, key);
-        if (__ == OK && !taken) break;
+    for (b8 taken = YES;; key++) {
+        call(pup_key_taken, &taken, pups, dir, ext, key);
+        if (!taken) break;
     }
-    then try(pup_write, dir, ext, body, key, YES);
-    then try(pup_book, pups, dir, ext, key);
-    for (size_t k = 0; k < m && __ == OK; k++)
-        __ = pup_drop(pups, dir, ext, oldest, YES);
-    u8bFree(scr);
+    a_path(runpath);
+    call(pup_path, runpath, dir, key, ext);
+    a_path(tmppath);
+    call(pup_path, tmppath, dir, key, ext);
+    a_cstr(tmpsuf, ".tmp");
+    call(u8bFeed, tmppath, tmpsuf);
+    call(PATHu8bTerm, tmppath);
+    u8bp out = NULL;
+    call(FILEMapCreate, &out, $path(tmppath), bound);
+#ifdef MADV_POPULATE_WRITE
+    //  The tmp is sparse: a first write per page traps into a read fault (a
+    //  readahead over holes) plus a page_mkwrite.  Prefault the bound for
+    //  writing in one call instead; advisory, so a refusal changes nothing.
+    madvise((void *)out[0], (size_t)(out[3] - out[0]), MADV_POPULATE_WRITE);
+#endif
+    try(pup_collapse_into, out, tail, row, bottom, merge);
+    b8 empty = __ == OK && u8bDataLen(out) == 0;
+    //  The output is trimmed to its written length, then fsync'd, before the
+    //  rename makes it a run.
+    if (__ == OK && !empty) {
+        int fd = FILEBookedFD(out);
+        try(FILETrimMap, out);
+        then try(FILESync, &fd);
+    }
+    FILEUnMap(out);
+    if (__ != OK || empty) FILEUnLink($path(tmppath));
     nedo fail(__);
+    //  PUPS-005: the sources go OLDEST first.  A crash part way leaves the
+    //  merged run (if any) plus a YOUNGEST suffix of the sources: every
+    //  tombstone outlives the rows it shadows, so the stack reads as before.
+    u32 oldest = PUPCount(pups) - (u32)m;
+    //  PUPS-001: nothing survived (every row was dead): no empty run, which
+    //  could not be mapped anyway — the sources just go.
+    if (!empty) {
+        call(FILERename, $path(tmppath), $path(runpath));
+        int dfd = -1;
+        call(FILEOpenDir, &dfd, dir);
+        callsafe(FILESync(&dfd), close(dfd));
+        close(dfd);
+        call(pup_book, pups, dir, ext, key);
+    }
+    for (size_t k = 0; k < m; k++)
+        call(pup_drop, pups, dir, ext, oldest, YES);
     pup_tail(pups);
     done;
 }
