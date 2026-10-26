@@ -83,7 +83,17 @@ fun void X(QS, Core)(T *lo, T *hi, int depth) {
         --depth;
 
         T *mid = lo + (hi - lo) / 2;
-        T *piv = X(QS, Med3)(lo, mid, hi - 1);
+        T *piv;
+        if (hi - lo > 128) {
+            //  Tukey's ninther: median-of-3 is fooled by back-to-back
+            //  sorted runs (BOX), then depth runs out into heapsort
+            size_t e = (size_t)(hi - lo) / 8;
+            piv = X(QS, Med3)(X(QS, Med3)(lo, lo + e, lo + 2 * e),
+                              X(QS, Med3)(mid - e, mid, mid + e),
+                              X(QS, Med3)(hi - 1 - 2 * e, hi - 1 - e, hi - 1));
+        } else {
+            piv = X(QS, Med3)(lo, mid, hi - 1);
+        }
         T pval = *piv;
         *piv = *(hi - 1);
         *(hi - 1) = pval;
