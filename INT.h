@@ -40,6 +40,11 @@ fun b8 n128Z(n128 const *a, n128 const *b) {
     return a->_64[1] < b->_64[1];
 }
 
+//  BOX-26A26EbjLj: the max records (u128max sits in 01.h)
+con n128 n128max = {{u64max, u64max}};
+con u256 u256max = {{u64max, u64max, u64max, u64max}};
+con u512 u512max = {{u64max, u64max, u64max, u64max, u64max, u64max, u64max, u64max}};
+
 fun b8 u256Z(u256 const *a, u256 const *b) {
     for (int i = 3; i >= 0; --i) {
         if (a->_64[i] != b->_64[i]) return a->_64[i] < b->_64[i];

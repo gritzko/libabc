@@ -623,6 +623,23 @@ ok64 PUPAllData(u8csb out, kv64b pups) {
 // --- DOG-027: the memtable — a sized pup the puts land in ---
 // =============================================================
 
+// BOX-26A26EbjLj: the memtables' run slices, per fd — process memory (BSS),
+// never stored in a mapped file.
+static u8cs PUP_MEM_RUN_SLOTS[FILE_MAX_OPEN][HIT_MAX_RUNS];
+static u8cs *PUP_MEM_RUNS[FILE_MAX_OPEN][4];
+
+u8cs *const *PUPMemRuns(u8bp mem) {
+    int fd = FILEBookedFD(mem);
+    if (fd < 0) return NULL;
+    return PUP_MEM_RUNS[fd];
+}
+
+static void pup_mem_runs_reset(int fd) {
+    u8cs **r = PUP_MEM_RUNS[fd];
+    r[0] = r[1] = r[2] = PUP_MEM_RUN_SLOTS[fd];
+    r[3] = PUP_MEM_RUN_SLOTS[fd] + HIT_MAX_RUNS;
+}
+
 // DOG-027: the live memtable is the dict's trailing ALL-ONES entry, if any.
 static u8bp pup_mem(kv64b pups) {
     u32 n = (u32)kv64bDataLen(pups);
@@ -675,6 +692,7 @@ static ok64 pup_mem_open(u8bp *mem, kv64b pups, path8s dir, u8cs ext,
     call(FILEMapCreate, &buf, $path(mpath), size);
     int fd = FILEBookedFD(buf);
     if (fd < 0) { FILEUnMap(buf); return PUPFAIL; }
+    pup_mem_runs_reset(fd);
     kv64 kv = {.key = PUP_MEM_KEY, .val = (u64)fd};
     try(kv64bPush, pups, &kv);
     if (__ != OK) { FILEUnMap(buf); fail(__); }
@@ -682,13 +700,13 @@ static ok64 pup_mem_open(u8bp *mem, kv64b pups, path8s dir, u8cs ext,
     done;
 }
 
-// DOG-027: INTERNAL sync — the typed hook runs only on non-empty DATA;
-// collapse on `force` or DATA past PUP_COLLAPSE, never on a plain read.
+// DOG-027: INTERNAL sync.  BOX-26A26EbjLj: a plain sync seals a non-empty
+// DATA segment into a run (+ the 1/8 ladder); `force` collapses every run into
+// one, what a seal needs.
 static ok64 pup_sync(u8bp mem, pupsync sync, b8 force) {
     sane(u8bOK(mem) && sync != NULL);
-    if (u8bDataLen(mem) == 0) done;
-    b8 collapse = force || u8bDataLen(mem) > PUP_COLLAPSE;
-    call(sync, mem, collapse);
+    if (force ? u8bBusyLen(mem) == 0 : u8bDataLen(mem) == 0) done;
+    call(sync, mem, force);
     done;
 }
 
@@ -898,6 +916,8 @@ ok64 PUPPutMem(kv64b pups, path8s dir, u8cs ext, u8csc rec, pupsync sync,
         }
     }
     call(u8bFeed, mem, rec);
+    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, BOXx_C's 512 B) the segment becomes a run
+    if (u8bDataLen(mem) > PUP_COLLAPSE) call(pup_sync, mem, sync, NO);
     done;
 }
 
@@ -942,15 +962,14 @@ ok64 PUPAllRunsToc(u8csb out, u8csb tocs, kv64b pups, pupsync sync,
         if (tocs) call(u8csbFeed1, tocs, t);
     }
     if (!mem || u8bBusyLen(mem) == 0) done;
+    //  BOX-26A26EbjLj: the segment sealed, the memtable's runs follow as
+    //  they are, oldest first.
     call(pup_sync, mem, sync, NO);
-    if (u8bPastLen(mem) > 0) {
-        a_dup(u8c, past, u8bPastC(mem));
-        call(u8csbFeed1, out, past);
-        if (tocs) call(u8csbFeed1, tocs, none);
-    }
-    if (u8bDataLen(mem) > 0) {
-        a_dup(u8c, data, u8bDataC(mem));
-        call(u8csbFeed1, out, data);
+    u8cs *const *runs = PUPMemRuns(mem);
+    test(runs != NULL, PUPFAIL);
+    for (u8cs *r = runs[1]; r < runs[2]; r++) {
+        if (u8csEmpty(*r)) continue;
+        call(u8csbFeed1, out, *r);
         if (tocs) call(u8csbFeed1, tocs, none);
     }
     done;

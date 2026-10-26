@@ -1,196 +1,228 @@
+//  BOX-26A26EbjLj: the run-buffer BOX — puts, ladder, Get/Range, merge op,
+//  against a naive oracle.
 #include "INT.h"
+#include "KV.h"
 #include "PRO.h"
 #include "TEST.h"
 
-// DOG-027: no csSwap prerequisite — HIT swaps entry pointers now.
 #define X(M, name) M##u64##name
 #include "HITx.h"
 #include "BOXx.h"
 #undef X
 
-// Helper: build a u64s buffer of N entries on the stack.
-//
-// 8 KB range with default 1 KB dirty + 8x ratio gives:
-//   dirty = 1 KB (128 entries)
-//   L0    = 1 KB (128)
-//   L1    = 8 KB ... wait 1+1+8 = 10 KB > 8 KB.  So 8 KB is too small.
-// Actual capacities for 8 KB range:
-//   dirty 1 KB, L0 1 KB → fits.  L1 8 KB → doesn't fit alone (only 6 KB
-//   left).  Top eats the 6 KB → 2 levels: dirty + L0(1KB) + L_top(7KB).
-//   But Levels() only opens a level once `step <= budget`, so step=1 KB
-//   passes (budget 7 KB), step=8 KB fails (budget 6 KB).  Result:
-//   1 sorted level (L0 = 1 KB), then top eats the 7 KB → L0 cap=8 KB.
-//
-// Use a 16 KB range so we get at least 3 sorted levels for cascade
-// testing: dirty 1 + L0 1 + L1 8 = 10, top eats 6 → L1 cap = 14 KB.
+//  keyed lane, no merge op: the youngest row of a key wins
+#define BOXx_C (8 * sizeof(kv64))
+#define X(M, name) M##kv64##name
+#include "HITx.h"
+#include "BOXx.h"
+#undef X
 
-#define BOX_RANGE_BYTES (16 * 1024)
-#define BOX_RANGE_N     (BOX_RANGE_BYTES / sizeof(u64))
+//  keyed lane WITH a merge op: vals add up
+typedef struct cnt64 {
+    u64 key;
+    u64 val;
+} cnt64;
+fun b8 cnt64Z(cnt64 const *a, cnt64 const *b) { return a->key < b->key; }
+con cnt64 cnt64max = {u64max, u64max};
+#define X(M, name) M##cnt64##name
+#include "Bx.h"
+#include "QSORTx.h"
+#include "HITx.h"
+#define BOXx_C (5 * sizeof(cnt64))
+#define BOXx_MERGE(acc, nxt) ((acc)->val += (nxt)->val)
+#include "BOXx.h"
+#undef X
 
-// BOX0: open on a freshly-zeroed range — every Ts is empty.
+#define N_PUT 20000
+#define KEYS 3000
+
+static u64 rnd(u64 *s) {
+    *s ^= *s << 13;
+    *s ^= *s >> 7;
+    *s ^= *s << 17;
+    return *s;
+}
+
+//  every run ascending, strictly (one row per key), runs back to back in PAST,
+//  the ladder holds
+static ok64 check_runs(u64b recs, u64csb runs) {
+    sane(1);
+    u64 const *at = recs[0];
+    a_pad(u64, lens, HIT_MAX_RUNS);
+    for (u64cs *r = runs[1]; r < runs[2]; r++) {
+        want((*r)[0] == at);
+        for (u64 const *p = (*r)[0] + 1; p < (*r)[1]; p++) want(p[-1] < *p);
+        at = (*r)[1];
+        u64bFeed1(lens, (u64)$len(*r));
+    }
+    want(at == recs[1]);
+    want(HITLadderOK(u64bDataC(lens)));
+    done;
+}
+
 ok64 BOX0() {
     sane(1);
-    u64 mem[BOX_RANGE_N] = {0};
-    u8s range = {(u8 *)mem, (u8 *)(mem + BOX_RANGE_N)};
-
-    u64s slots[16];        // descriptor array (1 dirty + N sorted + 1 fence)
-    u64sb box = {slots, slots, slots, slots + 16};
-
-    call(BOXu64Open, box, range);
-
-    // PAST has 1 (dirty), DATA has at least 1 sorted level.
-    testeqv((long long)((size_t)(box[1] - box[0])), (long long)((size_t)1), "%lld");
-    test((size_t)(box[2] - box[1]) >= 1, FAILSANITY);
-
-    // Dirty empty: start == end at range start.
-    testeqv((long long)((u64 *)box[0][0][0]), (long long)(mem), "%lld");
-    testeqv((long long)((u64 *)box[0][0][1]), (long long)(mem), "%lld");
-
-    // IDLE head is the fence: start == end, both at range_end.
-    u64 *fence_pos = (u64 *)mem + BOX_RANGE_N;
-    testeqv((long long)((u64 *)box[2][0][0]), (long long)(fence_pos), "%lld");
-    testeqv((long long)((u64 *)box[2][0][1]), (long long)(fence_pos), "%lld");
-    done;
-}
-
-// BOX1: feed a few entries below the dirty limit, no cascade.
-ok64 BOX1() {
-    sane(1);
-    u64 mem[BOX_RANGE_N] = {0};
-    u8s range = {(u8 *)mem, (u8 *)(mem + BOX_RANGE_N)};
-
-    u64s slots[16];
-    u64sb box = {slots, slots, slots, slots + 16};
-    call(BOXu64Open, box, range);
-
-    u64 v;
-    v = 100; call(BOXu64Feed1, box, &v);
-    v = 7;   call(BOXu64Feed1, box, &v);
-    v = 42;  call(BOXu64Feed1, box, &v);
-
-    // Dirty should hold three entries in arrival order.
-    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)3), "%lld");
-    testeqv((long long)(box[0][0][0][0]), (long long)((u64)100), "%lld");
-    testeqv((long long)(box[0][0][0][1]), (long long)((u64)7), "%lld");
-    testeqv((long long)(box[0][0][0][2]), (long long)((u64)42), "%lld");
-
-    // Flush and verify sorted-deduped output: 7, 42, 100.
-    u64 outbuf[16] = {0};
-    u64s save = {outbuf, outbuf + 16};
-    u64 *save_start = save[0];
-    call(BOXu64Flush, box, save);
-    size_t produced = (size_t)(save[0] - save_start);
-    testeqv((long long)(produced), (long long)((size_t)3), "%lld");
-    testeqv((long long)(outbuf[0]), (long long)((u64)7), "%lld");
-    testeqv((long long)(outbuf[1]), (long long)((u64)42), "%lld");
-    testeqv((long long)(outbuf[2]), (long long)((u64)100), "%lld");
-
-    // Dirty should be empty after flush.
-    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)0), "%lld");
-    done;
-}
-
-// BOX2: empty Flush is a no-op (no output).
-ok64 BOX2() {
-    sane(1);
-    u64 mem[BOX_RANGE_N] = {0};
-    u8s range = {(u8 *)mem, (u8 *)(mem + BOX_RANGE_N)};
-
-    u64s slots[16];
-    u64sb box = {slots, slots, slots, slots + 16};
-    call(BOXu64Open, box, range);
-
-    u64 outbuf[4] = {0};
-    u64s save = {outbuf, outbuf + 4};
-    u64 *save_start = save[0];
-    call(BOXu64Flush, box, save);
-    testeqv((long long)((size_t)(save[0] - save_start)), (long long)((size_t)0), "%lld");
-    done;
-}
-
-// BOX3: feed enough to trigger one cascade (dirty → L0).
-ok64 BOX3() {
-    sane(1);
-    u64 mem[BOX_RANGE_N] = {0};
-    u8s range = {(u8 *)mem, (u8 *)(mem + BOX_RANGE_N)};
-
-    u64s slots[16];
-    u64sb box = {slots, slots, slots, slots + 16};
-    call(BOXu64Open, box, range);
-
-    // 128 dirty entries (1 KB / 8 B) fills dirty exactly; the 129th
-    // entry triggers cascade.
-    for (u64 i = 1; i <= 200; i++)
-        call(BOXu64Feed1, box, &i);
-
-    u64 outbuf[256] = {0};
-    u64s save = {outbuf, outbuf + 256};
-    u64 *save_start = save[0];
-    call(BOXu64Flush, box, save);
-    size_t produced = (size_t)(save[0] - save_start);
-    testeqv((long long)(produced), (long long)((size_t)200), "%lld");
-    for (size_t i = 0; i < produced; i++)
-        testeqv((long long)(outbuf[i]), (long long)((u64)(i + 1)), "%lld");
-    done;
-}
-
-// BOX4: dedup across cascade — feed 1..50 three times in shuffled
-//       order, output should be 1..50 (50 entries).
-ok64 BOX4() {
-    sane(1);
-    u64 mem[BOX_RANGE_N] = {0};
-    u8s range = {(u8 *)mem, (u8 *)(mem + BOX_RANGE_N)};
-
-    u64s slots[16];
-    u64sb box = {slots, slots, slots, slots + 16};
-    call(BOXu64Open, box, range);
-
-    for (int round = 0; round < 3; round++) {
-        for (u64 i = 1; i <= 50; i++) {
-            u64 v = (i * 7 + (u64)round * 11) % 50 + 1;
-            call(BOXu64Feed1, box, &v);
+    Bu64 recs = {};
+    call(u64bMap, recs, 1 << 20);
+    u64cs slots[HIT_MAX_RUNS];
+    u64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    u8 seen[KEYS] = {};
+    u64 s = 42;
+    for (int i = 0; i < N_PUT; i++) {
+        u64 v = 1 + rnd(&s) % KEYS;
+        seen[v - 1] = 1;
+        call(BOXu64Put, recs, runs, &v);
+        if (i % 997 == 0) call(check_runs, recs, runs);
+    }
+    for (u64 k = 1; k <= KEYS + 5; k++) {
+        u64 got = 0;
+        ok64 o = BOXu64Get(recs, runs, &k, &got);
+        if (k <= KEYS && seen[k - 1]) {
+            want(o == OK && got == k);
+        } else {
+            want(o == NONE);
         }
     }
-
-    u64 outbuf[256] = {0};
-    u64s save = {outbuf, outbuf + 256};
-    u64 *save_start = save[0];
-    call(BOXu64Flush, box, save);
-    size_t produced = (size_t)(save[0] - save_start);
-    testeqv((long long)(produced), (long long)((size_t)50), "%lld");
-    for (size_t i = 0; i < produced; i++)
-        testeqv((long long)(outbuf[i]), (long long)((u64)(i + 1)), "%lld");
+    //  Range [100, 200): the HIT merge equals the oracle
+    u64cs view[HIT_MAX_RUNS];
+    u64css into = {view, view + HIT_MAX_RUNS};
+    u64 lo = 100, hi = 200;
+    call(BOXu64Range, into, recs, runs, &lo, &hi);
+    want(recs[1] == recs[2]);  //  the segment became a run
+    call(check_runs, recs, runs);
+    u64 out[256];
+    u64s o = {out, out + 256};
+    call(HITu64Merge, into, o);
+    u64 *w = out;
+    for (u64 k = lo; k < hi; k++)
+        if (seen[k - 1]) want(*w++ == k);
+    want(w == o[0]);
+    //  collapse all: one run, every seen key once
+    call(BOXu64Sort, recs, runs, YES);
+    want(runs[2] - runs[1] == 1);
+    size_t nseen = 0;
+    for (int k = 0; k < KEYS; k++) nseen += seen[k];
+    testeqv((long long)$len(runs[1][0]), (long long)nseen, "%lld");
+    call(check_runs, recs, runs);
+    u64bUnMap(recs);
     done;
 }
 
-// BOX5: re-Open after Close restores empty state.
-ok64 BOX5() {
+//  youngest wins across runs and within the segment
+ok64 BOX1() {
     sane(1);
-    u64 mem[BOX_RANGE_N] = {0};
-    u8s range = {(u8 *)mem, (u8 *)(mem + BOX_RANGE_N)};
+    Bkv64 recs = {};
+    call(kv64bMap, recs, 1 << 16);
+    kv64cs slots[HIT_MAX_RUNS];
+    kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    u64 last[64] = {};
+    u64 s = 7;
+    for (u64 i = 1; i <= 5000; i++) {
+        kv64 r = {rnd(&s) % 64, i};
+        last[r.key] = i;
+        call(BOXkv64Put, recs, runs, &r);
+        if (i % 333 == 0) {
+            for (u64 k = 0; k < 64; k++) {
+                kv64 key = {k, 0}, got = {};
+                ok64 o = BOXkv64Get(recs, runs, &key, &got);
+                if (last[k]) {
+                    want(o == OK && got.val == last[k]);
+                } else {
+                    want(o == NONE);
+                }
+            }
+        }
+    }
+    call(BOXkv64Sort, recs, runs, YES);
+    want(runs[2] - runs[1] == 1);
+    kv64 const *p = runs[1][0][0];
+    for (; p < runs[1][0][1]; p++) want(p->val == last[p->key]);
+    kv64bUnMap(recs);
+    done;
+}
 
-    u64s slots[16];
-    u64sb box = {slots, slots, slots, slots + 16};
-    call(BOXu64Open, box, range);
+//  the merge op folds in run order: vals sum up, in Get and after Sort
+ok64 BOX2() {
+    sane(1);
+    Bcnt64 recs = {};
+    call(cnt64bMap, recs, 1 << 16);
+    cnt64cs slots[HIT_MAX_RUNS];
+    cnt64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    u64 sum[50] = {};
+    u64 s = 99;
+    for (u64 i = 1; i <= 4000; i++) {
+        cnt64 r = {rnd(&s) % 50, i};
+        sum[r.key] += i;
+        call(BOXcnt64Put, recs, runs, &r);
+    }
+    for (u64 k = 0; k < 50; k++) {
+        cnt64 key = {k, 0}, got = {};
+        ok64 o = BOXcnt64Get(recs, runs, &key, &got);
+        if (sum[k]) want(o == OK && got.val == sum[k]);
+    }
+    call(BOXcnt64Sort, recs, runs, YES);
+    want(runs[2] - runs[1] == 1);
+    for (cnt64 const *p = runs[1][0][0]; p < runs[1][0][1]; p++)
+        want(p->val == sum[p->key]);
+    cnt64bUnMap(recs);
+    done;
+}
 
-    for (u64 i = 1; i <= 10; i++) call(BOXu64Feed1, box, &i);
+//  the tombstone record is refused; a full buffer says BOXFULL
+ok64 BOX3() {
+    sane(1);
+    u64 mem[16];
+    u64b recs = {mem, mem, mem, mem + 16};
+    u64cs slots[4];
+    u64csb runs = {slots, slots, slots, slots + 4};
+    u64 t = ~0ULL;
+    want(BOXu64Put(recs, runs, &t) == BOXFAIL);
+    for (u64 i = 1; i <= 16; i++) call(BOXu64Put, recs, runs, &i);
+    u64 x = 99;
+    want(BOXu64Put(recs, runs, &x) == BOXFULL);
+    done;
+}
 
-    u64 outbuf[16] = {0};
-    u64s save = {outbuf, outbuf + 16};
-    call(BOXu64Close, box, save);
-
-    // After Close: DATA empty, IDLE absorbed everything.
-    testeqv((long long)((size_t)(box[2] - box[1])), (long long)((size_t)0), "%lld");
-
-    // Re-Open and verify we can feed again.
-    call(BOXu64Open, box, range);
-    test((size_t)(box[2] - box[1]) >= 1, FAILSANITY);
-    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)0), "%lld");
-
-    u64 v = 99;
-    call(BOXu64Feed1, box, &v);
-    testeqv((long long)((size_t)(box[0][0][1] - box[0][0][0])), (long long)((size_t)1), "%lld");
-    testeqv((long long)(box[0][0][0][0]), (long long)((u64)99), "%lld");
+//  ascending puts take the in-order shortcut; a key repeated across a run
+//  boundary must not, and dips into older keys must still merge
+ok64 BOX4() {
+    sane(1);
+    Bkv64 recs = {};
+    call(kv64bMap, recs, 1 << 16);
+    kv64cs slots[HIT_MAX_RUNS];
+    kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    u64 last[4000] = {};
+    for (u64 i = 1; i <= 6000; i++) {
+        u64 k = i < 3000 ? i : (i % 7 ? i / 2 : 2999);
+        if (k >= 4000) k = 3999;
+        kv64 r = {k, i};
+        last[k] = i;
+        call(BOXkv64Put, recs, runs, &r);
+        if (i % 500 == 0) {
+            kv64 const *at = recs[0];
+            for (kv64cs *rr = runs[1]; rr < runs[2]; rr++) {
+                want((*rr)[0] == at);
+                for (kv64 const *p = (*rr)[0] + 1; p < (*rr)[1]; p++)
+                    want(p[-1].key < p->key);
+                at = (*rr)[1];
+            }
+            want(at == recs[1]);
+        }
+    }
+    for (u64 k = 0; k < 4000; k++) {
+        kv64 key = {k, 0}, got = {};
+        ok64 o = BOXkv64Get(recs, runs, &key, &got);
+        if (last[k]) {
+            want(o == OK && got.val == last[k]);
+        } else {
+            want(o == NONE);
+        }
+    }
+    call(BOXkv64Sort, recs, runs, YES);
+    want(runs[2] - runs[1] == 1);
+    for (kv64 const *p = runs[1][0][0]; p < runs[1][0][1]; p++)
+        want(p->val == last[p->key]);
+    kv64bUnMap(recs);
     done;
 }
 
@@ -201,7 +233,6 @@ ok64 BOXtest() {
     call(BOX2);
     call(BOX3);
     call(BOX4);
-    call(BOX5);
     done;
 }
 

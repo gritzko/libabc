@@ -183,12 +183,13 @@ Index-based prev/next links living inside buffer records (no pointers).
  -  `BINPeaks`/`BINPath` — list the peak bins covering a length, and the sibling path from a bin up to the covering peak.
  -  `bin64Z` — numeric ordering comparator on bin numbers.
 
-###  BOX.h, BOXx.h — leveled overflow box
+###  BOX.h, BOXx.h — sorted runs in one record buffer
 
-A fixed multi-level staging container that flushes to a save slice when a level fills (paired with sorted output).
+An in-memory sorted container (BOX-26A26EbjLj): a record buffer (PAST = sorted runs back to back, DATA = the unsorted segment) plus a buffer of run slices fed to HITx as they are. Needs `X(,Z)` and `X(,max)` (the tombstone, sorts last); optional `BOXx_MERGE`, `BOXx_C` (segment bytes, 512). The PUPS memtable runs on it.
 
- -  `BOXOpen`/`BOXFeed1`/`BOXFlush`/`BOXClose` — open a box over a range, push records, flush a full level.
- -  `BOXLevels` — compute the per-level capacities for a byte budget.
+ -  `BOXPut` — append; past c the segment becomes a run (`BOXSort`).
+ -  `BOXSort` — seal the segment, collapse the tailing runs by the 1/8 ladder (or all of them): parallel in-place combine, qsort, trim the max tail.
+ -  `BOXGet`/`BOXRange` — point lookup (newest wins, or the merge fold); the runs trimmed to `[lo, hi)`.
 
 ###  BIT.h — `u1` bitmap (bit addressing over u64 words)
 

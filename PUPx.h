@@ -17,7 +17,7 @@
 //  may still hold the key.  Left undefined it is 0: nothing is ever dead.
 //
 //  Needs, instantiated BEFORE this header (abc already does kv64 and u64):
-//    T, T##Z, the T##s / T##cs / T##css slices and T##b buffer (Bx),
+//    T, T##Z, T##max (BOX-26A26EbjLj: the tombstone, sorts last), the T##s / T##cs / T##css slices and T##b buffer (Bx),
 //    QSORTx for T (QSORT<T>InSort, <T>sSort, <T>sDedup), HITx for T.
 //
 //  PUPx_WHOLE_ROW: define to 1 before including when <T>Z compares the WHOLE
@@ -30,6 +30,8 @@
 #include "PRO.h"
 #include "PUPS.h"
 
+#include "BOXx.h"
+
 #ifndef PUPx_DEAD
 #define PUPx_DEAD(r) 0
 #endif
@@ -38,52 +40,15 @@
 #define PUPx_WHOLE_ROW 0
 #endif
 
-//  The memtable's typed sort/dedup/collapse: sort + keep-last dedup on DATA;
-//  on `collapse`, fold PAST+DATA with the ties to DATA.
+//  BOX-26A26EbjLj: the memtable is a BOX over the mapping — PAST its sorted
+//  runs, DATA the unsorted segment; the run slices are PUPMemRuns(mem).
+//  Seal the segment into a run and run the 1/8 ladder; on `collapse`, fold
+//  every run into one.  Equal keys: the youngest row wins.
 fun ok64 X(PUP, Sync)(u8bp mem, b8 collapse) {
     sane(u8bOK(mem));
-    X(, ) *dh = (X(, ) *)mem[1];
-    X(, ) *de = (X(, ) *)mem[2];
-    b8 clean = YES;
-    for (X(, ) *p = dh + 1; p < de; p++)
-        if (!X(, Z)(p - 1, p)) {
-            clean = NO;
-            break;
-        }
-    if (!clean) {
-        X(, s) d = {dh, de};
-        //  One page of DATA keeps the stable insertion sort; a big memtable of
-        //  a whole-row type takes the introsort.
-        if (!PUPx_WHOLE_ROW ||
-            (size_t)(de - dh) * sizeof(X(, )) <= FILESysPage())
-            X(QSORT, InSort)(dh, de);
-        else
-            X(, sSort)(d);
-        X(, sDedup)(d);
-        call(u8bShed, mem, (size_t)(de - d[1]) * sizeof(X(, )));
-    }
-    if (!collapse) done;
-    if (mem[0] == mem[1]) {
-        call(u8bUsedAll, mem);
-        done;
-    }
-    //  The scratch is the LIVE mapping's size, not a constant — the memtable is
-    //  whatever the open sized it to.
-    //  (a_carve, spelled out: it pastes its type argument, X() cannot be one)
-    X(B, ) scr = {};
-    must(ABC_BASS[1] == ABC_BASS[2], "PUPx sync in open gauge");
-    call(X(, bAcquire), ABC_BASS, scr,
-         (size_t)(u8bTerm(mem) - (u8 *)mem[0]) / sizeof(X(, )));
-    X(, cs) runs[2] = {{(X(, ) const *)mem[0], (X(, ) const *)mem[1]},
-                       {(X(, ) const *)mem[1], (X(, ) const *)mem[2]}};
-    X(, css) hp = {runs, runs + 2};
-    X(, ) *base = X(, bIdleHead)(scr);
-    X(, s) into = {base, X(, bTerm)(scr)};
-    call(X(HIT, Merge), hp, into);
-    u8cs merged = {(u8c *)base, (u8c *)into[0]};
-    u8bReset(mem);
-    call(u8bFeed, mem, merged);
-    call(u8bUsedAll, mem);
+    u8cs *const *runs = PUPMemRuns(mem);
+    test(runs != NULL, PUPFAIL);
+    call(X(BOX, Sort), (X(, ) **)mem, (X($, c) **)runs, collapse);
     done;
 }
 

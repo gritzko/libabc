@@ -1,346 +1,228 @@
-//  abc/BOX.h — staging memtable for puppy-style sorted runs.
+//  abc/BOXx.h — BOX-26A26EbjLj: an in-memory sorted container of fixed-size
+//  records: a record buffer plus a buffer of slices, one per sorted run.
 //
-//  A BOX is a fixed-capacity byte range partitioned into one unsorted
-//  *dirty* region followed by a 1/8-ladder of sorted runs.  New
-//  entries land in dirty; when dirty fills, it is sorted and cascade-
-//  merged into the lowest sorted level whose chunk holds the
-//  (post-dedup) merged result.  When even the top level cannot
-//  absorb, BOXFULL is returned — the caller is expected to Flush.
+//  recs  X(,b)    the records (bMap the whole max range once):
+//                 PAST = the sorted runs back to back, oldest first;
+//                 DATA = the unsorted last segment the puts append to;
+//                 IDLE = room.
+//  runs  X(,csb)  DATA = one slice per run, oldest first; each run is
+//                 ASCENDING by X(,Z) and holds at most one row per key.
+//                 Fed to HITx as they are (DATA is an X(,css)).
 //
-//  Layout inside the caller-provided byte range:
+//  Puts append to the segment until it is longer than c (BOXx_C bytes, 512).  Then
+//  X(BOX,Sort): (1) stable-sort the segment and fold its own equal keys, the
+//  segment becomes the youngest run; (2) select the tailing runs by the 1/8
+//  ladder (HITLadderOverRuns); (3) one parallel pass over the selected runs,
+//  in place: equal keys (one per run) are combined by BOXx_MERGE in run order
+//  (else the youngest wins), the result goes into the last equal slot, the
+//  others become the tombstone; (4) QSORTx the selected range ascending, the
+//  tombstones sink to the tail; (5) trim them: the range is one run.
 //
-//    [ dirty 1 KB | L0 1 KB | L1 8 KB | L2 64 KB | ... | L_top: rest ]
+//  Tombstone: X(,max), the type's max record (u64max, kv64max...), a reserved
+//  value no real record takes; X(,Z) must sort it last.  Trimmed by value.
 //
-//  Number of sorted levels is derived from the range length so the
-//  template never hardwires a layer count.  The top level absorbs
-//  any slack.  The default 1 KB dirty / 8× ratio can be overridden
-//  per-instantiation by defining BOX_DIRTY_BYTES / BOX_RATIO before
-//  including this header.  Both macros are #undef'd at the end so
-//  the next instantiation gets a clean slate.
-//
-//  Empty-slot sentinel is the all-zeros entry: chunks past their
-//  current data are zero, and a level's data extent is recovered on
-//  Open by scanning forward for the first zero — same convention as
-//  HASHx.  Real entries must satisfy `!X(,IsZero)(rec)`; the
-//  instantiating type is responsible for upholding that invariant.
-//
-//  The descriptor buffer is a `Tsb` on the caller's stack laid out
-//  per ABC PAST/DATA/IDLE convention, with one twist: BOX uses both
-//  PAST and IDLE for one populated slice each.
-//
-//    PAST  = box[0..1] : the dirty level's Ts (one descriptor)
-//    DATA  = box[1..2] : sorted levels' Ts entries, youngest-first
-//                        (DOG-027: higher levels hold OLDER data)
-//    IDLE  = box[2..3] : starts with a *fence* Ts {range_end,range_end}
-//                        followed by any unused descriptor slots
-//
-//  The fence in IDLE makes `data[i+1].start` work uniformly to read
-//  level `i`'s chunk end, including the top level whose chunk end is
-//  the byte range's end.  HIT's filter-empty pass skips the fence
-//  naturally, so callers can still feed `X(,sDataC)(box)` straight
-//  to HITx for lookup, range scan, or full sweep without a wrapper.
-//  DOG-027: that direct feed is youngest-first; a keyed lane (age
-//  breaks ties) must reverse DATA into an oldest-first runs array.
-//
-//  Like HASHx and HITx, BOX is a pure data-structure template: it
-//  knows nothing about allocation, mmap, or files.  The caller
-//  supplies the byte range, decides where it lives, and chooses
-//  what to do with the sorted output of Flush/Close.
-//
-//  Instantiation prerequisites: Bx, QSORTx, and HITx must already
-//  be instantiated for the same type before BOX.h is included.
-//
+//  Instantiate (Bx, QSORTx, HITx for T first; X(,Z) and X(,max) defined):
 //      #define X(M, name) M##u64##name
-//      #include "abc/Bx.h"
-//      #include "abc/QSORTx.h"
-//      #include "abc/HITx.h"
-//      #include "abc/BOX.h"
+//      #define BOXx_MERGE(acc, nxt) ...   // optional: fold younger *nxt into *acc
+//      #define BOXx_C 512                 // optional: c, segment BYTES
+//      #include "abc/BOXx.h"
 //      #undef X
-//
-//  Required environment: X(,Z), X(,IsZero), X(,sSort), X(HIT,Merge).
 
 #include "B.h"
 #include "BOX.h"
+#include "HIT.h"
 #include "OK.h"
 #include "S.h"
 
 #define BOX_T X(, )
 
-#ifndef BOX_DIRTY_BYTES
-#define BOX_DIRTY_BYTES 1024
+#ifndef BOXx_C
+#define BOXx_C 512  //  c: the unsorted segment's length in BYTES
 #endif
 
-#ifndef BOX_RATIO
-#define BOX_RATIO 8
+//  The tombstone is the type's max record X(,max), compared by value.
+fun b8 X(BOX, IsTomb)(BOX_T const *r) {
+    BOX_T mx = X(, max);
+    return memcmp((void const *)r, (void const *)&mx, sizeof(BOX_T)) == 0;
+}
+
+fun void X(BOX, Tomb)(BOX_T *r) {
+    BOX_T mx = X(, max);
+    *r = mx;
+}
+
+fun b8 X(BOX, Eq)(BOX_T const *a, BOX_T const *b) {
+    return !X(, Z)(a, b) && !X(, Z)(b, a);
+}
+
+//  (1) stable-sort the segment, fold equal keys in arrival order; returns the
+//  folded end.
+fun BOX_T *X(BOX, Fold)(BOX_T *lo, BOX_T *hi) {
+    if (hi - lo < 2) return hi;
+    X(QSORT, InSort)(lo, hi);
+    BOX_T *w = lo;
+    for (BOX_T *r = lo + 1; r < hi; r++) {
+        if (X(BOX, Eq)(w, r)) {
+#ifdef BOXx_MERGE
+            BOXx_MERGE(w, r);
+#else
+            *w = *r;
 #endif
-
-#ifndef BOX_MAX_LEVELS
-#define BOX_MAX_LEVELS 32
-#endif
-
-#define BOX_DIRTY_N (BOX_DIRTY_BYTES / sizeof(BOX_T))
-
-// --- Geometry ----------------------------------------------------------
-//
-//  Walk the ladder forward from the dirty chunk; stop when the next
-//  step would overflow the byte budget.  The top level absorbs any
-//  remaining slack so the entire range is partitioned.  When `caps`
-//  is non-NULL it must hold at least the returned count of size_t
-//  slots; on return, `caps[i]` is level `i`'s capacity in T entries.
-
-fun size_t X(BOX, Levels)(size_t range_bytes, size_t *caps) {
-    if (range_bytes < BOX_DIRTY_BYTES * 2) return 0;
-    size_t budget = range_bytes - BOX_DIRTY_BYTES;
-    size_t step = BOX_DIRTY_BYTES;
-    size_t n = 0;
-    while (step <= budget && n < BOX_MAX_LEVELS) {
-        if (caps) caps[n] = step / sizeof(BOX_T);
-        budget -= step;
-        n++;
-        if (step > ((size_t)-1) / BOX_RATIO) break;
-        step *= BOX_RATIO;
-    }
-    if (n == 0) return 0;
-    if (caps) caps[n - 1] += budget / sizeof(BOX_T);
-    return n;
-}
-
-// --- Open --------------------------------------------------------------
-//
-//  Carve `range` into `dirty | L0 | L1 | ... | L_top` and populate
-//  `box` with one Ts per region.  Each Ts's `start` is fixed at its
-//  chunk's start; `end` is recovered by scanning forward for the
-//  first zero so re-attaching to a previously-used range restores
-//  the BOX's logical state.  An additional fence Ts
-//  {range_end, range_end} is written at IDLE's head.
-//
-//  The caller's `box` must have capacity for at least `2 + n_levels`
-//  Ts slots.  Returns BOXFAIL when range is too small or box too
-//  short.
-
-fun ok64 X(BOX, Open)(X(, sb) box, u8s range) {
-    sane(box != NULL && range != NULL);
-    size_t total = (size_t)((u8c *)range[1] - (u8c *)range[0]);
-    size_t caps[BOX_MAX_LEVELS];
-    size_t n = X(BOX, Levels)(total, caps);
-    if (n == 0) return BOXFAIL;
-
-    //  Capacity check: dirty + sorted levels + fence.
-    X($, ) **bb = (X($, ) **)box;
-    size_t descs = (size_t)(bb[3] - bb[0]);
-    if (descs < 2 + n) return BOXFAIL;
-
-    BOX_T *base = (BOX_T *)range[0];
-    X($, ) *slot = bb[0];
-
-    //  PAST: dirty.
-    BOX_T *cs = base;
-    BOX_T *ce = cs + BOX_DIRTY_N;
-    BOX_T *q = cs;
-    while (q < ce && !X(, IsZero)(q)) q++;
-    (*slot)[0] = cs;
-    (*slot)[1] = q;
-    slot++;
-
-    //  DATA: each sorted level.
-    BOX_T *cursor = ce;
-    for (size_t i = 0; i < n; i++) {
-        cs = cursor;
-        ce = cs + caps[i];
-        q = cs;
-        while (q < ce && !X(, IsZero)(q)) q++;
-        (*slot)[0] = cs;
-        (*slot)[1] = q;
-        slot++;
-        cursor = ce;
-    }
-
-    //  IDLE head: fence.  cursor now equals range_end (in T units).
-    (*slot)[0] = cursor;
-    (*slot)[1] = cursor;
-
-    bb[1] = bb[0] + 1;
-    bb[2] = bb[0] + 1 + n;
-    return OK;
-}
-
-// --- Feed1 -------------------------------------------------------------
-//
-//  Append one entry into the dirty level.  When dirty fills, sort it
-//  and cascade-merge dirty + every populated level below the chosen
-//  target into the lowest empty target whose chunk capacity holds
-//  the merged result.  If even the top level can't absorb, returns
-//  BOXFULL — caller must Flush, then retry.
-
-fun ok64 X(BOX, Feed1)(X(, sb) box, BOX_T const *rec) {
-    //  zero is reserved as empty-slot sentinel; caller must not feed it
-    sane(box != NULL && rec != NULL && !X(, IsZero)(rec));
-
-    X($, ) **bb = (X($, ) **)box;
-    X($, ) *dirty = bb[0];
-    BOX_T *de = (*dirty)[1];
-    BOX_T *dterm = (*dirty)[0] + BOX_DIRTY_N;
-
-    if (de < dterm) {
-        *de = *rec;
-        (*dirty)[1] = de + 1;
-        return OK;
-    }
-
-    //  Dirty full: sort.
-    {
-        X(, s) ds = {(*dirty)[0], (*dirty)[1]};
-        X(, sSort)(ds);
-    }
-
-    X($, ) *data = bb[1];
-    X($, ) *idle = bb[2];   // first IDLE slot is the fence
-    size_t n = (size_t)(idle - data);
-
-    //  Walk DATA forward.  Accumulate every populated level we pass
-    //  through; the first empty level whose chunk capacity holds the
-    //  accumulated total (dirty + lower populated levels) is the
-    //  cascade target.
-    size_t merged = (size_t)((*dirty)[1] - (*dirty)[0]);
-    size_t target = n;
-    for (size_t i = 0; i < n; i++) {
-        BOX_T *lcs = data[i][0];
-        BOX_T *lce = data[i + 1][0];   // fence guarantees i+1 is valid
-        size_t cap = (size_t)(lce - lcs);
-        size_t cur = (size_t)(data[i][1] - lcs);
-        if (cur == 0 && cap >= merged) { target = i; break; }
-        merged += cur;
-    }
-    if (target == n) return BOXFULL;
-
-    //  Build a HIT input from dirty + every level below target.  Do
-    //  the merge into the target chunk, then zero each source
-    //  chunk's data tail and reset its Ts.
-    //  DOG-027: HIT runs are OLDEST-first; higher levels hold older data
-    //  and dirty is youngest, so feed L(target-1)..L0, then dirty.
-    X(, cs) runs[BOX_MAX_LEVELS + 1];
-    size_t nruns = 0;
-    for (size_t i = target; i > 0; i--) {
-        runs[nruns][0] = data[i - 1][0];
-        runs[nruns][1] = data[i - 1][1];
-        nruns++;
-    }
-    runs[nruns][0] = (*dirty)[0];
-    runs[nruns][1] = (*dirty)[1];
-    nruns++;
-
-    //  Merge into target's chunk.  ABC-015: HITMerge drains into a
-    //  bounded slice (the chunk, fenced by the next level's head) and
-    //  advances its head; we then read back the new data extent.
-    X(, css) heap = {runs, runs + nruns};
-    X(, s) out = {data[target][0], data[target + 1][0]};
-    ok64 o = X(HIT, Merge)(heap, out);
-    if (o != OK) return o;
-    data[target][1] = out[0];
-
-    //  Zero the dirty buffer and the source levels' data.  Required
-    //  so a future Open's first-zero scan recovers the right extent
-    //  (after this cascade those chunks are logically empty).
-    {
-        size_t z = (size_t)((*dirty)[1] - (*dirty)[0]);
-        for (size_t i = 0; i < z; i++) (*dirty)[0][i] = (BOX_T){0};
-        (*dirty)[1] = (*dirty)[0];
-    }
-    for (size_t i = 0; i < target; i++) {
-        size_t z = (size_t)(data[i][1] - data[i][0]);
-        for (size_t k = 0; k < z; k++) data[i][0][k] = (BOX_T){0};
-        data[i][1] = data[i][0];
-    }
-
-    //  Append the triggering record to the now-empty dirty.
-    *((*dirty)[1]) = *rec;
-    (*dirty)[1] += 1;
-    return OK;
-}
-
-// --- Flush -------------------------------------------------------------
-//
-//  Drain dirty + every sorted level into `save` as one merged
-//  deduplicated sorted run.  Advances `save[0]` past the produced
-//  entries (caller reads off the produced length via the slice
-//  difference).  Resets every level Ts to empty and zeros each
-//  chunk's data tail, so the BOX is ready for fresh inserts.
-//
-//  Returns BOXNOROOM when `save` is too small to hold the merged
-//  output (caller can size `save` >= total_entries upfront).
-
-fun ok64 X(BOX, Flush)(X(, sb) box, X(, s) save) {
-    sane(box != NULL && save != NULL);
-    X($, ) **bb = (X($, ) **)box;
-    X($, ) *dirty = bb[0];
-    X($, ) *data = bb[1];
-    X($, ) *idle = bb[2];
-    size_t n = (size_t)(idle - data);
-
-    //  Sort dirty before merging (HIT requires sorted runs).
-    if ((*dirty)[1] > (*dirty)[0]) {
-        X(, s) ds = {(*dirty)[0], (*dirty)[1]};
-        X(, sSort)(ds);
-    }
-
-    //  Build runs: every non-empty DATA level + dirty.
-    //  DOG-027: OLDEST-first for HIT — top level down to L0, dirty last.
-    X(, cs) runs[BOX_MAX_LEVELS + 1];
-    size_t nruns = 0;
-    for (size_t i = n; i > 0; i--) {
-        if (data[i - 1][1] > data[i - 1][0]) {
-            runs[nruns][0] = data[i - 1][0];
-            runs[nruns][1] = data[i - 1][1];
-            nruns++;
+        } else {
+            *++w = *r;
         }
     }
-    if ((*dirty)[1] > (*dirty)[0]) {
-        runs[nruns][0] = (*dirty)[0];
-        runs[nruns][1] = (*dirty)[1];
-        nruns++;
-    }
-    if (nruns == 0) return OK;   // empty box
+    return w + 1;
+}
 
-    //  Conservative pre-flight: ensure save has room for the sum of
-    //  all source lengths (dedup may produce less, never more).
-    size_t total = 0;
-    for (size_t i = 0; i < nruns; i++)
-        total += (size_t)(runs[i][1] - runs[i][0]);
-    if ((size_t)(save[1] - save[0]) < total) return BOXNOROOM;
-
-    X(, css) heap = {runs, runs + nruns};
-    X(HIT, Merge)(heap, save);
-
-    //  Zero everything and reset Ts.
-    {
-        size_t z = (size_t)((*dirty)[1] - (*dirty)[0]);
-        for (size_t i = 0; i < z; i++) (*dirty)[0][i] = (BOX_T){0};
-        (*dirty)[1] = (*dirty)[0];
+//  (3) the parallel in-place pass over runs[from..n): equal keys combined into
+//  the youngest equal slot, the others tombstoned.
+fun void X(BOX, Pass)(X($, c) *runs, size_t m) {
+    BOX_T *cur[HIT_MAX_RUNS];
+    for (size_t i = 0; i < m; i++) cur[i] = (BOX_T *)runs[i][0];
+    for (;;) {
+        BOX_T *min = NULL;
+        for (size_t i = 0; i < m; i++)
+            if (cur[i] < runs[i][1] && (!min || X(, Z)(cur[i], min)))
+                min = cur[i];
+        if (!min) break;
+        BOX_T key = *min;
+        BOX_T *last = NULL;
+        for (size_t i = 0; i < m; i++) {
+            if (cur[i] == runs[i][1] || !X(BOX, Eq)(cur[i], &key)) continue;
+            BOX_T *at = cur[i]++;
+            if (last) {
+#ifdef BOXx_MERGE
+                BOXx_MERGE(last, at);
+                *at = *last;
+#endif
+                X(BOX, Tomb)(last);
+            }
+            last = at;
+        }
     }
-    for (size_t i = 0; i < n; i++) {
-        size_t z = (size_t)(data[i][1] - data[i][0]);
-        for (size_t k = 0; k < z; k++) data[i][0][k] = (BOX_T){0};
-        data[i][1] = data[i][0];
+}
+
+//  Seal the segment into a run, then collapse the tailing runs the 1/8 ladder
+//  selects — or, with `all`, every run into one.  BOXFULL: no run slot left.
+fun ok64 X(BOX, Sort)(X(, b) recs, X(, csb) runs, b8 all) {
+    BOX_T **rb = (BOX_T **)recs;
+    X($, c) **sb = (X($, c) **)runs;
+    if (rb[2] > rb[1]) {
+        if (sb[2] == sb[3]) return BOXFULL;
+        BOX_T *end = X(BOX, Fold)(rb[1], rb[2]);
+        (*sb[2])[0] = rb[1];
+        (*sb[2])[1] = end;
+        sb[2]++;
+        rb[1] = rb[2] = end;
     }
+    size_t n = (size_t)(sb[2] - sb[1]);
+    if (n > HIT_MAX_RUNS) return HITTOOMANY;
+    size_t m = n;
+    if (!all) {
+        a_pad(u64, lens, HIT_MAX_RUNS);
+        for (X($, c) *r = sb[1]; r < sb[2]; r++)
+            u64bFeed1(lens, (u64)((*r)[1] - (*r)[0]));
+        m = HITLadderOverRuns(u64bDataC(lens));
+    }
+    if (m < 2) return OK;
+    X($, c) *sel = sb[2] - m;
+    BOX_T *lo = (BOX_T *)sel[0][0];
+    BOX_T *hi = (BOX_T *)sel[m - 1][1];
+    //  runs already in order (ascending keys): adjacent, no equal keys, done
+    b8 ordered = YES;
+    for (size_t i = 1; i < m && ordered; i++)
+        ordered = X(, Z)(sel[i - 1][1] - 1, sel[i][0]);
+    if (!ordered) {
+        X(BOX, Pass)(sel, m);
+        X(, s) range = {lo, hi};
+        X(, sSort)(range);
+        while (hi > lo && X(BOX, IsTomb)(hi - 1)) hi--;
+    }
+    sel[0][1] = hi;
+    sb[2] = sel + 1;
+    rb[1] = rb[2] = hi;
     return OK;
 }
 
-// --- Close -------------------------------------------------------------
-//
-//  Flush, then collapse the descriptor buffer: DATA becomes empty,
-//  PAST stays one slot (dirty), IDLE absorbs every prior DATA slot
-//  along with the fence.  Caller must Open again before reuse.
+//  Append one record; past c bytes the segment becomes a run (X(BOX,Sort)).
+//  BOXFULL when the record buffer has no room — the caller seals or drops.
+fun ok64 X(BOX, Put)(X(, b) recs, X(, csb) runs, BOX_T const *rec) {
+    BOX_T **rb = (BOX_T **)recs;
+    if (X(BOX, IsTomb)(rec)) return BOXFAIL;
+    if (rb[2] == rb[3]) return BOXFULL;
+    *rb[2]++ = *rec;
+    if ((size_t)(rb[2] - rb[1]) * sizeof(BOX_T) <= BOXx_C) return OK;
+    return X(BOX, Sort)(recs, runs, NO);
+}
 
-fun ok64 X(BOX, Close)(X(, sb) box, X(, s) save) {
-    ok64 o = X(BOX, Flush)(box, save);
+//  Point lookup: runs plus the segment, newest wins (or the BOXx_MERGE fold
+//  in age order).  NONE when no record carries the key.
+fun ok64 X(BOX, Get)(X(, b) recs, X(, csb) runs, BOX_T const *key,
+                     BOX_T *out) {
+    X($, c) **sb = (X($, c) **)runs;
+    BOX_T const **rb = (BOX_T const **)recs;
+#ifdef BOXx_MERGE
+    b8 hit = NO;
+    for (X($, c) *r = sb[1]; r < sb[2]; r++) {
+        X(, sc) rr = {(BOX_T *)(*r)[0], (BOX_T *)(*r)[1]};
+        BOX_T *p = X(, sBinSearch)(key, rr);
+        if (!p) continue;
+        if (hit) {
+            BOXx_MERGE(out, p);
+        } else {
+            *out = *p;
+            hit = YES;
+        }
+    }
+    for (BOX_T const *p = rb[1]; p < rb[2]; p++) {
+        if (!X(BOX, Eq)(p, key)) continue;
+        if (hit) {
+            BOXx_MERGE(out, p);
+        } else {
+            *out = *p;
+            hit = YES;
+        }
+    }
+    return hit ? OK : NONE;
+#else
+    for (BOX_T const *p = rb[2]; p > rb[1]; p--)
+        if (X(BOX, Eq)(p - 1, key)) {
+            *out = *(p - 1);
+            return OK;
+        }
+    for (X($, c) *r = sb[2]; r > sb[1]; r--) {
+        X(, sc) rr = {(BOX_T *)(*(r - 1))[0], (BOX_T *)(*(r - 1))[1]};
+        BOX_T *p = X(, sBinSearch)(key, rr);
+        if (p) {
+            *out = *p;
+            return OK;
+        }
+    }
+    return NONE;
+#endif
+}
+
+//  Range view: seal the segment into a run, then fill `into` (the caller's
+//  slice array, at least the run count long) with every run trimmed to
+//  [lo, hi), oldest first, empty ones dropped — a HITx input as it is.
+fun ok64 X(BOX, Range)(X(, css) into, X(, b) recs, X(, csb) runs,
+                       BOX_T const *lo, BOX_T const *hi) {
+    ok64 o = X(BOX, Sort)(recs, runs, NO);
     if (o != OK) return o;
-    X($, ) **bb = (X($, ) **)box;
-    bb[2] = bb[1];   // collapse DATA to empty
-    return OK;
+    X($, c) **sb = (X($, c) **)runs;
+    X(, cs) *w = into[0];
+    for (X($, c) *r = sb[1]; r < sb[2]; r++) {
+        if (w == into[1]) return BOXNOROOM;
+        (*w)[0] = (*r)[0];
+        (*w)[1] = (*r)[1];
+        w++;
+    }
+    into[1] = w;
+    o = X(HIT, SeekRange)(into, lo, hi);
+    return o == NODATA ? OK : o;
 }
 
-#undef BOX_DIRTY_N
-#undef BOX_MAX_LEVELS
-#undef BOX_RATIO
-#undef BOX_DIRTY_BYTES
+#undef BOXx_MERGE
+#undef BOXx_C
 #undef BOX_T

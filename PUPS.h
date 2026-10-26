@@ -223,9 +223,18 @@ fun u64 PUPSeqno(kv64b pups, u32 i) {
 // pages (`FILESysPage`, never a hardcoded 4096); 0 means one page, the default.
 #define PUP_MEM_PAGES 1
 
-// DOG-027: family-side typed hook — stable-sort (QSORT<type>InSort, never the
-// introsort) + keep-last dedup DATA; on `collapse`, fold DATA into PAST.
+// DOG-027: family-side typed hook over the memtable.
+// BOX-26A26EbjLj: the memtable is a BOX (BOXx.h): PAST holds its sorted runs,
+// DATA the unsorted segment the puts append to.  The hook seals DATA into a
+// run and collapses the tailing runs by the 1/8 ladder; on `collapse`, every
+// run into ONE (PAST), as a seal needs.  The run slices live in process memory
+// (PUPMemRuns), never in the mapped file.
 typedef ok64 (*pupsync)(u8bp mem, b8 collapse);
+
+// BOX-26A26EbjLj: the memtable's run slices — a u8csb, DATA = one byte slice
+// per run, oldest first — kept per fd of the memtable mapping `mem`.  Reset
+// when a memtable opens; NULL for a buffer that is no booked mapping.
+u8cs *const *PUPMemRuns(u8bp mem);
 
 // DOG-027: family-side typed compaction merge — HIT<type>Merge over the
 // oldest-first byte slices `srcs`; `into`'s head advances past the merged
