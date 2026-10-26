@@ -55,11 +55,9 @@ fun b8 X(BOX, Eq)(BOX_T const *a, BOX_T const *b) {
     return !X(, Z)(a, b) && !X(, Z)(b, a);
 }
 
-//  (1) stable-sort the segment, fold equal keys in arrival order; returns the
-//  folded end.
-fun BOX_T *X(BOX, Fold)(BOX_T *lo, BOX_T *hi) {
+//  Fold adjacent equal keys of a sorted [lo,hi) into one; returns the end.
+fun BOX_T *X(BOX, Dedup)(BOX_T *lo, BOX_T *hi) {
     if (hi - lo < 2) return hi;
-    X(QSORT, InSort)(lo, hi);
     BOX_T *w = lo;
     for (BOX_T *r = lo + 1; r < hi; r++) {
         if (X(BOX, Eq)(w, r)) {
@@ -73,6 +71,14 @@ fun BOX_T *X(BOX, Fold)(BOX_T *lo, BOX_T *hi) {
         }
     }
     return w + 1;
+}
+
+//  (1) stable-sort the segment, fold equal keys in arrival order; returns the
+//  folded end.
+fun BOX_T *X(BOX, Fold)(BOX_T *lo, BOX_T *hi) {
+    if (hi - lo < 2) return hi;
+    X(QSORT, InSort)(lo, hi);
+    return X(BOX, Dedup)(lo, hi);
 }
 
 //  (3) the parallel in-place pass over runs[from..n): equal keys combined into
@@ -153,6 +159,35 @@ fun ok64 X(BOX, Put)(X(, b) recs, X(, csb) runs, BOX_T const *rec) {
     if (rb[2] == rb[3]) return BOXFULL;
     *rb[2]++ = *rec;
     if ((size_t)(rb[2] - rb[1]) * sizeof(BOX_T) <= BOXx_C) return OK;
+    return X(BOX, Sort)(recs, runs, NO);
+}
+
+//  Append a batch as ONE run: seal the pending segment, qsort the batch in
+//  place, fold its equal keys, then run the ladder once.  The sort is not
+//  stable: equal keys INSIDE one batch fold in no particular order (the
+//  merge op must not care, else one of them survives); across batches and
+//  puts, younger still wins.  BOXFULL: no room; BOXFAIL: a tombstone row.
+fun ok64 X(BOX, PutBatch)(X(, b) recs, X(, csb) runs, BOX_T const *rows,
+                          size_t n) {
+    BOX_T **rb = (BOX_T **)recs;
+    X($, c) **sb = (X($, c) **)runs;
+    if (n == 0) return OK;
+    for (size_t i = 0; i < n; i++)
+        if (X(BOX, IsTomb)(rows + i)) return BOXFAIL;
+    if (rb[2] > rb[1]) {
+        ok64 o = X(BOX, Sort)(recs, runs, NO);
+        if (o != OK) return o;
+    }
+    if ((size_t)(rb[3] - rb[2]) < n || sb[2] == sb[3]) return BOXFULL;
+    BOX_T *lo = rb[2];
+    memcpy(lo, rows, n * sizeof(BOX_T));
+    X(, s) batch = {lo, lo + n};
+    X(, sSort)(batch);
+    BOX_T *end = X(BOX, Dedup)(lo, lo + n);
+    (*sb[2])[0] = lo;
+    (*sb[2])[1] = end;
+    sb[2]++;
+    rb[1] = rb[2] = end;
     return X(BOX, Sort)(recs, runs, NO);
 }
 

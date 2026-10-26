@@ -226,6 +226,54 @@ ok64 BOX4() {
     done;
 }
 
+//  batches become runs: distinct keys per batch, youngest batch wins, mixed
+//  with single puts; the ladder holds
+ok64 BOX5() {
+    sane(1);
+    Bkv64 recs = {};
+    call(kv64bMap, recs, 1 << 18);
+    kv64cs slots[HIT_MAX_RUNS];
+    kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    u64 last[5000] = {};
+    u64 s = 3, stamp = 0;
+    kv64 batch[700];
+    for (int b = 0; b < 120; b++) {
+        u8 used[5000] = {};
+        size_t n = 0;
+        for (int i = 0; i < 700; i++) {
+            u64 k = rnd(&s) % 5000;
+            if (used[k]) continue;
+            used[k] = 1;
+            batch[n++] = (kv64){k, ++stamp};
+            last[k] = stamp;
+        }
+        call(BOXkv64PutBatch, recs, runs, batch, n);
+        kv64 one = {rnd(&s) % 5000, ++stamp};
+        last[one.key] = stamp;
+        call(BOXkv64Put, recs, runs, &one);
+        a_pad(u64, lens, HIT_MAX_RUNS);
+        for (kv64cs *r = runs[1]; r < runs[2]; r++) {
+            for (kv64 const *p = (*r)[0] + 1; p < (*r)[1]; p++)
+                want(p[-1].key < p->key);
+            u64bFeed1(lens, (u64)$len(*r));
+        }
+        want(HITLadderOK(u64bDataC(lens)));
+    }
+    for (u64 k = 0; k < 5000; k++) {
+        kv64 key = {k, 0}, got = {};
+        ok64 o = BOXkv64Get(recs, runs, &key, &got);
+        if (last[k]) {
+            want(o == OK && got.val == last[k]);
+        } else {
+            want(o == NONE);
+        }
+    }
+    kv64 t = kv64max;
+    want(BOXkv64PutBatch(recs, runs, &t, 1) == BOXFAIL);
+    kv64bUnMap(recs);
+    done;
+}
+
 ok64 BOXtest() {
     sane(1);
     call(BOX0);
@@ -233,6 +281,7 @@ ok64 BOXtest() {
     call(BOX2);
     call(BOX3);
     call(BOX4);
+    call(BOX5);
     done;
 }
 
