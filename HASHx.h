@@ -134,6 +134,48 @@ fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
     return X(HASH, shift)(data, ndx);
 }
 
+// HASH-26A26Cq06k: grow a bMap-ed table.  The table is the buffer's
+// idle slice (the whole map, as X(,bMap) leaves it).  Map a range of
+// len*2 (pow2), re-Put every live entry scanning the old, unmap the old.
+// Should a line still overflow, the new map is dropped and len doubled
+// again.  Needs X(,bMap)/X(,bUnMap) (Bx.h instantiated for T).
+fun ok64 X(HASH, Grow)(X(B, ) buf) {
+    sane(buf != NULL && buf[0] != NULL && buf[0] == buf[2]);
+    X($, ) old = {buf[2], buf[3]};
+    size_t len = $len(old);
+    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), FAILSANITY);
+    for (len <<= 1; len != 0; len <<= 1) {
+        X(B, ) nb = {};
+        call(X(, bMap), nb, len);
+        X($, ) data = {nb[2], nb[3]};
+        ok64 o = OK;
+        for (T *p = old[0]; p < old[1] && o == OK; ++p)
+            if (!X($, is0)(old, p - old[0])) o = X(HASH, Put)(data, p);
+        if (o == OK) {
+            call(X(, bUnMap), buf);
+            for (int i = 0; i < 4; ++i) buf[i] = nb[i];
+            done;
+        }
+        call(X(, bUnMap), nb);
+        if (o != HASHNOROOM) fail(o);
+    }
+    fail(HASHNOROOM);
+}
+
+// Put into a bMap-ed table, Grow-ing first if rec's line is full.
+// Probes with find before Put: with ABC_HASH_CONVERGE a NOROOM Put
+// has already swapped some resident out, i.e. lost it.
+fun ok64 X(HASH, PutGrow)(X(B, ) buf, T const *rec) {
+    sane(buf != NULL && buf[0] != NULL);
+    size_t ndx = 0;
+    for (;;) {
+        X($, ) data = {buf[2], buf[3]};
+        if (HASHNOROOM != X(HASH, find)(&ndx, data, rec))
+            return X(HASH, Put)(data, rec);
+        call(X(HASH, Grow), buf);
+    }
+}
+
 #undef MASK
 #undef LMASK
 #undef ABC_HASH_LINE

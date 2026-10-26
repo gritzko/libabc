@@ -215,6 +215,66 @@ ok64 HASHo() {
     done;
 }
 
+// HASH-26A26Cq06k: Put into a 16-slot bMap-ed table until a line is full,
+// Grow, carry on; every key must survive every Grow.
+ok64 HASHgrow() {
+    sane(1);
+    Bu32 buf = {};
+    call(u32bMap, buf, 16);
+    u32 grows = 0;
+    for (u32 i = 1; i <= 5000; ++i) {
+        // CONVERGE Put may evict a record on NOROOM: probe with find first
+        size_t ndx = 0;
+        while (HASHNOROOM == HASHu32find(&ndx, u32bIdle(buf), &i)) {
+            size_t was = u32bIdleLen(buf);
+            call(HASHu32Grow, buf);
+            want(u32bIdleLen(buf) > was);
+            ++grows;
+        }
+        call(HASHu32Put, u32bIdle(buf), &i);
+    }
+    want(grows > 3);
+    want(0 == (u32bIdleLen(buf) & (u32bIdleLen(buf) - 1)));
+    for (u32 i = 1; i <= 5000; ++i) {
+        u32 v = i;
+        call(HASHu32Get, &v, u32bIdle(buf));
+        want(v == i);
+    }
+    u32 n = 5001;
+    want(HASHNONE == HASHu32Get(&n, u32bIdle(buf)));
+    for (u32 i = 1; i <= 5000; i += 2) call(HASHu32Del, u32bIdle(buf), &i);
+    call(HASHu32Grow, buf);  // deleted entries must not come back
+    for (u32 i = 1; i <= 5000; ++i) {
+        u32 v = i;
+        want((i & 1 ? HASHNONE : OK) == HASHu32Get(&v, u32bIdle(buf)));
+    }
+    call(u32bUnMap, buf);
+    done;
+}
+
+// PutGrow: kv records, values survive growth, overwrite keeps one entry.
+ok64 HASHputgrow() {
+    sane(1);
+    Bkv32 buf = {};
+    call(kv32bMap, buf, 16);
+    for (u32 k = 1; k <= 3000; ++k) {
+        kv32 r = {.key = k, .val = k * 7};
+        call(HASHkv32PutGrow, buf, &r);
+    }
+    kv32 r = {.key = 42, .val = 1};
+    call(HASHkv32PutGrow, buf, &r);
+    size_t live = 0;
+    $for(kv32, p, kv32bIdle(buf)) if (p->key) ++live;
+    testeqv((long long)live, 3000LL, "%lld");
+    for (u32 k = 1; k <= 3000; ++k) {
+        kv32 g = {.key = k};
+        call(HASHkv32Get, &g, kv32bIdle(buf));
+        want(g.val == (k == 42 ? 1 : k * 7));
+    }
+    call(kv32bUnMap, buf);
+    done;
+}
+
 ok64 RAPtest() {
     sane(1);
     u8c hello[] = "hello world";
@@ -249,6 +309,8 @@ ok64 HASH() {
     call(HASH3);
     call(HASHd);
     call(HASHo);
+    call(HASHgrow);
+    call(HASHputgrow);
     call(RAPtest);
     done;
 }
