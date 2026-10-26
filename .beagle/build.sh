@@ -8,6 +8,9 @@
 # SECSs [LOG]` line per suite and a `N/M suites passed, failed: ...` summary;
 # its exit status is the number of failed suites.  `test SUITE...` runs only
 # those (`be test SUITE`): each name matches suite X or Xtest exactly.
+# BUILD-26A26IKs0g: a failed suite's LOG is build/Testing/NAME.log, its own
+# output cut from LastTest.log (which holds every suite's); the suite list
+# for a bad `test SUITE` is taken first, as `ctest -N` empties LastTest.log.
 set -eu
 CF="--rtlib=compiler-rt"
 configure() {
@@ -19,16 +22,24 @@ skipped() {
     s=$(cat build/skipped.txt 2>/dev/null || :)
     [ -z "$s" ] || echo "build.sh: skipped: $s"
 }
-LOG=build/Testing/Temporary/LastTest.log
+LAST=build/Testing/Temporary/LastTest.log
+# suite NAME's output in $LAST -> build/Testing/NAME.log, the path echoed
+own_log() {
+    awk -v n="$1" '/^[0-9]+\/[0-9]+ Testing: / { in_ = ($3 == n); out = 0; next }
+        in_ && /^<end of output>$/ { out = 0 }
+        in_ && out { print }
+        in_ && /^Output:$/ { getline; out = 1 }' "$LAST" >"build/Testing/$1.log"
+    echo "build/Testing/$1.log"
+}
 case "${1:-}" in
     configure) configure ;;
     build) [ -f build/build.ninja ] || configure; ninja -C build ;;
     test) shift; [ -f build/build.ninja ] || configure; ninja -C build
           if [ $# -gt 0 ]; then
+              all=$(ctest --test-dir build -N | sed -n 's/^ *Test *#[0-9]*: //p' | tr '\n' ' ')
               ctest --test-dir build --no-tests=error --output-on-failure \
                   -R "^($(IFS='|'; echo "$*"))(test)?\$" && exit 0 || r=$?
-              echo "build.sh: suites: $(ctest --test-dir build -N |
-                  sed -n 's/^ *Test *#[0-9]*: //p' | tr '\n' ' ')" >&2
+              echo "build.sh: suites: $all" >&2
               exit $r
           fi
           O=build/ctest.out
@@ -41,8 +52,8 @@ case "${1:-}" in
                    print $4, v, $(NF-1) }' "$O" |
           while read -r n v t; do
               case "$v" in Passed) echo "be-suite: $n PASS ${t}s" ;;
-                  Timeout) echo "be-suite: $n TIMEOUT ${t}s $LOG" ;;
-                  *) echo "be-suite: $n FAIL ${t}s $LOG" ;; esac
+                  Timeout) echo "be-suite: $n TIMEOUT ${t}s $(own_log "$n")" ;;
+                  *) echo "be-suite: $n FAIL ${t}s $(own_log "$n")" ;; esac
           done | sort >build/suites.txt
           cat build/suites.txt
           ALL=$(wc -l <build/suites.txt)
