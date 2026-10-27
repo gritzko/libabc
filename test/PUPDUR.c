@@ -2,8 +2,8 @@
 //  (1) a durable create fsyncs the run before its rename and the directory
 //      after it; the plain create keeps the fast path (no fsync at all);
 //  (2) PUPOpenAll never returns OK with a run missing: a 0-byte run (what a
-//      crashed non-durable create leaves), an fd budget too small for the
-//      stack, and more runs than one scan holds all fail.
+//      crashed non-durable create leaves) fails; PUPS-26A276Xh2e: a run holds
+//      no fd, so an fd budget smaller than the stack reads it whole.
 #include "PUPS.h"
 
 #include <dlfcn.h>
@@ -66,8 +66,8 @@ static ok64 PUPDurCreate(void) {
     a_cstr(ext, ".dur.idx");
     a_cstr(body, "sixteen-byte-row");
     a_dup(u8c, b, body);
-    Bkv64 pups = {};
-    call(kv64bAllocate, pups, 8);
+    Bpup256 pups = {};
+    call(pup256bAllocate, pups, 8);
 
     dur_reset();
     call(PUPCreateAt, pups, $path(dir), ext, b, 1000);
@@ -104,8 +104,8 @@ static ok64 PUPDurEmptyRun(void) {
     call(dur_put, tmp, ext, 1001, 0);
     call(dur_put, tmp, ext, 1002, 32);
 
-    Bkv64 pups = {};
-    call(kv64bAllocate, pups, 8);
+    Bpup256 pups = {};
+    call(pup256bAllocate, pups, 8);
     ok64 o = PUPOpenAll(pups, $path(dir), ext);
     want(o == PUPEMPTY);
     call(PUPClose, pups);
@@ -122,6 +122,7 @@ static ok64 PUPDurEmptyRun(void) {
 }
 
 //  60 runs, 40 fds: the review's scanskip probe returned OK with 37 runs.
+//  PUPS-26A276Xh2e: runs hold no fd now, so all 60 open under 40 fds.
 static ok64 PUPDurNoFile(void) {
     sane(1);
     call(FILEInit);
@@ -137,16 +138,16 @@ static ok64 PUPDurNoFile(void) {
         struct rlimit rl = {.rlim_cur = LIM, .rlim_max = LIM};
         if (setrlimit(RLIMIT_NOFILE, &rl) != 0) _exit(3);
         a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
-        Bkv64 pups = {};
-        if (kv64bAllocate(pups, N + 4) != OK) _exit(3);
+        Bpup256 pups = {};
+        if (pup256bAllocate(pups, N + 4) != OK) _exit(3);
         ok64 o = PUPOpenAll(pups, $path(dir), ext);
         u32 n = PUPCount(pups);
         PUPClose(pups);
-        if (o == OK) {
-            fprintf(stderr, "PUPDurNoFile: OK with %u of %d runs\n", n, N);
+        if (o != OK || n != (u32)N) {
+            fprintf(stderr, "PUPDurNoFile: %u of %d runs\n", n, N);
             _exit(1);
         }
-        _exit(o == PUPNOMAP ? 0 : 2);
+        _exit(0);
     }
     int st = 0;
     want(waitpid(pid, &st, 0) == pid);
@@ -155,31 +156,11 @@ static ok64 PUPDurNoFile(void) {
     done;
 }
 
-//  More runs than one scan holds: the rest used to be silently not scanned.
-static ok64 PUPDurTooMany(void) {
-    sane(1);
-    call(FILEInit);
-    char tmp[256];
-    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
-    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
-    a_cstr(ext, ".dur.idx");
-    enum { N = FILE_MAX_OPEN + 1 };
-    for (int i = 0; i < N; i++) call(dur_put, tmp, ext, 1000 + i, 16);
-    Bkv64 pups = {};
-    call(kv64bAllocate, pups, N + 4);
-    ok64 o = PUPOpenAll(pups, $path(dir), ext);
-    want(o == PUPNOROOM);
-    call(PUPClose, pups);
-    TESTBErmrf(tmp);
-    done;
-}
-
 ok64 PUPDURtest() {
     sane(1);
     call(PUPDurCreate);
     call(PUPDurEmptyRun);
     call(PUPDurNoFile);
-    call(PUPDurTooMany);
     done;
 }
 

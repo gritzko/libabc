@@ -26,8 +26,8 @@ static ok64 PUPNilRun(void) {
     a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
     a_cstr(ext, ".nil.idx");
     u8cs none = {};
-    Bkv64 pups = {};
-    call(kv64bAllocate, pups, 8);
+    Bpup256 pups = {};
+    call(pup256bAllocate, pups, 8);
     call(PUPCreateAs, pups, $path(dir), ext, none, YES);
     call(PUPCreateAt, pups, $path(dir), ext, none, 5);  //  the fast path too
     want(PUPCount(pups) == 2);
@@ -39,7 +39,7 @@ static ok64 PUPNilRun(void) {
     call(PUPClose, pups);
 
     //  reopened: two empty runs, by every reader
-    call(kv64bAllocate, pups, 8);
+    call(pup256bAllocate, pups, 8);
     call(PUPOpenAll, pups, $path(dir), ext);
     want(PUPCount(pups) == 2);
     Bu8cs all = {};
@@ -61,7 +61,7 @@ static ok64 PUPNilRun(void) {
     call(PUPLadder, pups, $path(dir), ext, PUPkv64Merge, sizeof(kv64));
     kv64 got[4];
     kv64s out = {got, got + 4};
-    call(PUPkv64Read, out, pups);
+    call(PUPkv64Read, out, pups, NULL);
     want(out[0] - got == 2 && got[0].key == 1 && got[1].val == 20);
     call(PUPClose, pups);
     u8csbFree(all);
@@ -72,7 +72,7 @@ static ok64 PUPNilRun(void) {
     FILE *f = fopen(path, "w");
     want(f != NULL);
     fclose(f);
-    call(kv64bAllocate, pups, 8);
+    call(pup256bAllocate, pups, 8);
     want(PUPOpenAll(pups, $path(dir), ext) == PUPEMPTY);
     call(PUPClose, pups);
     TESTBErmrf(tmp);

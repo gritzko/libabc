@@ -286,6 +286,16 @@ Sorted-string tables with a skip index (`SST`/`SKIP`), and a skip-record log for
  -  `SLOGOpen`/`SLOGSeek` — read path: load the skip list from the close record and seek to the first entry `≥` a target.
  -  `SLOGu8sFeedSkips`/`SLOGu8bDrainSkips` — the delta+ZINT codec for a skip record's offset list.
 
+###  PUPS.h, PUPx.h — LSM-ish stack of fixed-size record runs
+
+A directory of immutable sorted runs `<10-RON64 key><ext>`, mmap'd read-only with no fd held (PUPS-26A276Xh2e), an anonymous BOX memtable, a 1/8 compaction ladder, an optional per-page ToC. State is a `pup256b` (`{key, val, data}` per run, the memtable last); the memtable's runs are the caller's typed `X(,csb)`, passed in. Guide: [PUPS.md].
+
+ -  `PUPOpenAll`/`PUPOpenAside`/`PUPClose` — map a directory's runs into the stack, release it.
+ -  `PUPCreate`/`PUPCreateAs`/`PUPCreateAt`/`PUPCreateAtAs`/`PUPThinTail`/`PUPDropAt` — book or drop whole runs.
+ -  `PUPCount`/`PUPCountAll`/`PUPSeqno`/`PUPData`/`PUPDataRow`/`PUPToc`/`PUPAllData` — read the runs.
+ -  `PUP<T>Put`/`PutMem`/`Commit`/`CommitAs`/`Ladder`/`AllRuns`/`Read` (PUPx.h) — the typed memtable, seal and merged view.
+ -  `PUPLock`/`PUPUnlock` — the per-directory write lock.
+
 ###  FILE.h, FSW.h, PATH.h, MIME.h — filesystem
 
 POSIX file/dir wrappers returning `ok64` (errno mapped to `FILE*` codes), path manipulation, fs-watching, and MIME lookup. Guides: [FILE.md], [FSW.md].
@@ -402,6 +412,7 @@ Tracks open/close of nested markup or container contexts in a buffer, with splic
 [SST.md]: ./SST.md
 [SKIP.md]: ./SKIP.md
 [SLOG.md]: ./SLOG.md
+[PUPS.md]: ./PUPS.md
 [FILE.md]: ./FILE.md
 [FSW.md]: ./FSW.md
 [URI.md]: ./URI.md

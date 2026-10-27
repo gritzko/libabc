@@ -10,15 +10,19 @@ and uses only abc's own pieces (`HIT`, `QSORTx`, `RON`, `FILE`).
 
  -  **Runs.** A stack of immutable files in one directory, each named
     `<seqno><ext>` (`seqno`: 10-char zero-padded RON64). Every file is a
-    sorted array of records, mmap'd read-only. `ext` is the caller's, and it
-    also names the on-disk format, so one directory can hold several stacks.
- -  **Memtable.** `PUPPut` appends a record to a small in-memory page
-    (`PUPPutMem` sizes it in OS pages for bulk loads). It is never sorted
-    on the way in.
- -  **Commit.** `PUPCommit` sorts and dedups the memtable (keep-last),
-    writes it to a temp file and renames it to `<seqno><ext>`. The rename is
-    atomic: a crash leaves a dot-file or a complete run, never a half-run.
-    `PUPCommitAs` leaves the fsync to the caller.
+    sorted array of records, mmap'd read-only; the fd is closed right after
+    the mmap, so a run holds no fd and the number of open runs is not capped
+    by `FILE_MAX_OPEN`. `ext` is the caller's, and it also names the on-disk
+    format, so one directory can hold several stacks.
+ -  **Memtable.** `PUPPut` appends a record to an anonymous in-memory buffer
+    (`PUPPutMem` sizes it in OS pages for bulk loads), a BOX (`BOXx.h`):
+    sorted runs plus an unsorted segment that becomes a run past 512 bytes.
+    It is no file and holds no fd; unsealed puts die with the handle.
+ -  **Commit.** `PUPCommit` merges the memtable's runs (keep-last) straight
+    into a temp file, one sequential write, adds the ToC and renames it to
+    `<seqno><ext>`. The rename is atomic: a crash leaves a tmp file or a
+    complete run, never a half-run. `PUPCommitAs` leaves the fsync to the
+    caller.
  -  **Ladder.** Every seal ends in `PUPLadder`, which keeps run sizes in a
     1/8 ladder by merging runs that fall out of proportion, so the run count
     stays small. A merged run never reuses a name: it takes the next free key
@@ -48,13 +52,13 @@ record type `T` the way abc's `HITx.h` is:
 This generates, using `T`'s comparator `<T>Z` and abc's `QSORTx` and `HITx`
 for `T` (instantiated beforehand):
 
- -  `PUP<T>Sync`: sort the memtable and drop duplicates (newest wins); on
-    `collapse`, fold the older part into the newer.
+ -  `PUP<T>Sync`: seal the memtable's segment into a run and keep its runs
+    in the 1/8 ladder (`BOX<T>Sort`), newest wins.
  -  `PUP<T>Merge`: merge sorted run slices into one; `bottom` says the slices
     are the whole stack (see Deletes).
  -  Typed entry points `PUP<T>Put`, `PutMem`, `Commit`, `CommitAs`, `Ladder`,
-    `AllRuns`, `AllRunsToc`. Each calls the core with `Sync`, `Merge` and
-    `sizeof(T)` filled in, e.g. `PUPu64Commit(pups, dir, ext)`.
+    `AllRuns`, `AllRunsToc`, `Read`. Each calls the core with `Sync`, `Merge`
+    and `sizeof(T)` filled in, e.g. `PUPu64Commit(pups, runs, dir, ext)`.
 
 Both generated functions work on the whole range at once, so the core calls
 them through a pointer once per operation. The core functions (`PUPCommit` and
@@ -96,10 +100,24 @@ runs they follow; the ladder rescans the directory first (DOG-046).
 
 ### State
 
-A stack is one `kv64b` of `(pup_key, fd)` entries, with the mapped bytes in
-abc's file table. `PUPOpenAll` fills it from a directory, `PUPClose`
-releases it. Path and `ext` are passed on every call, so one primitive serves
-many stacks.
+A stack is one `pup256b`: a buffer of 32-byte records `{key, val, data}`, one
+per run — the pup_key, the file's inode (for the rescan's replaced-file
+check) and the mapped bytes themselves — plus, last, the memtable under the
+all-ones key (its mapped size, its `[base, end of DATA)`). File names are
+derived from the key, `dir` and `ext`, never stored. `PUPOpenAll` fills the
+stack from a directory, `PUPClose` releases it. Path and `ext` are passed on
+every call, so one primitive serves many stacks.
+
+The memtable's run slices belong to the caller: a typed `X(,csb)` held next
+to the stack for as long as the stack, and passed to `Put`, `Commit`,
+`AllRuns` and `Read` (NULL is fine where the stack never had a memtable):
+
+    kv64cs slots[HIT_MAX_RUNS];
+    kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    PUPkv64Put(pups, runs, dir, ext, rec);
+
+The core sees it as a `u8csb` and passes it through; `PUP<T>Sync` casts it
+back once.
 
 ### Build and test
 
@@ -107,6 +125,6 @@ libpups is part of abc (`PUPS.c` is in `abc-core`; `PUPS.h` and `PUPx.h`
 are installed with the other headers). Tests are in `test/PUPS.c`
 (`PUPStest`): error-path fd leaks, memtable round trips, collapse, flush,
 commit, crash-invisibility, the ladder, ladder crash points, drop, name
-clashes, two writers,
-foreign runs and the ToC.
+clashes, two writers, foreign runs, more runs than `FILE_MAX_OPEN`, a
+memtable that holds no fd, and the ToC.
 
