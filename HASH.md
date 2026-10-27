@@ -48,6 +48,29 @@ copy), there are no holes.  Both 1 and 3 are idempotent.  Under
 new length (tested).  Reset a table by zeroing DATA and `bShed`-ing it
 back; the room may stay dirty, `GrowCopy` zeroes what it uses.
 
+##  Move into another table (HASH-26A275ba4V)
+
+`Move(into, from)` rehashes every entry of `from`'s DATA into `into`'s
+DATA, a table the caller set up at any power-of-2 length (at least
+`ABC_HASH_LINE`): bigger, the same, smaller.  It never maps; the caller
+allocates, then unmaps `from` (left intact) if it likes.  `into`'s
+residents stay, a key in both gets `from`'s record.  The tables must
+not overlap (`FAILSANITY`).  Use: the fallback when `Grow` fails
+`BNOROOM` (a new map, then Move), shrinking, another line size.
+
+    Bkv64 big = {};
+    call(kv64bMap, big, 1 << 28);
+    call(kv64bFed, big, kv64bDataLen(tab) * 4);
+    call(HASHkv64Move, big, tab);
+    call(kv64bUnMap, tab);
+
+`HASHNOROOM`: some entry's line in `into` is full.  `into` is left
+partially filled: the entries of `from` before that one (in slot order)
+are in, none lost (`find` is probed before each `Put`, so a
+`ABC_HASH_CONVERGE` Put never evicts); `from` is intact.  Under
+`ABC_HASH_CONVERGE` a Move into an empty table is byte-equal to one
+Put-built at its length (tested).
+
 Not done, kept possible: crash safety for a file-backed map with
 word-sized records.  Missing: the length persisted in a header word,
 the flip being that store; msync after phase 1 (before the flip) and

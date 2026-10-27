@@ -77,6 +77,12 @@ target_compile_options(HASHGtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(HASHGtest abc)
 add_test(NAME HASHGtest COMMAND HASHGtest)
 
+add_executable(HASHMtest HASHM.c)
+target_link_options(HASHMtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(HASHMtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(HASHMtest abc)
+add_test(NAME HASHMtest COMMAND HASHMtest)
+
 add_executable(TLVtest TLV.c)
 target_link_options(TLVtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(TLVtest PRIVATE ${TEST_CXX_FLAGS})

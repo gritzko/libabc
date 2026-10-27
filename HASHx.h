@@ -197,6 +197,30 @@ fun ok64 X(HASH, Grow)(X(B, ) buf) {
     done;
 }
 
+// HASH-26A275ba4V: rehash every entry of from's DATA into into's DATA,
+// a table the caller set up (bMap + bFed, a power-of-2 length >=
+// ABC_HASH_LINE, any size: bigger, same, smaller), never maps; into's
+// residents stay, a key in both ends up with from's record (Put).
+// from is read only; the two tables must not overlap.  Use: the
+// fallback when Grow fails BNOROOM, shrinking, another ABC_HASH_LINE.
+// HASHNOROOM: an entry's line in into is full; into is left partially
+// filled (from's entries before it, in slot order, moved; none lost,
+// as find is probed before each Put), from intact.
+fun ok64 X(HASH, Move)(X(B, ) into, X(B, ) from) {
+    sane(into != NULL && into[0] != NULL && from != NULL && from[0] != NULL);
+    X($, ) data = {into[1], into[2]};
+    size_t len = $len(data);
+    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), FAILSANITY);
+    test(from[2] <= into[1] || into[2] <= from[1], FAILSANITY);
+    for (T const *p = from[1]; p < from[2]; ++p) {
+        if (X(, IsZero)(p)) continue;
+        size_t ndx = 0;
+        if (HASHNOROOM == X(HASH, find)(&ndx, data, p)) fail(HASHNOROOM);
+        call(X(HASH, Put), data, p);
+    }
+    done;
+}
+
 // Put into a growable table (DATA, see Grow), Grow-ing first if rec's
 // line is full.
 // Probes with find before Put: with ABC_HASH_CONVERGE a NOROOM Put
