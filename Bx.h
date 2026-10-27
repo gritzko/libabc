@@ -448,8 +448,11 @@ fun ok64 X(, bSplice)(X(, bp) buf, size_t off, size_t cut, X(, csc) paste) {
     T *b = ((T **)buf)[1];
     memmove((void *)(b + off + $len(paste)), (void *)(b + off + cut),
             (X(, bDataLen)(buf) - off - cut) * sizeof(T));
-    memmove((void *)(b + off), (void const *)paste[0],
-            $len(paste) * sizeof(T));
+    //  B-26A27ChMjT: an empty paste may be {NULL, NULL}; memmove from
+    //  NULL is UB even for 0 bytes
+    if (!$empty(paste))
+        memmove((void *)(b + off), (void const *)paste[0],
+                $len(paste) * sizeof(T));
     ((T **)buf)[2] = buf[2] + $len(paste) - cut;
     return OK;
 }

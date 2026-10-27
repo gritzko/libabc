@@ -244,6 +244,21 @@ ok64 Bsplice_test() {
     done;
 }
 
+// B-26A27ChMjT: a cut with an empty {NULL, NULL} paste removes the
+// elements and never reads the paste
+ok64 Bsplice_empty_test() {
+    sane(1);
+    aBpad(u64, wb, 8);
+    for (u64 i = 0; i < 5; ++i) call(u64bFeed1, wb, 10 + i);
+    call(u64bSplice, wb, 1, 1, (u64cs){});
+    call(u64bSplice, wb, 3, 1, (u64cs){});
+    u64 expv[] = {10, 12, 13};
+    testeqv((long long)(u64bDataLen(wb)), (long long)(3), "%lld");
+    for (size_t i = 0; i < 3; ++i)
+        testeqv((long long)(u64bAt(wb, i)), (long long)(expv[i]), "%lld");
+    done;
+}
+
 // ABC-006 repro: non-mremap bReMap fallback must clamp the copy to
 // min(old,new) — a shrink used to memmove old_size into a new_size map.
 ok64 BReMapShrink_test() {
@@ -289,6 +304,7 @@ ok64 Btest() {
     sane(1);
     call(Bmap_test);
     call(Bsplice_test);
+    call(Bsplice_empty_test);
     call(BReMapShrink_test);
     call(Boverflow_test);
     call(B$_test);
