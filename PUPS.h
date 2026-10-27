@@ -217,6 +217,7 @@ fun u64 PUPSeqno(kv64b pups, u32 i) {
 // stacks in one process ever open (and O_TRUNC) one inode.  It still ends in
 // `<ext>` for bee's sweep, and `~` + an 11-wide seqno never parse as a run.
 #define PUP_MEM_BYTES 4096
+// PUPS-26A275OQK0: c, the memtable segment limit in bytes; PUPx.h sets BOXx_C to it.
 #define PUP_COLLAPSE  512
 
 // DOG-032: the memtable's size is an OPEN-TIME parameter counted in WHOLE OS

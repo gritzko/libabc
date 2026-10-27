@@ -916,7 +916,7 @@ ok64 PUPPutMem(kv64b pups, path8s dir, u8cs ext, u8csc rec, pupsync sync,
         }
     }
     call(u8bFeed, mem, rec);
-    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, BOXx_C's 512 B) the segment becomes a run
+    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, PUPx.h's BOXx_C) the segment becomes a run
     if (u8bDataLen(mem) > PUP_COLLAPSE) call(pup_sync, mem, sync, NO);
     done;
 }

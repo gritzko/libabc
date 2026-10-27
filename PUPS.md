@@ -94,10 +94,6 @@ A hand-written `pupmerge` takes the extra `bottom` argument and may ignore it.
 Dropping is safe while new runs of other writers carry younger keys than the
 runs they follow; the ladder rescans the directory first (DOG-046).
 
-Define `PUPx_WHOLE_ROW 1` before the include when `<T>Z` compares the whole
-row (equal rows are then bit-identical, so any sort will do). Leave it unset
-when `<T>Z` looks at a key only: the memtable is then sorted stably.
-
 ### State
 
 A stack is one `kv64b` of `(pup_key, fd)` entries, with the mapped bytes in

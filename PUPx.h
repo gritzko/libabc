@@ -19,25 +19,18 @@
 //  Needs, instantiated BEFORE this header (abc already does kv64 and u64):
 //    T, T##Z, T##max (BOX-26A26EbjLj: the tombstone, sorts last), the T##s / T##cs / T##css slices and T##b buffer (Bx),
 //    QSORTx for T (QSORT<T>InSort, <T>sSort, <T>sDedup), HITx for T.
-//
-//  PUPx_WHOLE_ROW: define to 1 before including when <T>Z compares the WHOLE
-//  row, so rows that compare equal are bit-identical and any sort will do.
-//  Left undefined (the default), <T>Z may look at part of the row (a key), equal
-//  rows may differ, and the memtable is sorted STABLY so the newest wins.
 
 #include "FILE.h"
 #include "HIT.h"
 #include "PRO.h"
 #include "PUPS.h"
 
+//  PUPS-26A275OQK0: c, the memtable segment limit, is PUP_COLLAPSE (PUPS.h).
+#define BOXx_C PUP_COLLAPSE
 #include "BOXx.h"
 
 #ifndef PUPx_DEAD
 #define PUPx_DEAD(r) 0
-#endif
-
-#ifndef PUPx_WHOLE_ROW
-#define PUPx_WHOLE_ROW 0
 #endif
 
 //  BOX-26A26EbjLj: the memtable is a BOX over the mapping — PAST its sorted
@@ -138,5 +131,4 @@ fun ok64 X(PUP, AllRunsToc)(u8csb out, u8csb tocs, kv64b pups) {
     return PUPAllRunsToc(out, tocs, pups, X(PUP, Sync), (u32)sizeof(X(, )));
 }
 
-#undef PUPx_WHOLE_ROW
 #undef PUPx_DEAD
