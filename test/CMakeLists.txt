@@ -102,6 +102,12 @@ target_compile_options(QSORTtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(QSORTtest abc)
 add_test(NAME QSORTtest COMMAND QSORTtest)
 
+add_executable(KVtest KV.c)
+target_link_options(KVtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(KVtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(KVtest abc)
+add_test(NAME KVtest COMMAND KVtest)
+
 # ABC-015: template hygiene pin (non-u8 instantiations, no leftovers)
 add_executable(TEMPLtest TEMPL.c)
 target_link_options(TEMPLtest PRIVATE ${TEST_LDD_FLAGS})

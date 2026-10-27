@@ -1,6 +1,7 @@
 #ifndef ABC_KV_H
 #define ABC_KV_H
 #include "01.h"
+#include "INT.h"
 
 typedef struct kv32 {
     u32 key;
@@ -30,6 +31,25 @@ con kv64 kv64max = {u64max, u64max};
 fun b8 kv64hashEq(kv64 const *a, kv64 const *b) { return a->key == b->key; }
 
 #define X(M, name) M##kv64##name
+#include "Bx.h"
+#include "QSORTx.h"
+#undef X
+
+typedef struct kv128 {
+    u128 key;
+    u128 val;
+} kv128;
+
+//  KV-26A273cxFy: key only; the all-zero record is empty, kv128max the tombstone
+fun u64 kv128hash(kv128 const *v) { return u128hash(&v->key); }
+
+fun b8 kv128Z(kv128 const *a, kv128 const *b) { return u128Z(&a->key, &b->key); }
+con kv128 kv128max = {{{u64max, u64max}}, {{u64max, u64max}}};
+fun b8 kv128hashEq(kv128 const *a, kv128 const *b) {
+    return u128hashEq(&a->key, &b->key);
+}
+
+#define X(M, name) M##kv128##name
 #include "Bx.h"
 #include "QSORTx.h"
 #undef X
