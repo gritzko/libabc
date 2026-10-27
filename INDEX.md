@@ -145,9 +145,10 @@ A rapidhash wrapper for hash tables and bloom-style keying.
 `(key,val)` structs that plug into the hash and sort templates.
 
  -  `kv32`/`kv64`/`kv128` — 32-, 64- and 128-bit key/value pair records.
- -  `kv32hash`/`kv64hash`/`kv128hash` (+`hashEq`) — key hasher and key-equality.
- -  `kv32Z`/`kv64Z`/`kv128Z` — comparators ordering pairs by `key` (value ignored).
- -  `kv32max`/`kv64max`/`kv128max` — all-ones tombstone records.
+ -  `k96v32` — a 16-byte `{u64 k0; u32 k1; u32 val}` map record: a 96-bit key (`k1` high) and a 32-bit value; use it, not a packed `u128`, when the value must stay out of the hash.
+ -  `kv32hash`/`kv64hash`/`kv128hash`/`k96v32hash` (+`hashEq`) — key hasher and key-equality, the value never read.
+ -  `kv32Z`/`kv64Z`/`kv128Z`/`k96v32Z` — comparators ordering pairs by key (value ignored).
+ -  `kv32max`/`kv64max`/`kv128max`/`k96v32max` — all-ones tombstone records; the all-zero record is empty.
 
 ##  Containers
 

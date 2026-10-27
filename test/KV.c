@@ -10,6 +10,12 @@
 #include "BOXx.h"
 #undef X
 
+#define X(M, name) M##k96v32##name
+#include "HASHx.h"
+#include "HITx.h"
+#include "BOXx.h"
+#undef X
+
 fun kv128 kv128of(u64 k, u64 v) {
     kv128 r = {.key = {._64 = {k, ~k}}, .val = {._64 = {v, v ^ k}}};
     return r;
@@ -85,11 +91,106 @@ ok64 KV128sort() {
     done;
 }
 
+//  KV-26A274c3W6: k96v32, the key spread over both key words
+fun k96v32 k96v32of(u64 k, u32 v) {
+    k96v32 r = {.k0 = k * 0x9e3779b97f4a7c15ULL, .k1 = (u32)(k >> 3) ^ 0x5a5a, .val = v};
+    return r;
+}
+
+//  map: same key, other value = one entry; Get fills the value; PutGrow
+//  keeps every entry across growth; keys equal in k0 or in k1 alone differ
+ok64 K96V32hash() {
+    sane(1);
+    Bk96v32 buf = {};
+    call(k96v32bMap, buf, 16);
+    for (u64 k = 1; k <= 3000; ++k) {
+        k96v32 r = k96v32of(k, (u32)(k * 7));
+        call(HASHk96v32PutGrow, buf, &r);
+    }
+    want($len(k96v32bIdle(buf)) > 3000);
+    k96v32 r = k96v32of(42, 1);
+    call(HASHk96v32PutGrow, buf, &r);
+    k96v32 lo = {.k0 = 1, .k1 = 0, .val = 11}, hi = {.k0 = 0, .k1 = 1, .val = 12};
+    call(HASHk96v32PutGrow, buf, &lo);
+    call(HASHk96v32PutGrow, buf, &hi);
+    size_t live = 0;
+    $for(k96v32, p, k96v32bIdle(buf)) if (p->k0 || p->k1) ++live;
+    testeqv((long long)live, 3002LL, "%lld");
+    for (u64 k = 1; k <= 3000; ++k) {
+        k96v32 g = k96v32of(k, 0);
+        call(HASHk96v32Get, &g, k96v32bIdle(buf));
+        want(g.val == (k == 42 ? 1 : (u32)(k * 7)));
+    }
+    k96v32 g = {.k0 = 1};
+    call(HASHk96v32Get, &g, k96v32bIdle(buf));
+    want(g.val == 11);
+    g = (k96v32){.k1 = 1};
+    call(HASHk96v32Get, &g, k96v32bIdle(buf));
+    want(g.val == 12);
+    k96v32 miss = k96v32of(5000, 0);
+    want(HASHk96v32Get(&miss, k96v32bIdle(buf)) == HASHNONE);
+    //  the value takes no part in hashing or key equality
+    k96v32 a = k96v32of(7, 1), b = k96v32of(7, 2);
+    want(k96v32hash(&a) == k96v32hash(&b) && k96v32hashEq(&a, &b));
+    call(k96v32bUnMap, buf);
+    done;
+}
+
+//  BOX: the youngest row of a key wins
+ok64 K96V32box() {
+    sane(1);
+    Bk96v32 recs = {};
+    call(k96v32bMap, recs, 1 << 14);
+    k96v32cs slots[HIT_MAX_RUNS];
+    k96v32csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    u32 last[100] = {};
+    for (u32 i = 1; i <= 2000; i++) {
+        u64 k = (i * 37) % 100;
+        k96v32 r = {.k0 = k, .k1 = (u32)(k % 3), .val = i};
+        last[k] = i;
+        call(BOXk96v32Put, recs, runs, &r);
+    }
+    for (u64 k = 0; k < 100; k++) {
+        k96v32 key = {.k0 = k, .k1 = (u32)(k % 3)}, got = {};
+        call(BOXk96v32Get, recs, runs, &key, &got);
+        want(got.val == last[k]);
+    }
+    call(BOXk96v32Sort, recs, runs, YES);
+    want(runs[2] - runs[1] == 1);
+    want(runs[1][0][1] - runs[1][0][0] == 100);
+    for (k96v32 const *p = runs[1][0][0]; p < runs[1][0][1]; p++)
+        want(p->val == last[p->k0] && p->k1 == p->k0 % 3);
+    k96v32bUnMap(recs);
+    done;
+}
+
+//  QSORT: by key only (k1 high, then k0), the value ignored
+ok64 K96V32sort() {
+    sane(1);
+    k96v32 arr[] = {
+        {1, 2, 0}, {9, 1, 1}, {0, 2, 2}, {1, 2, 3}, {5, 1, 4}, {u64max, 0, 5},
+    };
+    QSORTk96v32InSort(arr, arr + 6);
+    static u64 const keys[6][2] = {{u64max, 0}, {5, 1}, {9, 1},
+                                   {0, 2},      {1, 2}, {1, 2}};
+    for (int i = 0; i < 6; i++)
+        want(arr[i].k0 == keys[i][0] && arr[i].k1 == keys[i][1]);
+    want(arr[4].val == 0 && arr[5].val == 3);
+    k96v32 v0 = {1, 2, u32max}, v1 = {1, 2, 0};
+    want(!k96v32Z(&v0, &v1) && !k96v32Z(&v1, &v0));
+    want(!k96v32Z(&k96v32max, &arr[5]) && k96v32Z(&arr[5], &k96v32max));
+    want(sizeof(k96v32) == 16);
+    done;
+}
+
 ok64 KV() {
     sane(1);
     call(KV128hash);
     call(KV128box);
     call(KV128sort);
+    call(K96V32hash);
+    call(K96V32box);
+    call(K96V32sort);
     done;
 }
 

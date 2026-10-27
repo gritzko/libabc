@@ -54,4 +54,30 @@ fun b8 kv128hashEq(kv128 const *a, kv128 const *b) {
 #include "QSORTx.h"
 #undef X
 
+//  KV-26A274c3W6: a 16-byte map record, a 96-bit key (k0 low, k1 high)
+//  and a 32-bit value.  hash/hashEq/Z read the key only, never val
+//  (u128hash would read all 128 bits).  All-zero is empty, all-ones
+//  k96v32max the tombstone.
+typedef struct k96v32 {
+    u64 k0;
+    u32 k1;
+    u32 val;
+} k96v32;
+
+fun u64 k96v32hash(k96v32 const *v) { return u64hash2(v->k0, v->k1); }
+
+fun b8 k96v32Z(k96v32 const *a, k96v32 const *b) {
+    if (a->k1 != b->k1) return a->k1 < b->k1;
+    return a->k0 < b->k0;
+}
+con k96v32 k96v32max = {u64max, u32max, u32max};
+fun b8 k96v32hashEq(k96v32 const *a, k96v32 const *b) {
+    return a->k0 == b->k0 && a->k1 == b->k1;
+}
+
+#define X(M, name) M##k96v32##name
+#include "Bx.h"
+#include "QSORTx.h"
+#undef X
+
 #endif
