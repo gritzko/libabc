@@ -234,33 +234,34 @@ ok64 HASHo() {
 ok64 HASHgrow() {
     sane(1);
     Bu32 buf = {};
-    call(u32bMap, buf, 16);
+    call(u32bMap, buf, 1 << 20);
+    call(u32bFed, buf, 16);
     u32 grows = 0;
     for (u32 i = 1; i <= 5000; ++i) {
         // CONVERGE Put may evict a record on NOROOM: probe with find first
         size_t ndx = 0;
-        while (HASHNOROOM == HASHu32find(&ndx, u32bIdle(buf), &i)) {
-            size_t was = u32bIdleLen(buf);
+        while (HASHNOROOM == HASHu32find(&ndx, u32bData(buf), &i)) {
+            size_t was = u32bDataLen(buf);
             call(HASHu32Grow, buf);
-            want(u32bIdleLen(buf) > was);
+            want(u32bDataLen(buf) > was);
             ++grows;
         }
-        call(HASHu32Put, u32bIdle(buf), &i);
+        call(HASHu32Put, u32bData(buf), &i);
     }
     want(grows > 3);
-    want(0 == (u32bIdleLen(buf) & (u32bIdleLen(buf) - 1)));
+    want(0 == (u32bDataLen(buf) & (u32bDataLen(buf) - 1)));
     for (u32 i = 1; i <= 5000; ++i) {
         u32 v = i;
-        call(HASHu32Get, &v, u32bIdle(buf));
+        call(HASHu32Get, &v, u32bData(buf));
         want(v == i);
     }
     u32 n = 5001;
-    want(HASHNONE == HASHu32Get(&n, u32bIdle(buf)));
-    for (u32 i = 1; i <= 5000; i += 2) call(HASHu32Del, u32bIdle(buf), &i);
+    want(HASHNONE == HASHu32Get(&n, u32bData(buf)));
+    for (u32 i = 1; i <= 5000; i += 2) call(HASHu32Del, u32bData(buf), &i);
     call(HASHu32Grow, buf);  // deleted entries must not come back
     for (u32 i = 1; i <= 5000; ++i) {
         u32 v = i;
-        want((i & 1 ? HASHNONE : OK) == HASHu32Get(&v, u32bIdle(buf)));
+        want((i & 1 ? HASHNONE : OK) == HASHu32Get(&v, u32bData(buf)));
     }
     call(u32bUnMap, buf);
     done;
@@ -270,7 +271,8 @@ ok64 HASHgrow() {
 ok64 HASHputgrow() {
     sane(1);
     Bkv32 buf = {};
-    call(kv32bMap, buf, 16);
+    call(kv32bMap, buf, 1 << 20);
+    call(kv32bFed, buf, 16);
     for (u32 k = 1; k <= 3000; ++k) {
         kv32 r = {.key = k, .val = k * 7};
         call(HASHkv32PutGrow, buf, &r);
@@ -278,11 +280,11 @@ ok64 HASHputgrow() {
     kv32 r = {.key = 42, .val = 1};
     call(HASHkv32PutGrow, buf, &r);
     size_t live = 0;
-    $for(kv32, p, kv32bIdle(buf)) if (p->key) ++live;
+    $for(kv32, p, kv32bData(buf)) if (p->key) ++live;
     testeqv((long long)live, 3000LL, "%lld");
     for (u32 k = 1; k <= 3000; ++k) {
         kv32 g = {.key = k};
-        call(HASHkv32Get, &g, kv32bIdle(buf));
+        call(HASHkv32Get, &g, kv32bData(buf));
         want(g.val == (k == 42 ? 1 : k * 7));
     }
     call(kv32bUnMap, buf);
@@ -333,7 +335,8 @@ ok64 HASHprobe() {
 ok64 HASHprobegrow() {
     sane(1);
     Bkv64 buf = {};
-    call(kv64bMap, buf, 16);
+    call(kv64bMap, buf, 1 << 20);
+    call(kv64bFed, buf, 16);
     for (int pass = 0; pass < 2; ++pass)
         for (u64 k = 1; k <= 3000; ++k) {
             kv64 r = {.key = k * 0x10001, .val = k * 7}, *slot = NULL;
@@ -342,19 +345,20 @@ ok64 HASHprobegrow() {
             if (o == HASHNONE) *slot = r;
             want(slot->key == r.key && slot->val == k * 7);
         }
-    want(kv64bIdleLen(buf) > 3000);
+    want(kv64bDataLen(buf) > 3000);
     size_t live = 0;
-    $for(kv64, p, kv64bIdle(buf)) if (p->key) ++live;
+    $for(kv64, p, kv64bData(buf)) if (p->key) ++live;
     testeqv((long long)live, 3000LL, "%lld");
     for (u64 k = 1; k <= 3000; ++k) {
         kv64 g = {.key = k * 0x10001};
-        call(HASHkv64Get, &g, kv64bIdle(buf));
+        call(HASHkv64Get, &g, kv64bData(buf));
         want(g.val == k * 7);
     }
     call(kv64bUnMap, buf);
 
     Bk96v32 kb = {};
-    call(k96v32bMap, kb, 16);
+    call(k96v32bMap, kb, 1 << 20);
+    call(k96v32bFed, kb, 16);
     for (int pass = 0; pass < 2; ++pass)
         for (u32 k = 1; k <= 3000; ++k) {
             k96v32 r = {.k0 = k % 50, .k1 = k / 50, .val = k}, *slot = NULL;
@@ -365,7 +369,7 @@ ok64 HASHprobegrow() {
             want(slot->k0 == r.k0 && slot->k1 == r.k1 && slot->val == k);
         }
     live = 0;
-    $for(k96v32, p, k96v32bIdle(kb)) if (p->k0 || p->k1) ++live;
+    $for(k96v32, p, k96v32bData(kb)) if (p->k0 || p->k1) ++live;
     testeqv((long long)live, 3000LL, "%lld");
     call(k96v32bUnMap, kb);
     done;
@@ -394,7 +398,8 @@ ok64 HASHprobeconv() {
         want(OK == HASHu64Probe(&slot, prb_idle, p) && slot == p);
     }
     Bu64 buf = {};
-    call(u64bMap, buf, 16);
+    call(u64bMap, buf, 1 << 20);
+    call(u64bFed, buf, 16);
     for (u64 k = 1; k <= 3000; ++k) {
         u64 *slot = NULL;
         want(HASHNONE == HASHu64ProbeGrow(&slot, buf, &k));
@@ -402,7 +407,7 @@ ok64 HASHprobeconv() {
     }
     for (u64 k = 1; k <= 3000; ++k) {
         u64 v = k;
-        call(HASHu64Get, &v, u64bIdle(buf));
+        call(HASHu64Get, &v, u64bData(buf));
     }
     call(u64bUnMap, buf);
     done;

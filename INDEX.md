@@ -157,6 +157,7 @@ A rapidhash wrapper for hash tables and bloom-style keying.
 A bucketed linear-probe table laid out directly in a buffer slice; the length MUST be a power of two. Guide: [HASH.md].
 
  -  `HASHGet`/`HASHPut`/`HASHDel`/`HASHfind` — point lookup, insert/upsert, backward-shift delete.
+ -  `HASHGrow`/`HASHPutGrow` — a growable table is a buffer's DATA, its IDLE the room: `Grow` doubles DATA in place (phases `GrowCopy`, flip, `GrowClean`), `BNOROOM` when IDLE < DATA, never maps.
  -  `HASHProbe`/`HASHProbeGrow` — single-probe get-or-insert: `OK` with `*slot` at the resident, `HASHNONE` with `*slot` at the zeroed slot the caller fills, `HASHNOROOM` (Probe only) on a full line; one hash, no copy of `rec`; under `ABC_HASH_CONVERGE` the fill leaves Put's layout.
  -  Each instantiating type supplies `Typehash` + `TypehashEq`; `HASHx` keys and probes through those, never the name.
  -  `ABC_HASH_LINE`/`ABC_HASH_CONVERGE` — compile-time knobs for probe-line width and Robin-Hood-style convergence on insert.

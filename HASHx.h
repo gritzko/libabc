@@ -107,18 +107,22 @@ fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
     return X(HASH, _put)(rec, data, hash);
 }
 
+// Backward-shift deletion: zero slot ndx, refilling it from later slots
+// of the line (copy-before-zero).  An entry moves into the hole iff the
+// hole is on its probe path, home..slot, cyclic in the line.
+// HASH-26A275TmIX: the scan runs until an empty slot or the hole itself,
+// not one lap from the first hole: in a full line holding stale Grow
+// copies (their home is another line, here a meaningless offset: they
+// move or not, harmless) the last hole could land on the path of an
+// entry moved earlier in the lap, losing it.
 fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
     sane($ok(data) && (i64)ndx < $len(data));
-    size_t off = ndx & MASK;
     size_t base = ndx & ~MASK;
-    for (size_t i = off + 1; i < off + ABC_HASH_LINE; ++i) {
-        size_t x = base + (i & MASK);  // all pow 2
-        if (X($, is0)(data, x)) {
-            break;
-        }
+    for (size_t x = base + ((ndx + 1) & MASK); x != ndx;
+         x = base + ((x + 1) & MASK)) {
+        if (X($, is0)(data, x)) break;
         size_t nom = X(, hash)(*data + x) & LMASK;
-        if ((x > ndx && (nom <= ndx || nom > x)) ||
-            (x < ndx && (nom <= ndx && nom > x))) {
+        if (((ndx - nom) & MASK) < ((x - nom) & MASK)) {
             Bat(data, ndx) = Bat(data, x);
             ndx = x;
         }
@@ -134,42 +138,74 @@ fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
     return X(HASH, shift)(data, ndx);
 }
 
-// HASH-26A26Cq06k: grow a bMap-ed table.  The table is the buffer's
-// idle slice (the whole map, as X(,bMap) leaves it).  Map a range of
-// len*2 (pow2), re-Put every live entry scanning the old, unmap the old.
-// Should a line still overflow, the new map is dropped and len doubled
-// again.  Needs X(,bMap)/X(,bUnMap) (Bx.h instantiated for T).
-fun ok64 X(HASH, Grow)(X(B, ) buf) {
-    sane(buf != NULL && buf[0] != NULL && buf[0] == buf[2]);
-    X($, ) old = {buf[2], buf[3]};
-    size_t len = $len(old);
-    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), FAILSANITY);
-    for (len <<= 1; len != 0; len <<= 1) {
-        X(B, ) nb = {};
-        call(X(, bMap), nb, len);
-        X($, ) data = {nb[2], nb[3]};
-        ok64 o = OK;
-        for (T *p = old[0]; p < old[1] && o == OK; ++p)
-            if (!X($, is0)(old, p - old[0])) o = X(HASH, Put)(data, p);
-        if (o == OK) {
-            call(X(, bUnMap), buf);
-            for (int i = 0; i < 4; ++i) buf[i] = nb[i];
-            done;
-        }
-        call(X(, bUnMap), nb);
-        if (o != HASHNOROOM) fail(o);
+// HASH-26A275TmIX: in-place growth.  A growable table is the buffer's
+// DATA (pow2 length n >= ABC_HASH_LINE), its IDLE is the room it grows
+// into: bMap the max range once, bFed the initial length.  Grow doubles
+// DATA into the first n slots of IDLE in three phases, each leaving a
+// valid table (stale duplicates, no holes); `data` is the doubled view.
+// Phase 1: every entry of a lower line b whose home under 2n is line b+n
+// is Put there; the upper half is invisible under length n.  Each upper
+// line is zeroed first, so a re-run (and dirty room) is harmless.
+fun void X(HASH, GrowCopy)(X($, ) data) {
+    size_t half = $len(data) >> 1;
+    for (size_t b = 0; b < half; b += ABC_HASH_LINE) {
+        T *up = data[0] + half + b;
+        for (T *z = up; z < up + ABC_HASH_LINE; ++z) zerop(z);
+        for (T *p = data[0] + b; p < data[0] + b + ABC_HASH_LINE; ++p)
+            if (!X(, IsZero)(p) && (X(, hash)(p) & half))
+                X(HASH, Put)(data, p);  // <= LINE into a zero line: fits
     }
-    fail(HASHNOROOM);
 }
 
-// Put into a bMap-ed table, Grow-ing first if rec's line is full.
+// Phase 3 step: slot ndx of the lower half holds a stale copy (its home
+// under the doubled length is in the upper half)?  Delete it by the
+// backward shift (copy-before-zero), OK; else HASHNONE.  An entry the
+// shift brings into ndx may be stale too: call again.
+fun ok64 X(HASH, unstale)(X($, ) data, size_t ndx) {
+    T const *p = data[0] + ndx;
+    if (X(, IsZero)(p) || !(X(, hash)(p) & ($len(data) >> 1))) return HASHNONE;
+    return X(HASH, shift)(data, ndx);
+}
+
+// Phase 3: unstale the whole lower half, line by line.  A shift running
+// past one lap may carry a not yet checked entry back before ndx, so a
+// line is swept again until a sweep finds nothing.  Idempotent.
+fun void X(HASH, GrowClean)(X($, ) data) {
+    size_t half = $len(data) >> 1;
+    for (size_t b = 0; b < half; b += ABC_HASH_LINE) {
+        b8 dirty = YES;
+        while (dirty) {
+            dirty = NO;
+            for (size_t i = b; i < b + ABC_HASH_LINE; ++i)
+                while (OK == X(HASH, unstale)(data, i)) dirty = YES;
+        }
+    }
+}
+
+// Grow the table (DATA) 2x in place: phase 1, phase 2 (the flip: DATA's
+// end moves, one word store), phase 3.  BNOROOM if IDLE is shorter than
+// DATA; never maps.  Never overflows a line: one doubling always fits.
+fun ok64 X(HASH, Grow)(X(B, ) buf) {
+    sane(buf != NULL && buf[0] != NULL);
+    size_t len = X(, bDataLen)(buf);
+    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), FAILSANITY);
+    test(X(, bIdleLen)(buf) >= len, BNOROOM);
+    X($, ) data = {buf[1], buf[2] + len};
+    X(HASH, GrowCopy)(data);
+    call(X(, bFed), buf, len);
+    X(HASH, GrowClean)(data);
+    done;
+}
+
+// Put into a growable table (DATA, see Grow), Grow-ing first if rec's
+// line is full.
 // Probes with find before Put: with ABC_HASH_CONVERGE a NOROOM Put
 // has already swapped some resident out, i.e. lost it.
 fun ok64 X(HASH, PutGrow)(X(B, ) buf, T const *rec) {
     sane(buf != NULL && buf[0] != NULL);
     size_t ndx = 0;
     for (;;) {
-        X($, ) data = {buf[2], buf[3]};
+        X($, ) data = {buf[1], buf[2]};
         if (HASHNOROOM != X(HASH, find)(&ndx, data, rec))
             return X(HASH, Put)(data, rec);
         call(X(HASH, Grow), buf);
@@ -232,12 +268,12 @@ fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
     return HASHNOROOM;
 }
 
-// Probe a bMap-ed table, Grow-ing it while rec's line is full: OK or
+// Probe a growable table (DATA, see Grow), Grow-ing it while rec's line is full: OK or
 // HASHNONE as Probe, *slot into the (grown) table; else Grow's failure.
 fun ok64 X(HASH, ProbeGrow)(T **slot, X(B, ) buf, T const *rec) {
     sane(buf != NULL && buf[0] != NULL);
     for (;;) {
-        X($, ) data = {buf[2], buf[3]};
+        X($, ) data = {buf[1], buf[2]};
         ok64 o = X(HASH, Probe)(slot, data, rec);
         if (o != HASHNOROOM) return o;
         call(X(HASH, Grow), buf);

@@ -16,3 +16,43 @@ Macro parameters:
     Operations that commute can arrive in any order!
     For example, "put 1, put 2, remove 1, put 3" and "put 3, put 2" would
     result in the same bit-state of the *buffer*.
+
+##  Growth in place (HASH-26A275TmIX)
+
+A growable table lives in a buffer: the table is the buffer's DATA (a
+power-of-2 length, at least `ABC_HASH_LINE`), the IDLE behind it is the
+room it grows into.  Map the max range once, set the initial length:
+
+    Bkv64 tab = {};
+    call(kv64bMap, tab, 1 << 26);       // the max, idle pages cost nothing
+    call(kv64bFed, tab, 1024);          // the table: kv64bData(tab)
+    call(HASHkv64PutGrow, tab, &rec);   // Get/Put/Del/Probe take kv64bData(tab)
+
+`Grow(buf)` doubles DATA into the first half of IDLE; it never maps or
+copies the table and fails `BNOROOM` if IDLE is shorter than DATA (the
+table is untouched then).  One doubling never overflows a line.  Phases,
+`data` being the doubled view `{DATA head, DATA end + len}`:
+
+ 1. `GrowCopy(data)`: for each lower line b, zero line b+len, then Put
+    there every entry of line b whose home under 2·len is in line b+len.
+    The upper half is invisible under the old length.
+ 2. Flip: `bFed(buf, len)`, a single word store, doubles DATA.
+ 3. `GrowClean(data)`: delete the stale copies left in the lower half
+    (`unstale(data, ndx)` = one backward-shift `shift` at ndx), each line
+    swept until clean.
+
+Every state between steps is a valid table: stale duplicates are
+invisible (their key's home is in the upper line, which holds the live
+copy), there are no holes.  Both 1 and 3 are idempotent.  Under
+`ABC_HASH_CONVERGE` the grown table is byte-equal to one Put-built at the
+new length (tested).  Reset a table by zeroing DATA and `bShed`-ing it
+back; the room may stay dirty, `GrowCopy` zeroes what it uses.
+
+Not done, kept possible: crash safety for a file-backed map with
+word-sized records.  Missing: the length persisted in a header word,
+the flip being that store; msync after phase 1 (before the flip) and
+after the flip; on open, `GrowClean` at the persisted length (a no-op on
+a clean table: no lower-half entry has its home in the upper half),
+which finishes a phase 3 cut short; a phase 1 cut short needs nothing,
+it is invisible and the next Grow redoes it.  Records must be stored by
+single words (a torn multi-word record is a corrupt entry).

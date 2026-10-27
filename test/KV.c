@@ -25,7 +25,8 @@ fun kv128 kv128of(u64 k, u64 v) {
 ok64 KV128hash() {
     sane(1);
     Bkv128 buf = {};
-    call(kv128bMap, buf, 16);
+    call(kv128bMap, buf, 1 << 20);
+    call(kv128bFed, buf, 16);
     for (u64 k = 1; k <= 3000; ++k) {
         kv128 r = kv128of(k, k * 7);
         call(HASHkv128PutGrow, buf, &r);
@@ -33,16 +34,16 @@ ok64 KV128hash() {
     kv128 r = kv128of(42, 1);
     call(HASHkv128PutGrow, buf, &r);
     size_t live = 0;
-    $for(kv128, p, kv128bIdle(buf)) if (p->key._64[0]) ++live;
+    $for(kv128, p, kv128bData(buf)) if (p->key._64[0]) ++live;
     testeqv((long long)live, 3000LL, "%lld");
     for (u64 k = 1; k <= 3000; ++k) {
         kv128 g = {.key = kv128of(k, 0).key};
-        call(HASHkv128Get, &g, kv128bIdle(buf));
+        call(HASHkv128Get, &g, kv128bData(buf));
         kv128 w = kv128of(k, k == 42 ? 1 : k * 7);
         want(g.val._64[0] == w.val._64[0] && g.val._64[1] == w.val._64[1]);
     }
     kv128 miss = kv128of(5000, 0);
-    want(HASHkv128Get(&miss, kv128bIdle(buf)) == HASHNONE);
+    want(HASHkv128Get(&miss, kv128bData(buf)) == HASHNONE);
     call(kv128bUnMap, buf);
     done;
 }
@@ -102,33 +103,34 @@ fun k96v32 k96v32of(u64 k, u32 v) {
 ok64 K96V32hash() {
     sane(1);
     Bk96v32 buf = {};
-    call(k96v32bMap, buf, 16);
+    call(k96v32bMap, buf, 1 << 20);
+    call(k96v32bFed, buf, 16);
     for (u64 k = 1; k <= 3000; ++k) {
         k96v32 r = k96v32of(k, (u32)(k * 7));
         call(HASHk96v32PutGrow, buf, &r);
     }
-    want($len(k96v32bIdle(buf)) > 3000);
+    want($len(k96v32bData(buf)) > 3000);
     k96v32 r = k96v32of(42, 1);
     call(HASHk96v32PutGrow, buf, &r);
     k96v32 lo = {.k0 = 1, .k1 = 0, .val = 11}, hi = {.k0 = 0, .k1 = 1, .val = 12};
     call(HASHk96v32PutGrow, buf, &lo);
     call(HASHk96v32PutGrow, buf, &hi);
     size_t live = 0;
-    $for(k96v32, p, k96v32bIdle(buf)) if (p->k0 || p->k1) ++live;
+    $for(k96v32, p, k96v32bData(buf)) if (p->k0 || p->k1) ++live;
     testeqv((long long)live, 3002LL, "%lld");
     for (u64 k = 1; k <= 3000; ++k) {
         k96v32 g = k96v32of(k, 0);
-        call(HASHk96v32Get, &g, k96v32bIdle(buf));
+        call(HASHk96v32Get, &g, k96v32bData(buf));
         want(g.val == (k == 42 ? 1 : (u32)(k * 7)));
     }
     k96v32 g = {.k0 = 1};
-    call(HASHk96v32Get, &g, k96v32bIdle(buf));
+    call(HASHk96v32Get, &g, k96v32bData(buf));
     want(g.val == 11);
     g = (k96v32){.k1 = 1};
-    call(HASHk96v32Get, &g, k96v32bIdle(buf));
+    call(HASHk96v32Get, &g, k96v32bData(buf));
     want(g.val == 12);
     k96v32 miss = k96v32of(5000, 0);
-    want(HASHk96v32Get(&miss, k96v32bIdle(buf)) == HASHNONE);
+    want(HASHk96v32Get(&miss, k96v32bData(buf)) == HASHNONE);
     //  the value takes no part in hashing or key equality
     k96v32 a = k96v32of(7, 1), b = k96v32of(7, 2);
     want(k96v32hash(&a) == k96v32hash(&b) && k96v32hashEq(&a, &b));
