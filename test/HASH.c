@@ -19,6 +19,20 @@
 #include "HASHx.h"
 #undef X
 
+// HASH-26A274tV3C: Probe/ProbeGrow on u64 (convergent), kv64, k96v32
+#define X(M, name) M##u64##name
+#define ABC_HASH_CONVERGE 1
+#include "HASHx.h"
+#undef X
+
+#define X(M, name) M##kv64##name
+#include "HASHx.h"
+#undef X
+
+#define X(M, name) M##k96v32##name
+#include "HASHx.h"
+#undef X
+
 ok64 HASH0() {
     sane(1);
     a_pad(u32, pad, 1024);
@@ -275,6 +289,125 @@ ok64 HASHputgrow() {
     done;
 }
 
+// HASH-26A274tV3C: Probe hit/miss/fill on kv64; a full line is NOROOM
+ok64 HASHprobe() {
+    sane(1);
+    a_pad(kv64, pad, 64);
+    zerob(pad);
+    kv64 *slot = NULL;
+    kv64 r = {.key = 5, .val = 50};
+    want(HASHNONE == HASHkv64Probe(&slot, pad_idle, &r));
+    want(slot != NULL && slot->key == 0 && slot->val == 0);
+    *slot = r;
+    kv64 q = {.key = 5, .val = 99};
+    kv64 *hit = NULL;
+    want(OK == HASHkv64Probe(&hit, pad_idle, &q));
+    want(hit == slot && hit->val == 50 && q.val == 99);
+    kv64 g = {.key = 5};
+    call(HASHkv64Get, &g, pad_idle);
+    want(g.val == 50);
+    // the filled slot is where Put puts it: Put then Probe agree
+    kv64 p = {.key = 6, .val = 60};
+    call(HASHkv64Put, pad_idle, &p);
+    want(OK == HASHkv64Probe(&hit, pad_idle, &p) && hit->val == 60);
+    // one line (16 slots): 16 keys fit, the 17th is NOROOM, slot untouched
+    a_pad(kv64, line, 16);
+    zerob(line);
+    for (u64 k = 1; k <= 16; ++k) {
+        kv64 x = {.key = k, .val = k * 3};
+        want(HASHNONE == HASHkv64Probe(&slot, line_idle, &x));
+        *slot = x;
+    }
+    for (u64 k = 1; k <= 16; ++k) {
+        kv64 x = {.key = k};
+        want(OK == HASHkv64Probe(&slot, line_idle, &x) && slot->val == k * 3);
+    }
+    kv64 full = {.key = 17, .val = 1};
+    slot = NULL;
+    want(HASHNOROOM == HASHkv64Probe(&slot, line_idle, &full));
+    want(slot == NULL);
+    done;
+}
+
+// ProbeGrow: get-or-insert across growth, one entry per key
+ok64 HASHprobegrow() {
+    sane(1);
+    Bkv64 buf = {};
+    call(kv64bMap, buf, 16);
+    for (int pass = 0; pass < 2; ++pass)
+        for (u64 k = 1; k <= 3000; ++k) {
+            kv64 r = {.key = k * 0x10001, .val = k * 7}, *slot = NULL;
+            ok64 o = HASHkv64ProbeGrow(&slot, buf, &r);
+            want(o == (pass ? OK : HASHNONE));
+            if (o == HASHNONE) *slot = r;
+            want(slot->key == r.key && slot->val == k * 7);
+        }
+    want(kv64bIdleLen(buf) > 3000);
+    size_t live = 0;
+    $for(kv64, p, kv64bIdle(buf)) if (p->key) ++live;
+    testeqv((long long)live, 3000LL, "%lld");
+    for (u64 k = 1; k <= 3000; ++k) {
+        kv64 g = {.key = k * 0x10001};
+        call(HASHkv64Get, &g, kv64bIdle(buf));
+        want(g.val == k * 7);
+    }
+    call(kv64bUnMap, buf);
+
+    Bk96v32 kb = {};
+    call(k96v32bMap, kb, 16);
+    for (int pass = 0; pass < 2; ++pass)
+        for (u32 k = 1; k <= 3000; ++k) {
+            k96v32 r = {.k0 = k % 50, .k1 = k / 50, .val = k}, *slot = NULL;
+            r.val += pass;  // the value never takes part in the match
+            ok64 o = HASHk96v32ProbeGrow(&slot, kb, &r);
+            want(o == (pass ? OK : HASHNONE));
+            if (o == HASHNONE) *slot = r;
+            want(slot->k0 == r.k0 && slot->k1 == r.k1 && slot->val == k);
+        }
+    live = 0;
+    $for(k96v32, p, k96v32bIdle(kb)) if (p->k0 || p->k1) ++live;
+    testeqv((long long)live, 3000LL, "%lld");
+    call(k96v32bUnMap, kb);
+    done;
+}
+
+// ABC_HASH_CONVERGE: Probe+fill leaves the very layout Put leaves
+ok64 HASHprobeconv() {
+    sane(1);
+    a_pad(u64, put, 1 << 10);
+    a_pad(u64, prb, 1 << 10);
+    zerob(put);
+    zerob(prb);
+    u64 x = 0x9e3779b97f4a7c15ULL;
+    for (u64 i = 0; i < 400; ++i) {  // ~40% load, no line full
+        x = x * 6364136223846793005ULL + 1442695040888963407ULL;
+        u64 v = (x >> 20) | 1, *slot = NULL;
+        ok64 o = HASHu64Probe(&slot, prb_idle, &v);
+        if (o == HASHNONE) *slot = v;
+        else want(o == OK && *slot == v);
+        call(HASHu64Put, put_idle, &v);
+    }
+    want(0 == memcmp(put[0], prb[0], sizeof(u64) << 10));
+    for (u64 const *p = prb[0]; p < prb[0] + (1 << 10); ++p) {
+        if (!*p) continue;
+        u64 *slot = NULL;
+        want(OK == HASHu64Probe(&slot, prb_idle, p) && slot == p);
+    }
+    Bu64 buf = {};
+    call(u64bMap, buf, 16);
+    for (u64 k = 1; k <= 3000; ++k) {
+        u64 *slot = NULL;
+        want(HASHNONE == HASHu64ProbeGrow(&slot, buf, &k));
+        *slot = k;
+    }
+    for (u64 k = 1; k <= 3000; ++k) {
+        u64 v = k;
+        call(HASHu64Get, &v, u64bIdle(buf));
+    }
+    call(u64bUnMap, buf);
+    done;
+}
+
 ok64 RAPtest() {
     sane(1);
     u8c hello[] = "hello world";
@@ -311,6 +444,9 @@ ok64 HASH() {
     call(HASHo);
     call(HASHgrow);
     call(HASHputgrow);
+    call(HASHprobe);
+    call(HASHprobegrow);
+    call(HASHprobeconv);
     call(RAPtest);
     done;
 }

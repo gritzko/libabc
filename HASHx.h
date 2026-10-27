@@ -176,6 +176,74 @@ fun ok64 X(HASH, PutGrow)(X(B, ) buf, T const *rec) {
     }
 }
 
+// HASH-26A274tV3C: get-or-insert in one probe, rec hashed once, never
+// copied.  OK: *slot is the resident with rec's key.  HASHNONE: *slot
+// is the zeroed slot Put would have put rec into; the caller fills it
+// (a nonzero record with rec's key) before any other op on the table.
+// HASHNOROOM: rec's line is full, *slot and the table untouched.
+// ABC_HASH_CONVERGE: on HASHNONE the residents Put would have displaced
+// are moved first (hashed, as Put does), so Probe+fill leaves the very
+// layout Put leaves; unlike Put, a NOROOM evicts nothing.  As Put, no
+// guard for a table shorter than ABC_HASH_LINE.
+fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
+    u64 hash = X(, hash)(rec);
+    size_t fit = hash & LMASK;
+    size_t off = fit & MASK;
+    T *line = data[0] + (fit & ~MASK);
+    size_t disp = ABC_HASH_LINE;  // CONVERGE: rec displaces this one
+    u64 dhash = 0;
+    for (size_t i = 0; i < ABC_HASH_LINE; ++i) {
+        T *s = line + ((off + i) & MASK);
+        if (X(, IsZero)(s)) {
+            if (ABC_HASH_CONVERGE && disp < i) {
+                T *d = line + ((off + disp) & MASK);
+                T r;
+                X(, mv)(&r, d);
+                zerop(d);
+                for (size_t j = disp + 1; j <= i; ++j) {
+                    T *c = line + ((off + j) & MASK);
+                    if (X(, IsZero)(c)) {
+                        X(, mv)(c, &r);
+                        break;
+                    }
+                    u64 h2 = X(, hash)(c);
+                    if (h2 > dhash) {
+                        X(, Swap)(&r, c);
+                        dhash = h2;
+                    }
+                }
+                s = d;
+            }
+            *slot = s;
+            return HASHNONE;
+        }
+        if (X(, hashEq)(rec, s)) {
+            *slot = s;
+            return OK;
+        }
+        if (ABC_HASH_CONVERGE && disp == ABC_HASH_LINE) {
+            u64 h2 = X(, hash)(s);
+            if (h2 > hash) {
+                disp = i;
+                dhash = h2;
+            }
+        }
+    }
+    return HASHNOROOM;
+}
+
+// Probe a bMap-ed table, Grow-ing it while rec's line is full: OK or
+// HASHNONE as Probe, *slot into the (grown) table; else Grow's failure.
+fun ok64 X(HASH, ProbeGrow)(T **slot, X(B, ) buf, T const *rec) {
+    sane(buf != NULL && buf[0] != NULL);
+    for (;;) {
+        X($, ) data = {buf[2], buf[3]};
+        ok64 o = X(HASH, Probe)(slot, data, rec);
+        if (o != HASHNOROOM) return o;
+        call(X(HASH, Grow), buf);
+    }
+}
+
 #undef MASK
 #undef LMASK
 #undef ABC_HASH_LINE
