@@ -81,22 +81,20 @@ fun BOX_T *X(BOX, Fold)(BOX_T *lo, BOX_T *hi) {
     return X(BOX, Dedup)(lo, hi);
 }
 
-//  (3) the parallel in-place pass over runs[from..n): equal keys combined into
-//  the youngest equal slot, the others tombstoned.
-fun void X(BOX, Pass)(X($, c) *runs, size_t m) {
-    BOX_T *cur[HIT_MAX_RUNS];
-    for (size_t i = 0; i < m; i++) cur[i] = (BOX_T *)runs[i][0];
+//  (3) the parallel in-place pass over the selected runs, each run's head its
+//  cursor (the runs are consumed): equal keys combined into the youngest equal
+//  slot, the others tombstoned.
+fun void X(BOX, Pass)(X(, css) sel) {
     for (;;) {
-        BOX_T *min = NULL;
-        for (size_t i = 0; i < m; i++)
-            if (cur[i] < runs[i][1] && (!min || X(, Z)(cur[i], min)))
-                min = cur[i];
+        BOX_T const *min = NULL;
+        $for(X(, cs), r, sel)
+            if (!$empty(*r) && (!min || X(, Z)((*r)[0], min))) min = (*r)[0];
         if (!min) break;
         BOX_T key = *min;
         BOX_T *last = NULL;
-        for (size_t i = 0; i < m; i++) {
-            if (cur[i] == runs[i][1] || !X(BOX, Eq)(cur[i], &key)) continue;
-            BOX_T *at = cur[i]++;
+        $for(X(, cs), r, sel) {
+            if ($empty(*r) || !X(BOX, Eq)((*r)[0], &key)) continue;
+            BOX_T *at = (BOX_T *)(*r)[0]++;
             if (last) {
 #ifdef BOXx_MERGE
                 BOXx_MERGE(last, at);
@@ -140,11 +138,13 @@ fun ok64 X(BOX, Sort)(X(, b) recs, X(, csb) runs, b8 all) {
     for (size_t i = 1; i < m && ordered; i++)
         ordered = X(, Z)(sel[i - 1][1] - 1, sel[i][0]);
     if (!ordered) {
-        X(BOX, Pass)(sel, m);
+        X(, css) sub = {sel, sb[2]};
+        X(BOX, Pass)(sub);
         X(, s) range = {lo, hi};
         X(, sSort)(range);
         while (hi > lo && X(BOX, IsTomb)(hi - 1)) hi--;
     }
+    sel[0][0] = lo;
     sel[0][1] = hi;
     sb[2] = sel + 1;
     rb[1] = rb[2] = hi;

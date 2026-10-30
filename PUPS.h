@@ -285,8 +285,7 @@ fun u64 PUPSeqno(pup256b pups, u32 i) {
 // and passed to every entry point that touches the memtable.  The core sees it
 // as a u8csb and passes it through; it resets it whenever the memtable starts
 // empty.  HIT_MAX_RUNS slots are plenty: the BOX ladder keeps runs few.
-//   kv64cs slots[HIT_MAX_RUNS];
-//   kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+//   a_pad(kv64cs, runs, HIT_MAX_RUNS);   // a struct member: a_wrap (B.h)
 //
 // DOG-027: family-side typed hook over the memtable.
 // BOX-26A26EbjLj: the hook seals DATA into a run and collapses the tailing

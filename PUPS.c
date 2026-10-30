@@ -892,7 +892,7 @@ static ok64 pup_ladder(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
         //  The ladder reads run LENGTHS only — byte lengths here, element
         //  counts in a HIT stack; HIT.h stays the one home of the 1/8 policy.
         a_pad(u64, lens, HIT_MAX_RUNS);
-        $for(u8cs, r, stack) u64bFeed1(lens, (u64)u8csLen(*r));
+        $for(u8cs, r, stack) call(u64bFeed1, lens, (u64)u8csLen(*r));
         size_t m = HITLadderOverRuns(u64bDataC(lens));
         if (m < 2) done;
         call(pup_collapse, pups, dir, ext, merge, row, stack, m, opt);

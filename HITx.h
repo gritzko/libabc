@@ -18,6 +18,9 @@
 #define HIT_E X(, cs)    // entry = const slice
 #define HIT_H X(, csps)  // heap = slice of pointers to entries
 
+// The heap's buffer: the pointers live in its DATA (a_pad(X(, csp), ...)).
+typedef X(, csp) *X(, cspb)[4];
+
 // --- Comparator: compare entries by head element ---
 
 // DOG-027: total order — equal heads resolve by entry pointer, highest
@@ -69,20 +72,21 @@ fun void X(HIT, Eject)(X(, csps) heap, size_t at) {
 // --- Load: compact `runs` in place, build the pointer heap over it ---
 // DOG-027: SIDE EFFECT on `runs` — empty entries are dropped, survivors
 // shift down keeping age order, runs[1] moves back; the heap aims at those.
-// Past HIT_MAX_RUNS the stack is damaged or foreign: HITTOOMANY, no window.
+// The heap is the DATA of `heap`, reset here.  More runs than its room
+// (HIT_MAX_RUNS: the stack is damaged or foreign): HITTOOMANY, no window.
 
-fun ok64 X(HIT, Load)(X(, csps) heap, X(, csp) *slots, X(, css) runs) {
-    if ($len(runs) > HIT_MAX_RUNS) return HITTOOMANY;
-    heap[0] = heap[1] = slots;
+fun ok64 X(HIT, Load)(X(, cspb) heap, X(, css) runs) {
+    if ($len(runs) > heap[3] - heap[0]) return HITTOOMANY;
+    heap[1] = heap[2] = heap[0];
     HIT_E *w = runs[0];
     for (HIT_E *r = runs[0]; r < runs[1]; r++) {
         if ($empty(*r)) continue;
         if (w != r) X(, csMv)(*w, *r);
-        *heap[1]++ = *w;
+        *heap[2]++ = *w;
         w++;
     }
     runs[1] = w;
-    X(HIT, Heap)(heap);
+    X(HIT, Heap)(heap + 1);
     return OK;
 }
 
@@ -141,9 +145,9 @@ fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
 // output) and return OKNOROOM when it fills.
 
 fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
-    X(, csp) slots[HIT_MAX_RUNS];
-    X(, csps) heap;
-    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    X(, csp) **heap = slots_data;
+    ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap)) {
         if ($empty(into)) return OKNOROOM;
@@ -156,9 +160,9 @@ fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
 // --- Merge: drain heap producing sorted deduplicated output ---
 
 fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
-    X(, csp) slots[HIT_MAX_RUNS];
-    X(, csps) heap;
-    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    X(, csp) **heap = slots_data;
+    ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap)) {
         HIT_T val = *(*heap[0])[0];
@@ -177,9 +181,9 @@ fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
 // --- Intersect: emit values present in ALL nruns iterators ---
 
 fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
-    X(, csp) slots[HIT_MAX_RUNS];
-    X(, csps) heap;
-    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    X(, csp) **heap = slots_data;
+    ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap)) {
         size_t ntops = X(HIT, Tops)(heap);
@@ -200,9 +204,9 @@ fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
 // --- Seek: advance all entries until heap top >= key ---
 
 fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
-    X(, csp) slots[HIT_MAX_RUNS];
-    X(, csps) heap;
-    ok64 lo = X(HIT, Load)(heap, slots, runs);
+    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    X(, csp) **heap = slots_data;
+    ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap) && X(, Z)((*heap[0])[0], key)) {
         X(, c) *const run[2] = {(*heap[0])[0], (*heap[0])[1]};
@@ -244,9 +248,9 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
 // lives entirely in its (oldest-first, in-place-advanced) entries.
 
 fun ok64 X(HIT, SkipValue)(X(, css) runs) {
-    X(, csp) slots[HIT_MAX_RUNS];
-    X(, csps) inner;
-    ok64 lo = X(HIT, Load)(inner, slots, runs);
+    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    X(, csp) **inner = slots_data;
+    ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     if ($empty(inner)) return OK;
     HIT_T val = *(*inner[0])[0];
@@ -257,7 +261,7 @@ fun ok64 X(HIT, SkipValue)(X(, css) runs) {
         X(HIT, Step)(inner);
     // DOG-027: re-Load to compact `runs` — sIntersectMerge's cssTop reads
     // the inner's entries directly, with no Load of its own to filter them.
-    return X(HIT, Load)(inner, slots, runs);
+    return X(HIT, Load)(slots, runs);
 }
 
 // --- IntersectMerge: intersect the merged outputs of N inner HITs ---
@@ -382,8 +386,7 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
 // Past HIT_MAX_RUNS the stack is damaged, hence never compact.
 fun b8 X(HIT, IsCompact)(X(, css) stack) {
     a_pad(u64, lens, HIT_MAX_RUNS);
-    if ($len(stack) > HIT_MAX_RUNS) return NO;
-    $for(HIT_E, r, stack) u64bFeed1(lens, (u64)$len(*r));
+    $for(HIT_E, r, stack) if (u64bFeed1(lens, (u64)$len(*r)) != OK) return NO;
     return HITLadderOK(u64bDataC(lens));
 }
 
@@ -400,8 +403,7 @@ fun b8 X(HIT, IsCompact)(X(, css) stack) {
 // length-only caller like dog's Pup calls HIT.h directly.
 fun size_t X(HIT, CompactRuns)(X(, css) stack) {
     a_pad(u64, lens, HIT_MAX_RUNS);
-    if ($len(stack) > HIT_MAX_RUNS) return 0;
-    $for(HIT_E, r, stack) u64bFeed1(lens, (u64)$len(*r));
+    $for(HIT_E, r, stack) if (u64bFeed1(lens, (u64)$len(*r)) != OK) return 0;
     return HITLadderOverRuns(u64bDataC(lens));
 }
 

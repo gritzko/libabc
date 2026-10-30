@@ -45,21 +45,28 @@ fun ok64 X(PUP, Sync)(u8bp mem, u8csb runs) {
     done;
 }
 
+//  Feed typed views of the run byte slices `srcs` into `runs`, a X(,cs)
+//  buffer; HITTOOMANY past its room.
+fun ok64 X(PUP, Runs)(X(, csb) runs, u8css srcs) {
+    X(, cs) **b = (X(, cs) **)runs;
+    $for(u8cs, s, srcs) {
+        if (b[2] == b[3]) return HITTOOMANY;
+        (*b[2])[0] = (X(, ) const *)(*s)[0];
+        (*b[2])[1] = (X(, ) const *)(*s)[1];
+        b[2]++;
+    }
+    return OK;
+}
+
 //  The ladder's typed merge over oldest-first run byte slices; equal rows go to
 //  the youngest run.  `bottom`: the slices are the whole stack, dead rows go.
 fun ok64 X(PUP, Merge)(u8s into, u8css srcs, b8 bottom) {
     sane($ok(into));
-    size_t n = (size_t)$len(srcs);
-    if (n > HIT_MAX_RUNS) return HITTOOMANY;
-    X(, cs) runs[HIT_MAX_RUNS];
-    for (size_t i = 0; i < n; i++) {
-        runs[i][0] = (X(, ) const *)srcs[0][i][0];
-        runs[i][1] = (X(, ) const *)srcs[0][i][1];
-    }
-    X(, css) hp = {runs, runs + n};
+    a_pad(X(, cs), runs, HIT_MAX_RUNS);
+    call(X(PUP, Runs), runs, srcs);
     X(, ) *base = (X(, ) *)into[0];
     X(, s) dst = {base, (X(, ) *)into[1]};
-    call(X(HIT, Merge), hp, dst);
+    call(X(HIT, Merge), runs_data, dst);
     if (bottom) {
         X(, ) *w = base;
         for (X(, ) *r = base; r < dst[0]; r++)
@@ -127,22 +134,12 @@ fun ok64 X(PUP, AllRuns)(u8csb out, pup256b pups, X(, csb) runs) {
 //  `runs` may be NULL for a stack that never had a memtable.
 fun ok64 X(PUP, Read)(X(, s) into, pup256b pups, X(, csb) runs) {
     sane(into != NULL);
-    Bu8cs srcs = {};
-    call(u8csbAllocate, srcs, HIT_MAX_RUNS);
-    try(X(PUP, AllRuns), srcs, pups, runs);
-    nedo { u8csbFree(srcs); fail(__); }
-    size_t n = u8csbDataLen(srcs);
-    X(, cs) srcv[HIT_MAX_RUNS];
-    u8cs *sl = u8csbDataHead(srcs);
-    for (size_t i = 0; i < n; i++) {
-        srcv[i][0] = (X(, ) const *)sl[i][0];
-        srcv[i][1] = (X(, ) const *)sl[i][1];
-    }
-    X(, css) hp = {srcv, srcv + n};
+    a_pad(u8cs, srcs, HIT_MAX_RUNS);
+    call(X(PUP, AllRuns), srcs, pups, runs);
+    a_pad(X(, cs), srcv, HIT_MAX_RUNS);
+    call(X(PUP, Runs), srcv, srcs_data);
     X(, ) *base = into[0];
-    try(X(HIT, Merge), hp, into);
-    u8csbFree(srcs);
-    nedo fail(__);
+    call(X(HIT, Merge), srcv_data, into);
     X(, ) *w = base;
     for (X(, ) *r = base; r < into[0]; r++)
         if (!PUPx_DEAD(r)) *w++ = *r;

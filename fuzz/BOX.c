@@ -23,10 +23,8 @@ FUZZ(u16, BOXfuzz) {
     if ($len(input) > (i64)MAX_INPUT_N) input[1] = input[0] + MAX_INPUT_N;
     if ($empty(input)) done;
 
-    u16 mem[MAX_INPUT_N + 1];
-    u16b recs = {mem, mem, mem, mem + MAX_INPUT_N + 1};
-    u16cs slots[HIT_MAX_RUNS];
-    u16csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    a_pad(u16, recs, MAX_INPUT_N + 1);
+    a_pad(u16cs, runs, HIT_MAX_RUNS);
     u8 seen[1 << 16] = {};
 
     $for(u16c, p, input) {

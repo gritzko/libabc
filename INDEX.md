@@ -29,7 +29,7 @@ A slice is `T *s[2]`, a `[head, term)` pointer pair; consuming a slice means mov
  -  `u8sFeed`/`u8sFeed1`/`u8sFeedSome`/`u8sCopy`/`u8sDrain1` — write a slice or element into a writable slice and advance.
  -  `u8sFind`/`u8sFindS`/`u8csRevFind`/`u8csHasPrefix`/`u8csHasSuffix` — element/sub-slice search, prefix/suffix.
  -  `u8csEq`/`u8csIn`/`u8sFork`/`u8sJoin`/`u8csSub` — equality, containment.
- -  `a_pad`/`a$`/`a_dup`/`a_head`/`a_tail`/`a_rest`/`a_part` — stack-slice and sub-slice construction macros (type first).
+ -  `a_pad`/`a_wrap`/`a$`/`a_dup`/`a_head`/`a_tail`/`a_rest`/`a_part` — stack-slice and sub-slice construction macros (type first).
  -  `$for`/`$rof`/`$eat` — forward/reverse/consuming iteration over a slice.
 
 ###  B.h, Bx.h, BUF.h — buffers and arenas

@@ -24,6 +24,7 @@ releases it:
 | `u8bMap(buf, cap)`            | mmap    | `u8bUnMap(buf)`    |
 | `u8bAcquire(arena, buf, cap)` | arena   | arena rewind/reset |
 | `a_pad(u8, buf, cap)`         | stack   | scope exit (auto)  |
+| `a_wrap(u8, buf, arr)`        | `arr`   | `arr`'s owner      |
 
 Provenance lives in the caller's head, not in the buffer's type —
 match the release verb to the creation verb at every site.  A

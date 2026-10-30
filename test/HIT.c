@@ -94,10 +94,9 @@ ok64 HIT3() {
         {a + 3, a + 3},    // empty (begin == end)
     };
     u64css heap = {runs, runs + 4};
-    u64csp slots[HIT_MAX_RUNS];
-    u64csps ptrs;
-    call(HITu64Load, ptrs, slots, heap);
-    testeqv((long long)($len(ptrs)), (long long)((size_t)2), "%lld");
+    a_pad(u64csp, slots, HIT_MAX_RUNS);
+    call(HITu64Load, slots, heap);
+    testeqv((long long)($len(slots_data)), (long long)((size_t)2), "%lld");
     testeqv((long long)($len(heap)), (long long)((size_t)2), "%lld");
     // first (oldest) surviving entry is run a, head 1
     testeqv((long long)(*(*heap[0])[0]), (long long)((u64)1), "%lld");
@@ -195,9 +194,8 @@ ok64 HIT7() {
     testeqv((long long)(o), (long long)(NODATA), "%lld");
     // DOG-027: Seek no longer compacts — the next Load drops the exhausted
     // entries, so the same emptiness claim is asserted through one.
-    u64csp slots[HIT_MAX_RUNS];
-    u64csps ptrs;
-    call(HITu64Load, ptrs, slots, heap);
+    a_pad(u64csp, slots, HIT_MAX_RUNS);
+    call(HITu64Load, slots, heap);
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     done;
 }
@@ -253,10 +251,9 @@ ok64 HIT10() {
         {NULL, NULL},
     };
     u64css heap = {runs, runs + 3};
-    u64csp slots[HIT_MAX_RUNS];
-    u64csps ptrs;
-    call(HITu64Load, ptrs, slots, heap);
-    testeqv((long long)($len(ptrs)), (long long)((size_t)0), "%lld");
+    a_pad(u64csp, slots, HIT_MAX_RUNS);
+    call(HITu64Load, slots, heap);
+    testeqv((long long)($len(slots_data)), (long long)((size_t)0), "%lld");
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     u64 key = 1;
     ok64 o = HITu64Seek(heap, &key);

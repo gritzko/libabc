@@ -103,13 +103,22 @@ fun void u8aReset(u8a arena) {
     T##$ n##idle __attribute__((unused)) = T##bIdle(n##buf);   \
     T##$ n##data __attribute__((unused)) = T##bData(n##buf);
 
-#define a_pad(T, n, l)                                         \
-    T _##n[(l)];                                               \
-    T##b n = {_##n, _##n, _##n, _##n + (l)};                   \
-    T##sp n##_idle __attribute__((unused)) = T##bIdle(n);      \
-    T##sp n##_data __attribute__((unused)) = T##bData(n);      \
-    T##csp n##_datac __attribute__((unused)) =                 \
-        T##cbData((T const **)n);
+// a_wrap: an empty buffer `n` over a preexisting fixed array `arr` (a struct
+// member, a local), its whole length idle, plus the `n_idle` / `n_data` /
+// `n_datac` slices; fill it with checked feeds.  `arr` must be an array, not
+// a pointer.  No token pasting, so T may be a template type (X(, cs)).
+// a_pad(T, n, l) is the same over a fresh stack array T _n[l].
+#define a_wrap(T, n, arr)                                                  \
+    static_assert(!__builtin_types_compatible_p(typeof(arr),               \
+                                                typeof(&*(arr))));         \
+    T *n[4] = {(arr), (arr), (arr), (arr) + sizeof(arr) / sizeof(*(arr))}; \
+    T **n##_idle __attribute__((unused)) = n + 2;                          \
+    T **n##_data __attribute__((unused)) = n + 1;                          \
+    T const **n##_datac __attribute__((unused)) = (T const **)n + 1;
+
+#define a_pad(T, n, l) \
+    T _##n[(l)];       \
+    a_wrap(T, n, _##n)
 
 #define a_pad0(T, n, l) \
     a_pad(T, n, l);     \
