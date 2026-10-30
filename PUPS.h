@@ -66,6 +66,9 @@ con ok64 PUPFAIL = 0x197993ca495;
 con ok64 PUPEMPTY = 0x65e64e599762;
 con ok64 PUPNOMAP = 0x65e657616299;
 con ok64 PUPNOROOM = 0x197995d86d8616;
+//  PUPS-26A309qbG9: PUPGONE: a run listed by the scan was gone by the time it
+//  was mapped (another writer unlinked it); retry the open.
+con ok64 PUPGONE = 0x197994185ce;
 
 // PUPS-26A276Xh2e: the most run files one directory scan collects (a
 // map-max-once key buffer; idle pages cost nothing).
@@ -98,6 +101,32 @@ con ok64 PUPNOROOM = 0x197995d86d8616;
 // unlinked; an open leaves whatever it cannot read on disk.
 ok64 PUPOpenAll(pup256b pups, path8sc dir, u8csc ext);
 
+// PUPS-26A309qbG9: PUPOpenAll bounded by a key ceiling — a run keyed above
+// `ceil` is not mapped, as if absent (a newer writer's, not yet committed by
+// the caller's own protocol).  PUPOpenAll is this with ceil ~0.  A run that
+// vanishes between the listing and its mapping fails with PUPGONE (both).
+ok64 PUPOpenTo(pup256b pups, path8sc dir, u8csc ext, u64 ceil);
+
+// PUPS-26A309qbG9: the caller's say in how a WRITE keys and retires runs, for
+// a caller that publishes runs itself (e.g. by a key ceiling, PUPOpenTo).
+//   floor  every run the call creates (create, seal, ladder output) takes a
+//          key at or above it; on return it is past every key created, so
+//          ONE pupopt passed to many stacks draws their keys from one counter;
+//   dead   NULL: merged-away runs are unlinked at once (the plain entry
+//          points).  Else they are unmapped and dropped from the stack, their
+//          files left on disk, their keys appended here; a later scan through
+//          this pupopt skips them.  Hand the keys to PUPUnlink once readers no
+//          longer need them; keep passing the same list until then.
+typedef struct pupopt {
+    u64 floor;
+    u64bp dead;
+} pupopt;
+
+// PUPS-26A309qbG9: unlink the runs `keys` names, OLDEST first (sorts `keys`
+// in place), so a crash part way leaves a youngest suffix: every tombstone
+// outlives the rows it shadows.  A file already gone is fine (a retry).
+ok64 PUPUnlink(path8s dir, u8cs ext, u64s keys);
+
 // Cross-branch load: flip the current DATA into PAST (collapse the
 // previously-loaded branch into the read-only context), then open
 // `dir`'s pup files into the now-empty DATA.  Mirror of "open first
@@ -121,6 +150,9 @@ ok64 PUPCreate(pup256b pups, path8s dir, u8cs ext, u8cs bytes);
 // anything on top of the run passes `durable`: the run is fsync'd before the
 // rename and the directory after it, so it is on disk when the call returns.
 ok64 PUPCreateAs(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable);
+// PUPS-26A309qbG9: PUPCreateAs with the key at or above `opt->floor`.
+ok64 PUPCreateOpt(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable,
+                  pupopt *opt);
 
 // Same as PUPCreate but the caller picks the pup_key explicitly.
 // Refuses with PUPFAIL when a live entry with the same pup_key
@@ -290,6 +322,11 @@ ok64 PUPPut(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
 ok64 PUPPutMem(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
                pupsync sync, pupmerge merge, u32 row, u32 mem_pages);
 
+// PUPS-26A309qbG9: PUPPutMem keyed and retired by `opt` (NULL: as PUPPutMem).
+ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
+               pupsync sync, pupmerge merge, u32 row, u32 mem_pages,
+               pupopt *opt);
+
 // DOG-027: seal the memtable into `<10-RON64><ext>`: its runs merged through
 // `merge` into a tmp file, ToC, rename — atomic: a crash leaves a tmp file or
 // a complete run.  Ends, like every seal, with the ladder (below).  A NULL
@@ -305,6 +342,11 @@ ok64 PUPCommit(pup256b pups, u8csb runs, path8s dir, u8cs ext, pupsync sync,
 ok64 PUPCommitAs(pup256b pups, u8csb runs, path8s dir, u8cs ext,
                  pupsync sync, pupmerge merge, u32 row, b8 durable);
 
+// PUPS-26A309qbG9: PUPCommitAs keyed and retired by `opt` (NULL: as PUPCommitAs).
+ok64 PUPCommitOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext,
+                  pupsync sync, pupmerge merge, u32 row, b8 durable,
+                  pupopt *opt);
+
 // DOG-027: the 1/8 size-tiered ladder (HIT_LADDER_DIV) over the committed
 // runs — every seal ends here, so a caller never sees the ladder's state.
 // Merges the youngest violating tail through `merge` into ONE
@@ -314,6 +356,11 @@ ok64 PUPCommitAs(pup256b pups, u8csb runs, path8s dir, u8cs ext,
 // merged are unlinked, and a dict entry whose file another writer already
 // unlinked keeps its mapping until PUPClose.
 ok64 PUPLadder(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row);
+// PUPS-26A309qbG9: the ladder keyed and retired by `opt` (NULL: as PUPLadder):
+// the merged run takes a key at or above `opt->floor`, and with `opt->dead`
+// its sources stay on disk for the caller to PUPUnlink.
+ok64 PUPLadderOpt(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row,
+                  pupopt *opt);
 
 // DOG-027: query view — committed runs oldest→newest, then the memtable's
 // PAST and DATA (sync'd first) as one or two more HIT sources.  Resets `out`.

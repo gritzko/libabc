@@ -98,10 +98,12 @@ static u64 pup_parse_seqno(u8csc name, u8csc ext) {
 // PUPS-26A276Xh2e: map the run on `path` read-only into `ent` and close the
 // fd at once — a mapping outlives close, so a run holds no fd.  PUPEMPTY for a
 // 0-byte file (mmap refuses it), PUPNOMAP for anything else.
+// PUPS-26A309qbG9: PUPGONE for a file no longer there (unlinked since listed).
 static ok64 pup_map(pup256 *ent, path8s path, u64 key) {
     sane(ent != NULL && $ok(path));
     int fd = FILE_CLOSED;
-    if (FILEOpen(&fd, path, O_RDONLY) != OK) return PUPNOMAP;
+    ok64 op = FILEOpen(&fd, path, O_RDONLY);
+    if (op != OK) return op == FILENONE ? PUPGONE : PUPNOMAP;
     struct stat st;
     ok64 o = fstat(fd, &st) == 0 ? OK : PUPNOMAP;
     if (o == OK && st.st_size == 0) o = PUPEMPTY;
@@ -147,8 +149,10 @@ static void pup_remap(pup256b pups, path8s fpath, u64 key) {
 
 // DOG-027: the ONE monotonic pup_key scheme — max(RONNow, max(DATA)+1),
 // skipping the reserved ALL-ONES memtable entry.
-static u64 pup_next_key(pup256b pups) {
+// PUPS-26A309qbG9: and at least the caller's `floor`.
+static u64 pup_next_key(pup256b pups, u64 floor) {
     u64 key = (u64)RONNow();
+    if (key < floor) key = floor;
     $for(pup256, p, pup256bData(pups))
         if (p->key != PUP_MEM_KEY && p->key >= key) key = p->key + 1;
     if (key == 0) key = 1;
@@ -175,15 +179,29 @@ static ok64 pup_key_taken(b8 *out, pup256b pups, path8s dir, u8cs ext,
 
 // DOG-027: the next key whose NAME is free — RON64 is case-sensitive, APFS is
 // not, so two keys can compose one filename and a seal would eat a live run.
-static ok64 pup_free_key(u64 *out, pup256b pups, path8s dir, u8cs ext) {
+static ok64 pup_free_key(u64 *out, pup256b pups, path8s dir, u8cs ext,
+                         u64 floor) {
     sane(out != NULL && pups != NULL && $ok(dir) && $ok(ext));
-    u64 key = pup_next_key(pups);
+    u64 key = pup_next_key(pups, floor);
     for (b8 taken = YES; ; key++) {
         call(pup_key_taken, &taken, pups, dir, ext, key);
         if (!taken) break;
     }
     *out = key;
     done;
+}
+
+// PUPS-26A309qbG9: the caller's floor, and the counter past a key just used.
+static u64 pup_floor(pupopt const *opt) { return opt ? opt->floor : 0; }
+static void pup_took(pupopt *opt, u64 key) {
+    if (opt && opt->floor <= key) opt->floor = key + 1;
+}
+
+// PUPS-26A309qbG9: is `key` on the caller's list of merged-away runs?
+static b8 pup_dead(pupopt const *opt, u64 key) {
+    if (!opt || !opt->dead) return NO;
+    $for(u64, k, u64bData(opt->dead)) if (*k == key) return YES;
+    return NO;
 }
 
 // DOG-027: restore the dict's "runs first, memtable last" invariant — a push
@@ -213,7 +231,9 @@ static b8 pup_dicted(pup256b pups, u64 key) {
 // refresh.  `dedup` skips a key DATA already holds — what a refresh needs and
 // what PUPOpenAll must NOT do (the same basename in another dir is another
 // file, see the header's "not idempotent" contract).
-static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup) {
+// PUPS-26A309qbG9: keys above `ceil` and the caller's dead runs are not runs.
+static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
+                     pupopt const *opt) {
     sane(pups != NULL && u8csOK(dir) && u8csOK(ext));
 
     //  Two-phase: walk the directory with FILEIter collecting pup_keys, sort,
@@ -239,7 +259,7 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup) {
         u64 sq = pup_parse_seqno(base, ext);
         //  DOG-027: anything that is not a `<10-RON64><ext>` run (a pre-ron64
         //  name, a tmp, a stray file) is skipped, never unlinked.
-        if (sq == 0) continue;
+        if (sq == 0 || sq > ceil || pup_dead(opt, sq)) continue;
         //  CODE-26A23CSStk: past PUP_SCAN_MAX runs the rest would go
         //  unscanned — fail, a stack is never read short.
         if (u64bFeed1(keys, sq) != OK) {
@@ -275,6 +295,7 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup) {
         //  CODE-26A23CSStk: a run on disk that cannot be mapped fails the
         //  open, never vanishes from it: PUPEMPTY for a 0-byte run (a crashed
         //  non-durable create), PUPNOMAP for anything else (fds, perms).
+        //  PUPS-26A309qbG9: PUPGONE for one unlinked since the listing.
         pup256 ent = {};
         try(pup_map, &ent, $path(fpath), *kp);
         nedo break;
@@ -292,15 +313,21 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup) {
 }
 
 ok64 PUPOpenAll(pup256b pups, path8sc dir, u8csc ext) {
-    return pup_scan(pups, dir, ext, NO);
+    return pup_scan(pups, dir, ext, NO, ~0ULL, NULL);
+}
+
+ok64 PUPOpenTo(pup256b pups, path8sc dir, u8csc ext, u64 ceil) {
+    return pup_scan(pups, dir, ext, NO, ceil, NULL);
 }
 
 // DOG-046: map in the runs another writer sealed into `dir` since this handle
 // opened.  Runs BEFORE every seal and every ladder, so the key pick and the
 // 1/8 policy both weigh the REAL stack, not this handle's stale view.
-static ok64 pup_refresh(pup256b pups, path8s dir, u8cs ext) {
+// PUPS-26A309qbG9: the runs `opt` holds dead stay out — they were merged away.
+static ok64 pup_refresh(pup256b pups, path8s dir, u8cs ext,
+                        pupopt const *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
-    call(pup_scan, pups, dir, ext, YES);
+    call(pup_scan, pups, dir, ext, YES, ~0ULL, opt);
     //  A foreign run lands past what was dicted, so re-sort DATA oldest-first;
     //  the ALL-ONES memtable key sorts itself back to the tail.
     a_dup(pup256, all, pup256bData(pups));
@@ -411,7 +438,8 @@ ok64 PUPCreateAt(pup256b pups, path8s dir, u8cs ext, u8cs bytes,
     return PUPCreateAtAs(pups, dir, ext, bytes, pup_key, NO);
 }
 
-ok64 PUPCreateAs(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable) {
+ok64 PUPCreateOpt(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable,
+                  pupopt *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  Pick `max(RONNow, max(DATA)+1)` so two writers / two parallel
     //  sub-shards collapsed into one project never accidentally pick
@@ -426,11 +454,16 @@ ok64 PUPCreateAs(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable) {
     int lk = -1;
     call(PUPLock, &lk, dir);
     u64 new_seqno = 0;
-    try(pup_free_key, &new_seqno, pups, dir, ext);
+    try(pup_free_key, &new_seqno, pups, dir, ext, pup_floor(opt));
     then try(pup_create_at, pups, dir, ext, bytes, new_seqno, durable);
     PUPUnlock(&lk);
     nedo fail(__);
+    pup_took(opt, new_seqno);
     done;
+}
+
+ok64 PUPCreateAs(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable) {
+    return PUPCreateOpt(pups, dir, ext, bytes, durable, NULL);
 }
 
 ok64 PUPCreate(pup256b pups, path8s dir, u8cs ext, u8cs bytes) {
@@ -757,11 +790,12 @@ static ok64 pup_merge_run(pup256b pups, path8s dir, u8cs ext, u64 key,
 // DOG-035: `row` (the record width, 0 = none) decides whether a ToC block
 // follows the data.
 static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
-                         pupsync sync, pupmerge merge, u32 row, b8 durable) {
+                         pupsync sync, pupmerge merge, u32 row, b8 durable,
+                         pupopt *opt) {
     sane(pups != NULL && runs != NULL && $ok(dir) && $ok(ext));
     //  DOG-046: pick the fresh key against the runs OTHER writers sealed
     //  meanwhile, and leave the dict a true oldest-first stack for the ladder.
-    call(pup_refresh, pups, dir, ext);
+    call(pup_refresh, pups, dir, ext, opt);
     pup256 *e = pup_mem(pups);
     if (!e) return PUPFAIL;
     call(pup_sync, e, runs, sync);
@@ -774,9 +808,10 @@ static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
     u8css ss = {sl, sl + u8csbDataLen(srcs)};
     if (!$empty(ss)) {
         u64 key = 0;
-        call(pup_free_key, &key, pups, dir, ext);
+        call(pup_free_key, &key, pups, dir, ext, pup_floor(opt));
         //  never `bottom`: the dead rows of a seal still shadow older runs
         call(pup_merge_run, pups, dir, ext, key, ss, row, NO, merge, durable);
+        pup_took(opt, key);
     }
     //  the booked run went under the memtable entry: fetch it again
     e = pup_mem(pups);
@@ -788,11 +823,12 @@ static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
 //  The seal under the stack's write lock: the key pick and the rename onto it
 //  are one critical section.
 static ok64 pup_mem_seal(pup256b pups, u8csb runs, path8s dir, u8cs ext,
-                         pupsync sync, pupmerge merge, u32 row, b8 durable) {
+                         pupsync sync, pupmerge merge, u32 row, b8 durable,
+                         pupopt *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     int lk = -1;
     call(PUPLock, &lk, dir);
-    try(pup_seal_run, pups, runs, dir, ext, sync, merge, row, durable);
+    try(pup_seal_run, pups, runs, dir, ext, sync, merge, row, durable, opt);
     PUPUnlock(&lk);
     nedo fail(__);
     done;
@@ -801,9 +837,13 @@ static ok64 pup_mem_seal(pup256b pups, u8csb runs, path8s dir, u8cs ext,
 // DOG-027: merge the youngest `m` runs into one fresh run — the caller's
 // `merge` does the typed merge, Pup owns the tmp + rename seal and the
 // source unlinks.
+// PUPS-26A309qbG9: or, with `opt->dead`, hands the sources' keys back instead.
 static ok64 pup_collapse(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
-                         u32 row, u8css stack, size_t m) {
+                         u32 row, u8css stack, size_t m, pupopt *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext) && merge != NULL && m > 1);
+    u64bp dead = opt ? opt->dead : NULL;
+    //  room for every source first: a half-returned list would leak files
+    if (dead && u64bIdleLen(dead) < m) return PUPNOROOM;
     size_t n = (size_t)$len(stack);
     u8css tail = {stack[0] + (n - m), stack[0] + n};
     //  PUPS-001: the merge spans the whole stack only when it takes every run
@@ -815,6 +855,7 @@ static ok64 pup_collapse(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
     //  the youngest source (sequential; the ladder holds the write lock), is
     //  made durable, booked, and only then are the sources unlinked.
     u64 key = PUPSeqno(pups, PUPCount(pups) - 1) + 1;
+    if (key < pup_floor(opt)) key = pup_floor(opt);
     for (b8 taken = YES;; key++) {
         call(pup_key_taken, &taken, pups, dir, ext, key);
         if (!taken) break;
@@ -826,18 +867,21 @@ static ok64 pup_collapse(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
     //  PUPS-001: nothing survived (every row was dead): no empty run — the
     //  sources just go.
     call(pup_merge_run, pups, dir, ext, key, tail, row, bottom, merge, YES);
-    for (size_t k = 0; k < m; k++)
-        call(pup_drop, pups, dir, ext, oldest, YES);
+    pup_took(opt, key);
+    for (size_t k = 0; k < m; k++) {
+        if (dead) call(u64bFeed1, dead, PUPSeqno(pups, oldest));
+        call(pup_drop, pups, dir, ext, oldest, dead == NULL);
+    }
     pup_tail(pups);
     done;
 }
 
 static ok64 pup_ladder(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
-                       u32 row) {
+                       u32 row, pupopt *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  DOG-046: a ladder over a stale view collapses the wrong tail — map in
     //  what other writers sealed, then weigh.  Only merged runs are unlinked.
-    call(pup_refresh, pups, dir, ext);
+    call(pup_refresh, pups, dir, ext, opt);
     for (;;) {
         //  DOG-035: clipped lengths — a ToC block is not run bytes, so the
         //  ladder must not weigh it and the merge must never see a cell.
@@ -851,24 +895,42 @@ static ok64 pup_ladder(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
         $for(u8cs, r, stack) u64bFeed1(lens, (u64)u8csLen(*r));
         size_t m = HITLadderOverRuns(u64bDataC(lens));
         if (m < 2) done;
-        call(pup_collapse, pups, dir, ext, merge, row, stack, m);
+        call(pup_collapse, pups, dir, ext, merge, row, stack, m, opt);
     }
 }
 
-ok64 PUPLadder(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row) {
+ok64 PUPLadderOpt(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row,
+                  pupopt *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     if (merge == NULL) done;
     //  One merger per stack: the lock covers the rescan and every collapse.
     int lk = -1;
     call(PUPLock, &lk, dir);
-    try(pup_ladder, pups, dir, ext, merge, row);
+    try(pup_ladder, pups, dir, ext, merge, row, opt);
     PUPUnlock(&lk);
     nedo fail(__);
     done;
 }
 
-ok64 PUPPutMem(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
-               pupsync sync, pupmerge merge, u32 row, u32 mem_pages) {
+ok64 PUPLadder(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row) {
+    return PUPLadderOpt(pups, dir, ext, merge, row, NULL);
+}
+
+ok64 PUPUnlink(path8s dir, u8cs ext, u64s keys) {
+    sane($ok(dir) && $ok(ext) && $ok(keys));
+    u64sSort(keys);
+    $for(u64, k, keys) {
+        a_path(fpath);
+        call(pup_path, fpath, dir, *k, ext);
+        ok64 o = FILEUnLink($path(fpath));
+        if (o != OK && o != FILENONE) fail(o);
+    }
+    done;
+}
+
+ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
+               pupsync sync, pupmerge merge, u32 row, u32 mem_pages,
+               pupopt *opt) {
     sane(pups != NULL && runs != NULL && $ok(dir) && $ok(ext) &&
          u8csOK(rec));
     if (sync == NULL) return PUPFAIL;
@@ -879,8 +941,8 @@ ok64 PUPPutMem(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
     if (u8bIdleLen(mem) < (size_t)u8csLen(rec)) {
         //  DOG-027: full buffer — seal it into a run, run the ladder, start
         //  the memtable empty again.
-        call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, NO);
-        call(PUPLadder, pups, dir, ext, merge, row);
+        call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, NO, opt);
+        call(PUPLadderOpt, pups, dir, ext, merge, row, opt);
         e = pup_mem(pups);
         pup_mem_buf(mem, e, runs);
     }
@@ -891,20 +953,32 @@ ok64 PUPPutMem(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
     done;
 }
 
+ok64 PUPPutMem(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
+               pupsync sync, pupmerge merge, u32 row, u32 mem_pages) {
+    return PUPPutOpt(pups, runs, dir, ext, rec, sync, merge, row, mem_pages,
+                     NULL);
+}
+
 ok64 PUPPut(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
             pupsync sync, pupmerge merge, u32 row) {
     return PUPPutMem(pups, runs, dir, ext, rec, sync, merge, row,
                      PUP_MEM_PAGES);
 }
 
-ok64 PUPCommitAs(pup256b pups, u8csb runs, path8s dir, u8cs ext,
-                 pupsync sync, pupmerge merge, u32 row, b8 durable) {
+ok64 PUPCommitOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext,
+                  pupsync sync, pupmerge merge, u32 row, b8 durable,
+                  pupopt *opt) {
     sane(pups != NULL && runs != NULL && $ok(dir) && $ok(ext));
     if (sync == NULL) return PUPFAIL;
     if (pup_mem_empty(pup_mem(pups))) done;
-    call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, durable);
-    call(PUPLadder, pups, dir, ext, merge, row);
+    call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, durable, opt);
+    call(PUPLadderOpt, pups, dir, ext, merge, row, opt);
     done;
+}
+
+ok64 PUPCommitAs(pup256b pups, u8csb runs, path8s dir, u8cs ext,
+                 pupsync sync, pupmerge merge, u32 row, b8 durable) {
+    return PUPCommitOpt(pups, runs, dir, ext, sync, merge, row, durable, NULL);
 }
 
 ok64 PUPCommit(pup256b pups, u8csb runs, path8s dir, u8cs ext, pupsync sync,

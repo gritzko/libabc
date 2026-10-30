@@ -6,7 +6,8 @@
 //
 //  Generates, for type T (names follow abc: X(PUP, Sync) is PUPu64Sync):
 //    PUP<T>Sync, PUP<T>Merge    the whole-range functions the core PUPS.c calls
-//    PUP<T>Put, PutMem, Commit, CommitAs, Ladder, AllRuns, AllRunsToc, Read
+//    PUP<T>Put, PutMem, Commit, CommitAs, Ladder, AllRuns, AllRunsToc, Read,
+//    PutOpt, CommitOpt, LadderOpt (PUPS-26A309qbG9)
 //                               thin typed entry points: the core's functions
 //                               with sync, merge and sizeof(T) filled in, the
 //                               memtable runs taken as the caller's X(,csb)
@@ -97,6 +98,24 @@ fun ok64 X(PUP, CommitAs)(pup256b pups, X(, csb) runs, path8s dir, u8cs ext,
 
 fun ok64 X(PUP, Ladder)(pup256b pups, path8s dir, u8cs ext) {
     return PUPLadder(pups, dir, ext, X(PUP, Merge), (u32)sizeof(X(, )));
+}
+
+//  PUPS-26A309qbG9: the same writes keyed and retired by the caller's pupopt.
+fun ok64 X(PUP, PutOpt)(pup256b pups, X(, csb) runs, path8s dir, u8cs ext,
+                        u8csc rec, u32 mem_pages, pupopt *opt) {
+    return PUPPutOpt(pups, (u8cs **)runs, dir, ext, rec, X(PUP, Sync),
+                     X(PUP, Merge), (u32)sizeof(X(, )), mem_pages, opt);
+}
+
+fun ok64 X(PUP, CommitOpt)(pup256b pups, X(, csb) runs, path8s dir, u8cs ext,
+                           b8 durable, pupopt *opt) {
+    return PUPCommitOpt(pups, (u8cs **)runs, dir, ext, X(PUP, Sync),
+                        X(PUP, Merge), (u32)sizeof(X(, )), durable, opt);
+}
+
+fun ok64 X(PUP, LadderOpt)(pup256b pups, path8s dir, u8cs ext, pupopt *opt) {
+    return PUPLadderOpt(pups, dir, ext, X(PUP, Merge), (u32)sizeof(X(, )),
+                        opt);
 }
 
 fun ok64 X(PUP, AllRuns)(u8csb out, pup256b pups, X(, csb) runs) {

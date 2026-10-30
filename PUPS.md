@@ -80,6 +80,22 @@ renamed its merge onto the youngest source's name; since PUPS-005 none does). Kn
 runs other writers unlinked, so after more than `HIT_MAX_RUNS` of them a view
 overflows (`SNOROOM`); reopen the stack.
 
+### Caller-published runs (PUPS-26A309qbG9)
+
+A caller that makes runs visible by its own protocol, a key ceiling W
+("a reader sees a run iff its key <= W"), needs three things:
+
+ -  `PUPOpenTo(pups, dir, ext, ceil)` maps only runs keyed at or below
+    `ceil`. A run unlinked between the listing and its mapping fails the open
+    with `PUPGONE` (any open), so the caller re-reads W and retries.
+ -  `pupopt.floor`: the `*Opt` writes (`PUPCreateOpt`, `PUPPutOpt`,
+    `PUPCommitOpt`, `PUPLadderOpt`, typed `PUP<T>PutOpt` etc.) key every run
+    they create, ladder output included, at or above it, and leave it past
+    the last key used: one `pupopt` across many stacks is one counter.
+ -  `pupopt.dead`: a ladder merge unmaps its sources and appends their keys
+    instead of unlinking them; later scans through the same `pupopt` skip
+    them. `PUPUnlink` retires them oldest first once W covers the merge.
+
 ### Deletes
 
 The core has no delete; a row says "this key is gone" through a tombstone the
@@ -126,5 +142,6 @@ are installed with the other headers). Tests are in `test/PUPS.c`
 (`PUPStest`): error-path fd leaks, memtable round trips, collapse, flush,
 commit, crash-invisibility, the ladder, ladder crash points, drop, name
 clashes, two writers, foreign runs, more runs than `FILE_MAX_OPEN`, a
-memtable that holds no fd, and the ToC.
+memtable that holds no fd, and the ToC; `test/PUPKEY.c` the key floor,
+the returned merge sources and the ceiling-bounded open.
 

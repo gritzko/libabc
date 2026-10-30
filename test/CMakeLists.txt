@@ -151,6 +151,12 @@ target_compile_options(PUPNILtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(PUPNILtest abc)
 add_test(NAME PUPNILtest COMMAND PUPNILtest)
 
+add_executable(PUPKEYtest PUPKEY.c)
+target_link_options(PUPKEYtest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(PUPKEYtest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(PUPKEYtest abc)
+add_test(NAME PUPKEYtest COMMAND PUPKEYtest)
+
 add_executable(BOXtest BOX.c)
 target_link_options(BOXtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(BOXtest PRIVATE ${TEST_CXX_FLAGS})
