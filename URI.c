@@ -216,13 +216,13 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
     if (!$eq(base->host, specific->host) || !$eq(base->port, specific->port) ||
         !$eq(base->user, specific->user)) {
         // Different authority - include authority and path
-        u8csDup(rel->authority, specific->authority);
-        u8csDup(rel->host, specific->host);
-        u8csDup(rel->port, specific->port);
-        u8csDup(rel->user, specific->user);
-        u8csDup(rel->path, specific->path);
-        u8csDup(rel->query, specific->query);
-        u8csDup(rel->fragment, specific->fragment);
+        u8csMv(rel->authority, specific->authority);
+        u8csMv(rel->host, specific->host);
+        u8csMv(rel->port, specific->port);
+        u8csMv(rel->user, specific->user);
+        u8csMv(rel->path, specific->path);
+        u8csMv(rel->query, specific->query);
+        u8csMv(rel->fragment, specific->fragment);
         done;
     }
 
@@ -235,19 +235,19 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
         call(URISplitPath, spec_segs_arr, specific->path);
 
         u8cscs base_segs, spec_segs;
-        u8cscsDup(base_segs, u8csbDataC(base_segs_arr));
-        u8cscsDup(spec_segs, u8csbDataC(spec_segs_arr));
+        u8cscsMv(base_segs, u8csbDataC(base_segs_arr));
+        u8cscsMv(spec_segs, u8csbDataC(spec_segs_arr));
 
         // Compute relative path
         call(URIRelativePath, rel->path, out, base_segs, spec_segs);
         // Copy query/fragment (or mark explicitly empty)
         if (*specific->query) {
-            u8csDup(rel->query, specific->query);
+            u8csMv(rel->query, specific->query);
         } else if (*base->query) {
             rel->query[0] = rel->query[1] = *specific->data;
         }
         if (*specific->fragment) {
-            u8csDup(rel->fragment, specific->fragment);
+            u8csMv(rel->fragment, specific->fragment);
         } else if (*base->fragment) {
             rel->fragment[0] = rel->fragment[1] = *specific->data;
         }
@@ -258,7 +258,7 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
     if (!$eq(base->query, specific->query)) {
         // Use non-NULL empty slice to indicate "explicitly no query" vs NULL "not set"
         if (*specific->query) {
-            u8csDup(rel->query, specific->query);
+            u8csMv(rel->query, specific->query);
         } else {
             // Empty but non-NULL: marks "explicitly no query"
             rel->query[0] = rel->query[1] = *specific->data;
@@ -266,7 +266,7 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
         // Copy fragment (or mark explicitly empty only when base has
         // one to override; otherwise leave NULL so the emit drops it).
         if (*specific->fragment) {
-            u8csDup(rel->fragment, specific->fragment);
+            u8csMv(rel->fragment, specific->fragment);
         } else if (*base->fragment) {
             rel->fragment[0] = rel->fragment[1] = *specific->data;
         }
@@ -276,7 +276,7 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
     // Same query - check fragment
     if (!$eq(base->fragment, specific->fragment)) {
         if (*specific->fragment) {
-            u8csDup(rel->fragment, specific->fragment);
+            u8csMv(rel->fragment, specific->fragment);
         } else {
             // Empty but non-NULL: marks "explicitly no fragment"
             rel->fragment[0] = rel->fragment[1] = *specific->data;
@@ -381,25 +381,25 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel, u8s out) {
     }
 
     // Inherit scheme from base
-    u8csDup(abs->scheme, base->scheme);
+    u8csMv(abs->scheme, base->scheme);
 
     // If relative has authority, use it
     if (!$empty(rel->authority) || !$empty(rel->host)) {
-        u8csDup(abs->authority, rel->authority);
-        u8csDup(abs->host, rel->host);
-        u8csDup(abs->port, rel->port);
-        u8csDup(abs->user, rel->user);
-        u8csDup(abs->path, rel->path);
-        u8csDup(abs->query, rel->query);
-        u8csDup(abs->fragment, rel->fragment);
+        u8csMv(abs->authority, rel->authority);
+        u8csMv(abs->host, rel->host);
+        u8csMv(abs->port, rel->port);
+        u8csMv(abs->user, rel->user);
+        u8csMv(abs->path, rel->path);
+        u8csMv(abs->query, rel->query);
+        u8csMv(abs->fragment, rel->fragment);
         done;
     }
 
     // Inherit authority from base
-    u8csDup(abs->authority, base->authority);
-    u8csDup(abs->host, base->host);
-    u8csDup(abs->port, base->port);
-    u8csDup(abs->user, base->user);
+    u8csMv(abs->authority, base->authority);
+    u8csMv(abs->host, base->host);
+    u8csMv(abs->port, base->port);
+    u8csMv(abs->user, base->user);
 
     // If relative has path, merge with base path.
     if (!$empty(rel->path)) {
@@ -418,42 +418,42 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel, u8s out) {
             $empty(rel->authority) && $empty(rel->host) &&
             rel->path[0][0] != '/';
         if (verbatim_relref) {
-            u8csDup(abs->path, rel->path);
+            u8csMv(abs->path, rel->path);
         } else {
             call(URIMergePath, abs->path, out, base->path, rel->path);
         }
-        u8csDup(abs->query, rel->query);
-        u8csDup(abs->fragment, rel->fragment);
+        u8csMv(abs->query, rel->query);
+        u8csMv(abs->fragment, rel->fragment);
         done;
     }
 
     // Relative has no path - inherit from base
-    u8csDup(abs->path, base->path);
+    u8csMv(abs->path, base->path);
 
     // Check if relative specifies query (non-NULL pointer = explicitly set)
     if (*rel->query) {
         // Non-empty means use that query, empty means explicitly no query
         if (!$empty(rel->query)) {
-            u8csDup(abs->query, rel->query);
+            u8csMv(abs->query, rel->query);
         }
         // else: abs->query stays empty (explicitly no query)
         // Fragment: use rel's if set, otherwise inherit from base
         if (*rel->fragment) {
-            u8csDup(abs->fragment, rel->fragment);
+            u8csMv(abs->fragment, rel->fragment);
         } else {
-            u8csDup(abs->fragment, base->fragment);
+            u8csMv(abs->fragment, base->fragment);
         }
         done;
     }
 
     // No relative query info - inherit from base
-    u8csDup(abs->query, base->query);
+    u8csMv(abs->query, base->query);
 
     // Fragment: use rel's if specified, otherwise inherit from base
     if (*rel->fragment) {
-        u8csDup(abs->fragment, rel->fragment);
+        u8csMv(abs->fragment, rel->fragment);
     } else {
-        u8csDup(abs->fragment, base->fragment);
+        u8csMv(abs->fragment, base->fragment);
     }
 
     done;

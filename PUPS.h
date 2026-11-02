@@ -272,7 +272,7 @@ fun u64 PUPSeqno(pup256b pups, u32 i) {
 // its runs straight into a new run file (tmp, ToC, optional fsync, rename):
 // that one streamed write IS the save.  Unsealed puts die with the process.
 #define PUP_MEM_BYTES 4096
-// PUPS-26A275OQK0: c, the memtable segment limit in bytes; PUPx.h sets BOXx_C to it.
+// PUPS-26A275OQK0: c, the memtable segment limit in bytes; PUPx.h sets ABC_BOX_SEG to it.
 #define PUP_COLLAPSE  512
 
 // DOG-032: the memtable's size is an OPEN-TIME parameter counted in WHOLE OS
@@ -284,8 +284,8 @@ fun u64 PUPSeqno(pup256b pups, u32 i) {
 // held next to its pups, on its stack or in its struct, as long as the pups,
 // and passed to every entry point that touches the memtable.  The core sees it
 // as a u8csb and passes it through; it resets it whenever the memtable starts
-// empty.  HIT_MAX_RUNS slots are plenty: the BOX ladder keeps runs few.
-//   a_pad(kv64cs, runs, HIT_MAX_RUNS);   // a struct member: a_wrap (B.h)
+// empty.  ABC_HIT_MAX_RUNS slots are plenty: the BOX ladder keeps runs few.
+//   a_pad(kv64cs, runs, ABC_HIT_MAX_RUNS);   // a struct member: a_wrap (B.h)
 //
 // DOG-027: family-side typed hook over the memtable.
 // BOX-26A26EbjLj: the hook seals DATA into a run and collapses the tailing
@@ -346,7 +346,7 @@ ok64 PUPCommitOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext,
                   pupsync sync, pupmerge merge, u32 row, b8 durable,
                   pupopt *opt);
 
-// DOG-027: the 1/8 size-tiered ladder (HIT_LADDER_DIV) over the committed
+// DOG-027: the 1/8 size-tiered ladder (ABC_HIT_LADDER_DIV) over the committed
 // runs — every seal ends here, so a caller never sees the ladder's state.
 // Merges the youngest violating tail through `merge` into ONE
 // fresh run (same tmp + rename path, fresh pup_key), unlinks the sources,

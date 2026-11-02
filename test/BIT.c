@@ -40,7 +40,7 @@ ok64 BITelem_test() {
     sane(1);
     Bu1 b = {};
     call(u1bMap, b, 256);
-    u64s s; u64sDup(s, u1bData(b));
+    u64s s; u64sMv(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 256LL, "%lld");
 
     u32 want[] = {0, 1, 63, 64, 65, 127, 128, 199, 255};
@@ -71,7 +71,7 @@ ok64 BITclr_regression_test() {
     enum { N = 200 };
     Bu1 b = {};
     call(u1bMap, b, N);
-    u64s s; u64sDup(s, u1bData(b));
+    u64s s; u64sMv(s, u1bData(b));
     for (u32 i = 0; i < N; i++) u1sSet(s, i);
     testeqv((long long)u1sCount(u1sConst(s)), (long long)N, "%lld");
     for (u32 clr = 0; clr < N; clr++) {
@@ -90,7 +90,7 @@ ok64 BITtail_test() {
     sane(1);
     Bu1 b = {};
     call(u1bMap, b, 10);  // rounds up to one 64-bit word
-    u64s s; u64sDup(s, u1bData(b));
+    u64s s; u64sMv(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 64LL, "%lld");
     for (u32 i = 0; i < 10; i++) u1sSet(s, i);
     testeqv((long long)u1sCount(u1sConst(s)), 10LL, "%lld");
@@ -109,8 +109,8 @@ ok64 BITalgebra_test() {
     Bu1 ba = {}, bb = {};
     call(u1bMap, ba, N);
     call(u1bMap, bb, N);
-    u64s a; u64sDup(a, u1bData(ba));
-    u64s b; u64sDup(b, u1bData(bb));
+    u64s a; u64sMv(a, u1bData(ba));
+    u64s b; u64sMv(b, u1bData(bb));
     for (u32 i = 0; i < N; i++) {
         if (i % 3 == 0) u1sSet(a, i);
         if (i % 5 == 0) u1sSet(b, i);
@@ -124,7 +124,7 @@ ok64 BITalgebra_test() {
     do {                                                                  \
         Bu1 bd = {};                                                      \
         call(u1bMap, bd, N);                                              \
-        u64s d; u64sDup(d, u1bData(bd));                                  \
+        u64s d; u64sMv(d, u1bData(bd));                                  \
         call(u1sOr, d, u1sConst(a));                                      \
         call(opfn, d, u1sConst(b));                                       \
         ref rd;                                                           \
@@ -150,7 +150,7 @@ ok64 BITalgebra_test() {
     //  Word-length mismatch guard: 3-word dst vs 2-word src -> BITLEN.
     Bu1 bs = {};
     call(u1bMap, bs, 128);  // 2 words
-    u64s shorter; u64sDup(shorter, u1bData(bs));
+    u64s shorter; u64sMv(shorter, u1bData(bs));
     testeqv((long long)u1sOr(a, u1sConst(shorter)), (long long)BITLEN, "%lld");
     want(!u1sEq(u1sConst(a), u1sConst(shorter)));
     call(u1bUnMap, bs);
@@ -165,10 +165,10 @@ ok64 BITbuf_test() {
     sane(1);
     Bu1 b = {};
     call(u1bMap, b, 128);  // 2 words, all zero
-    u64s s; u64sDup(s, u1bData(b));
+    u64s s; u64sMv(s, u1bData(b));
     testeqv((long long)u1sCount(u1sConst(s)), 0LL, "%lld");
     for (u32 i = 0; i < 128; i++) if (i & 1) u1sSet(s, i);
-    u64cs d; u64csDup(d, u1bDataC(b));
+    u64cs d; u64csMv(d, u1bDataC(b));
     for (u32 i = 0; i < 128; i++)
         testeqv((long long)u1At(d, i), (long long)(i & 1), "%lld");
     //  Reset clears every bit, keeps the map size.
@@ -184,7 +184,7 @@ ok64 BITacquire_test() {
     sane(1);
     Bu1 b = {};
     call(u1bAcquire, ABC_BASS, b, 130);  // -> 3 words
-    u64s s; u64sDup(s, u1bData(b));
+    u64s s; u64sMv(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 192LL, "%lld");
     testeqv((long long)u1sCount(u1sConst(s)), 0LL, "%lld");
     u1sSet(s, 129);

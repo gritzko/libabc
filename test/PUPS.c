@@ -224,7 +224,7 @@ ok64 PUPTestLeaks(void) {
 #define T_HANDLES 32
 static struct {
     void const *pups;
-    kv64cs slots[HIT_MAX_RUNS];
+    kv64cs slots[ABC_HIT_MAX_RUNS];
     kv64cs *hdr[4];
 } t_runs[T_HANDLES];
 static kv64cs *const *KR(pup256b pups) {
@@ -237,7 +237,7 @@ static kv64cs *const *KR(pup256b pups) {
     t_runs[free_at].pups = (void const *)pups;
     kv64cs **h = t_runs[free_at].hdr;
     h[0] = h[1] = h[2] = t_runs[free_at].slots;
-    h[3] = t_runs[free_at].slots + HIT_MAX_RUNS;
+    h[3] = t_runs[free_at].slots + ABC_HIT_MAX_RUNS;
     return t_runs[free_at].hdr;
 }
 #define TR(p) ((u8cs **)KR(p))
@@ -261,19 +261,19 @@ static ok64 dog_mem_put(pup256b pups, path8s dir, u8cs ext, u64 key, u64 val) {
 static ok64 pup_query(kv64s out, u32 *nsrc, pup256b pups, u32 row) {
     sane(out != NULL && nsrc != NULL);
     Bu8cs srcs = {};
-    call(u8csbAllocate, srcs, HIT_MAX_RUNS);
+    call(u8csbAllocate, srcs, ABC_HIT_MAX_RUNS);
     try(PUPAllRuns, srcs, pups, TR(pups), PUPkv64Sync, row);
     nedo { u8csbFree(srcs); fail(__); }
     u32 n = (u32)u8csbDataLen(srcs);
     *nsrc = n;
-    kv64cs runs[HIT_MAX_RUNS];
+    kv64cs runs[ABC_HIT_MAX_RUNS];
     u8cs *sl = u8csbDataHead(srcs);
     for (u32 i = 0; i < n; i++) {
         runs[i][0] = (kv64 const *)sl[i][0];
         runs[i][1] = (kv64 const *)sl[i][1];
     }
     kv64css hp = {runs, runs + n};
-    try(HITkv64Merge, hp, out);
+    try(HITkv64Merge, out, hp);
     u8csbFree(srcs);
     done;
 }
@@ -562,7 +562,7 @@ static ok64 PUPTestLadder(void) {
         u8cs a = {}, b = {};
         PUPData(a, pups, i);
         PUPData(b, pups, i + 1);
-        want(u8csLen(b) * HIT_LADDER_DIV <= u8csLen(a));
+        want(u8csLen(b) * ABC_HIT_LADDER_DIV <= u8csLen(a));
     }
     u8cs big = {};
     PUPData(big, pups, 0);
@@ -831,7 +831,7 @@ static ok64 PUPTestCrashLadder(void) {
 //  the ladder merge all the time.  Without the lock a run is eaten by a rename
 //  or a row lost in a double collapse; with it every run and every row stays.
 //  A handle keeps the mappings of runs other writers unlinked (DOG-046), and a
-//  stack view holds HIT_MAX_RUNS: the commit loop stays under that, the create
+//  stack view holds ABC_HIT_MAX_RUNS: the commit loop stays under that, the create
 //  loop (no ladder, no view) does not need to.
 #define LOCK_KIDS 4
 #define LOCK_N 150
@@ -1546,8 +1546,8 @@ static ok64 PUPTestMemNoFd(void) {
     want(fd0 > 0);
     Bpup256 pups = {};
     call(pup256bAllocate, pups, 8);
-    kv64cs slots[HIT_MAX_RUNS];
-    kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    kv64cs slots[ABC_HIT_MAX_RUNS];
+    kv64csb runs = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     for (u64 i = 0; i < 200; i++) {
         kv64 row = {(i * 7919) % 200, i};
         u8cs rec = {(u8c *)&row, (u8c *)(&row + 1)};

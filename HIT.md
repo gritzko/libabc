@@ -9,11 +9,19 @@ A HIT is a min-heap of sorted slices (iterators). Instantiate with the
 #undef X
 ```
 
-There are no prerequisites beyond Sx (DOG-027: the heap permutes entry
-POINTERS, so `X(,csSwap)` is no longer needed).
+The element type gives `X(,Z)` and `X(,KeyEq)` (the key view, depot
+wiki/Containers.mkd); the heap types `X(,cspb)`, `X(,csss)` come from Sx.
+HITx defines nothing in the type's own namespace; its internals are
+`_lowercase`.  `ABC_HIT_MERGE` (defined: on) makes Merge fold equal keys
+oldest first by `X(,Merge)(acc, younger)` instead of the youngest winning;
+undefined at the end of HITx.h.
+
+Codes: `OK`; `NONE` nothing left (Seek, SeekRange); `NOROOM` the output
+slice filled; `FULL` more than `ABC_HIT_MAX_RUNS` runs.  The destination
+goes first: `Merge(into, runs)`.
 
 The entry points take an oldest-first `X(,css)` of runs, whose entries
-never move; each builds its own `HIT_MAX_RUNS`-slot `X(,csps)` pointer
+never move; each builds its own `ABC_HIT_MAX_RUNS`-slot `X(,csps)` pointer
 heap.  Equal head elements (a keyed lane's genuine ties) resolve to the
 highest entry pointer — the youngest run — in Merge, Seek, SeekRange's
 drain and Compact alike.
@@ -28,9 +36,9 @@ an element-typed HIT it would never merge with.
 
 | Define           | Value | Meaning                                   |
 |------------------|-------|-------------------------------------------|
-| `HIT_MAX_RUNS`   | 64    | runs per merge; ONE cap for every entry point and both JS leaves |
-| `HIT_LADDER_DIV` | 8     | the 1/8 size-tiered ladder ratio          |
-| `HITTOOMANY`     | —     | the `ok64` every entry point returns above the cap |
+| `ABC_HIT_MAX_RUNS`   | 64    | runs per merge; ONE cap for every entry point and both JS leaves |
+| `ABC_HIT_LADDER_DIV` | 8     | the 1/8 size-tiered ladder ratio          |
+| `FULL` (01.h)    | —     | the `ok64` every entry point returns above the cap |
 
 | Function (HIT.h)      | Description                                  |
 |-----------------------|----------------------------------------------|
@@ -42,7 +50,7 @@ newest-first array silently inverts newest-wins on a keyed lane.  The
 caller owns the convention (in JS, the `abc.index` handle, which holds
 each run's pup key).
 
-Above `HIT_MAX_RUNS` an entry point just refuses with `HITTOOMANY` — no
+Above `ABC_HIT_MAX_RUNS` an entry point just refuses with `FULL` — no
 windowing, no repair cascade, no youngest-N batching.  A stack that deep
 is damaged or foreign; the cure is to drop the runs and re-derive.
 
@@ -62,8 +70,8 @@ is damaged or foreign; the cure is to drop the runs and re-derive.
 | Function            | Description                            |
 |--------------------|----------------------------------------|
 | `HITTStep(heap)`   | Advance top, eject if done, sift down  |
-| `HITTMerge(heap, &out)` | Sorted deduplicated drain         |
-| `HITTIntersect(heap, &out, n)` | Emit only values in all N entries |
+| `HITTMerge(out, heap)` | Sorted deduplicated drain (`MergeBag` keeps duplicates) |
+| `HITTIntersect(out, heap, n)` | Emit only values in all N entries |
 | `HITTSeek(heap, &key)` | Binary-search advance to key       |
 | `HITTIsCompact(stack)` | measures the stack, then `HITLadderOK` (NO above the cap) |
 | `HITTCompactRuns(stack)` | measures the stack, then `HITLadderOverRuns` (0 above the cap) |
@@ -73,21 +81,22 @@ is damaged or foreign; the cure is to drop the runs and re-derive.
 
 | Function                        | Description                       |
 |--------------------------------|-----------------------------------|
-| `HITTsIntersectMerge(oh, &out)` | Intersect merged outputs of N inner HITs |
+| `HITTsIntersectMerge(out, oh)` | Intersect merged outputs of N inner HITs |
 | `HITTSkipValue(inner)`          | Advance inner HIT past current top value (`ok64`) |
 
 ## Merge
 
 Drains the heap producing a sorted, deduplicated sequence. Each step
-pops the minimum, advances all entries that had that value, skips
-remaining duplicates.
+pops the minimum, advances all entries that had that key, skips
+remaining duplicates.  The youngest run's row is emitted, or with
+`ABC_HIT_MERGE` the fold of all equal rows in age order.
 
 ```c
 u64cs runs[3] = {{a, a+4}, {b, b+3}, {c, c+5}};
 u64css heap = {runs, runs + 3};
-u64 buf[64]; u64p out = buf;
-HITu64Merge(heap, &out);
-// buf[0..out-buf) contains sorted deduplicated merge
+u64 buf[64]; u64s out = {buf, buf + 64};
+HITu64Merge(out, heap);  // NOROOM if buf fills
+// buf[0..out[0]-buf) contains sorted deduplicated merge
 ```
 
 ## Intersect
@@ -95,8 +104,8 @@ HITu64Merge(heap, &out);
 Like Merge, but only emits values present in ALL N iterators.
 
 ```c
-u64 buf[64]; u64p out = buf;
-HITu64Intersect(heap, &out, 3);  // 3 = number of runs
+u64 buf[64]; u64s out = {buf, buf + 64};
+HITu64Intersect(out, heap, 3);  // 3 = number of runs
 ```
 
 ## IntersectMerge (HIT-of-HITs)
@@ -111,8 +120,8 @@ u64cs *outers[N][2];   // N inner HITs
 outers[i][0] = runs_i; outers[i][1] = runs_i + nruns_i;
 
 u64csss oh = {outers, outers + N};
-u64 buf[...]; u64p out = buf;
-HITu64sIntersectMerge(oh, &out);
+u64 buf[...]; u64s out = {buf, buf + ...};
+HITu64sIntersectMerge(out, oh);
 ```
 
 ## Seek
@@ -122,5 +131,5 @@ within each entry.
 
 ```c
 u64 key = 42;
-ok64 o = HITu64Seek(heap, &key);  // NODATA if all exhausted
+ok64 o = HITu64Seek(heap, &key);  // NONE if all exhausted
 ```

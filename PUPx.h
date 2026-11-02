@@ -19,7 +19,7 @@
 //  may still hold the key.  Left undefined it is 0: nothing is ever dead.
 //
 //  Needs, instantiated BEFORE this header (abc already does kv64 and u64):
-//    T, T##Z, T##max (BOX-26A26EbjLj: the tombstone, sorts last), the T##s / T##cs / T##css slices and T##b buffer (Bx),
+//    T, T##Z, T##KeyEq, T##Max (BOX-26A26EbjLj: the tombstone, sorts last), the T##s / T##cs / T##css slices and T##b buffer (Bx),
 //    QSORTx for T (QSORT<T>InSort, <T>sSort, <T>sDedup), HITx for T.
 
 #include "FILE.h"
@@ -28,7 +28,7 @@
 #include "PUPS.h"
 
 //  PUPS-26A275OQK0: c, the memtable segment limit, is PUP_COLLAPSE (PUPS.h).
-#define BOXx_C PUP_COLLAPSE
+#define ABC_BOX_SEG PUP_COLLAPSE
 #include "BOXx.h"
 
 #ifndef PUPx_DEAD
@@ -46,11 +46,11 @@ fun ok64 X(PUP, Sync)(u8bp mem, u8csb runs) {
 }
 
 //  Feed typed views of the run byte slices `srcs` into `runs`, a X(,cs)
-//  buffer; HITTOOMANY past its room.
+//  buffer; FULL past its room.
 fun ok64 X(PUP, Runs)(X(, csb) runs, u8css srcs) {
     X(, cs) **b = (X(, cs) **)runs;
     $for(u8cs, s, srcs) {
-        if (b[2] == b[3]) return HITTOOMANY;
+        if (b[2] == b[3]) return FULL;
         (*b[2])[0] = (X(, ) const *)(*s)[0];
         (*b[2])[1] = (X(, ) const *)(*s)[1];
         b[2]++;
@@ -62,11 +62,11 @@ fun ok64 X(PUP, Runs)(X(, csb) runs, u8css srcs) {
 //  the youngest run.  `bottom`: the slices are the whole stack, dead rows go.
 fun ok64 X(PUP, Merge)(u8s into, u8css srcs, b8 bottom) {
     sane($ok(into));
-    a_pad(X(, cs), runs, HIT_MAX_RUNS);
+    a_pad(X(, cs), runs, ABC_HIT_MAX_RUNS);
     call(X(PUP, Runs), runs, srcs);
     X(, ) *base = (X(, ) *)into[0];
     X(, s) dst = {base, (X(, ) *)into[1]};
-    call(X(HIT, Merge), runs_data, dst);
+    call(X(HIT, Merge), dst, runs_data);
     if (bottom) {
         X(, ) *w = base;
         for (X(, ) *r = base; r < dst[0]; r++)
@@ -134,12 +134,12 @@ fun ok64 X(PUP, AllRuns)(u8csb out, pup256b pups, X(, csb) runs) {
 //  `runs` may be NULL for a stack that never had a memtable.
 fun ok64 X(PUP, Read)(X(, s) into, pup256b pups, X(, csb) runs) {
     sane(into != NULL);
-    a_pad(u8cs, srcs, HIT_MAX_RUNS);
+    a_pad(u8cs, srcs, ABC_HIT_MAX_RUNS);
     call(X(PUP, AllRuns), srcs, pups, runs);
-    a_pad(X(, cs), srcv, HIT_MAX_RUNS);
+    a_pad(X(, cs), srcv, ABC_HIT_MAX_RUNS);
     call(X(PUP, Runs), srcv, srcs_data);
     X(, ) *base = into[0];
-    call(X(HIT, Merge), srcv_data, into);
+    call(X(HIT, Merge), into, srcv_data);
     X(, ) *w = base;
     for (X(, ) *r = base; r < into[0]; r++)
         if (!PUPx_DEAD(r)) *w++ = *r;

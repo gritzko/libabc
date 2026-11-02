@@ -2,7 +2,7 @@
 #define ABC_HASH_H
 #include "OK.h"
 
-con ok64 HASHNOROOM = 0x44a7115d86d8616;
-con ok64 HASHNONE = 0x44a7115d85ce;
+//  ABC-26B02JHe_k: HASHx returns the shared codes (wiki/Containers.mkd):
+//  OK, NONE absent, FULL a full line, NOROOM no IDLE to grow, BADARG.
 
 #endif

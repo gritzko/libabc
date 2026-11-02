@@ -89,7 +89,7 @@ ok64 TEMPL1() {
     u32 g = 42;
     call(HASHu32Get, &g, data);
     want(OK == HASHu32Del(data, &g));
-    want(HASHNONE == HASHu32Del(data, &g));
+    want(NONE == HASHu32Del(data, &g));
     done;
 }
 
@@ -102,7 +102,7 @@ ok64 TEMPL2() {
     u32 out[6];
     $u32 into = {out, out + 6};
     // DOG-027: MSET retired — the same u32 multiway merge, now via HIT.
-    call(HITu32Merge, iter, into);
+    call(HITu32Merge, into, iter);
     for (int i = 0; i < 6; i++) testeqv((long long)(out[i]), (long long)(i + 1), "%lld");
     done;
 }

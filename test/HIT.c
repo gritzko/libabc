@@ -15,6 +15,23 @@
 #include "HITx.h"
 #undef X
 
+// ABC-26B02JHe_k: a lane WITH the X(,Merge) hook, folding oldest first
+typedef struct dig64 {
+    u64 key;
+    u64 val;
+} dig64;
+fun b8 dig64Z(dig64 const *a, dig64 const *b) { return a->key < b->key; }
+fun b8 dig64KeyEq(dig64 const *a, dig64 const *b) { return a->key == b->key; }
+//  not commutative: the digits show the fold order
+fun void dig64Merge(dig64 *acc, dig64 const *nxt) {
+    acc->val = acc->val * 10 + nxt->val;
+}
+#define X(M, name) M##dig64##name
+#include "Bx.h"
+#define ABC_HIT_MERGE
+#include "HITx.h"
+#undef X
+
 // HIT0: merge 3 sorted runs -> sorted deduped
 ok64 HIT0() {
     sane(1);
@@ -25,7 +42,7 @@ ok64 HIT0() {
     u64css heap = {runs, runs + 3};
     u64 buf[12];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64Merge, heap, out);
+    call(HITu64Merge, out, heap);
     size_t olen = out[0] - buf;
     // expected: 1,2,3,4,5,6,7,8,10
     testeqv((long long)(olen), (long long)((size_t)9), "%lld");
@@ -53,7 +70,7 @@ ok64 HIT1() {
     u64css hheap = {hruns, hruns + 3};
     u64 hbuf[15];
     u64s hout = {hbuf, hbuf + sizeof(hbuf) / sizeof(u64)};
-    call(HITu64Merge, hheap, hout);
+    call(HITu64Merge, hout, hheap);
     size_t hlen = hout[0] - hbuf;
 
     // DOG-027: MSET retired — the expected union {1..11}, spelled out.
@@ -73,7 +90,7 @@ ok64 HIT2() {
     u64css heap = {runs, runs + 3};
     u64 buf[15];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64Intersect, heap, out, 3);
+    call(HITu64Intersect, out, heap, 3);
     size_t olen = out[0] - buf;
     // intersection = {3,5}
     testeqv((long long)(olen), (long long)((size_t)2), "%lld");
@@ -94,7 +111,7 @@ ok64 HIT3() {
         {a + 3, a + 3},    // empty (begin == end)
     };
     u64css heap = {runs, runs + 4};
-    a_pad(u64csp, slots, HIT_MAX_RUNS);
+    a_pad(u64csp, slots, ABC_HIT_MAX_RUNS);
     call(HITu64Load, slots, heap);
     testeqv((long long)($len(slots_data)), (long long)((size_t)2), "%lld");
     testeqv((long long)($len(heap)), (long long)((size_t)2), "%lld");
@@ -121,7 +138,7 @@ ok64 HIT4() {
     u64css hheap = {hruns, hruns + 5};
     u64 hbuf[12];
     u64s hout = {hbuf, hbuf + sizeof(hbuf) / sizeof(u64)};
-    call(HITu64Merge, hheap, hout);
+    call(HITu64Merge, hout, hheap);
     size_t hlen = hout[0] - hbuf;
 
     // DOG-027: MSET retired — the same union the empties must not disturb.
@@ -148,7 +165,7 @@ ok64 HIT5() {
     // drain and verify all values >= 5
     u64 buf[15];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64Merge, heap, out);
+    call(HITu64Merge, out, heap);
     size_t olen = out[0] - buf;
     for (size_t i = 0; i < olen; i++)
         test(buf[i] >= 5, FAILSANITY);
@@ -171,7 +188,7 @@ ok64 HIT6() {
     HITu64Seek(hheap, &key);
     u64 hbuf[15];
     u64s hout = {hbuf, hbuf + sizeof(hbuf) / sizeof(u64)};
-    call(HITu64Merge, hheap, hout);
+    call(HITu64Merge, hout, hheap);
     size_t hlen = hout[0] - hbuf;
 
     // DOG-027: MSET retired — every element >= 25, in order, spelled out.
@@ -182,7 +199,7 @@ ok64 HIT6() {
     done;
 }
 
-// HIT7: Seek past all data → NODATA
+// HIT7: Seek past all data → NONE
 ok64 HIT7() {
     sane(1);
     u64 a[] = {1, 2, 3};
@@ -191,10 +208,10 @@ ok64 HIT7() {
     u64css heap = {runs, runs + 2};
     u64 key = 100;
     ok64 o = HITu64Seek(heap, &key);
-    testeqv((long long)(o), (long long)(NODATA), "%lld");
+    testeqv((long long)(o), (long long)(NONE), "%lld");
     // DOG-027: Seek no longer compacts — the next Load drops the exhausted
     // entries, so the same emptiness claim is asserted through one.
-    a_pad(u64csp, slots, HIT_MAX_RUNS);
+    a_pad(u64csp, slots, ABC_HIT_MAX_RUNS);
     call(HITu64Load, slots, heap);
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     done;
@@ -230,7 +247,7 @@ ok64 HIT9() {
     // drain rest
     u64 buf[8];
     u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64Merge, heap, out);
+    call(HITu64Merge, out, heap);
     size_t olen = out[0] - buf;
     // expected: 4,5,6,7,8
     testeqv((long long)(olen), (long long)((size_t)5), "%lld");
@@ -251,13 +268,13 @@ ok64 HIT10() {
         {NULL, NULL},
     };
     u64css heap = {runs, runs + 3};
-    a_pad(u64csp, slots, HIT_MAX_RUNS);
+    a_pad(u64csp, slots, ABC_HIT_MAX_RUNS);
     call(HITu64Load, slots, heap);
     testeqv((long long)($len(slots_data)), (long long)((size_t)0), "%lld");
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     u64 key = 1;
     ok64 o = HITu64Seek(heap, &key);
-    testeqv((long long)(o), (long long)(NODATA), "%lld");
+    testeqv((long long)(o), (long long)(NONE), "%lld");
     done;
 }
 
@@ -279,7 +296,7 @@ ok64 HIT11() {
 
     u64csss heap = {oh, oh + 2};
     u64 buf[20]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     size_t n = out[0] - buf;
     // {1,2,3,4,5,7} ∩ {1,2,3,5,6,8} = {1,2,3,5}
     testeqv((long long)(n), (long long)((size_t)4), "%lld");
@@ -305,7 +322,7 @@ ok64 HIT12() {
 
     u64csss heap = {oh, oh + 3};
     u64 buf[20]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     size_t n = out[0] - buf;
     // {1..5} ∩ {2..6} ∩ {3..7} = {3,4,5}
     testeqv((long long)(n), (long long)((size_t)3), "%lld");
@@ -327,7 +344,7 @@ ok64 HIT13() {
 
     u64csss heap = {oh, oh + 2};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     testeqv((long long)((size_t)(out[0] - buf)), (long long)((size_t)0), "%lld");
     done;
 }
@@ -344,7 +361,7 @@ ok64 HIT14() {
 
     u64csss heap = {oh, oh + 1};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     size_t n = out[0] - buf;
     testeqv((long long)(n), (long long)((size_t)6), "%lld");
     for (u64 i = 0; i < 6; i++) testeqv((long long)(buf[i]), (long long)(i + 1), "%lld");
@@ -369,7 +386,7 @@ ok64 HIT15() {
 
     u64csss heap = {oh, oh + 2};
     u64 buf[20]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     size_t n = out[0] - buf;
     // {1,2,3,4} ∩ {2,3,4,5} = {2,3,4}
     testeqv((long long)(n), (long long)((size_t)3), "%lld");
@@ -393,20 +410,20 @@ ok64 HIT16() {
     oh[1][0] = rb1; oh[1][1] = rb1 + 2;
     u64csss heap = {oh, oh + 2};
     u64 rbuf[20]; u64s rout = {rbuf, rbuf + sizeof(rbuf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, rout);
+    call(HITu64sIntersectMerge, rout, heap);
     size_t rlen = rout[0] - rbuf;
 
     // Method 2: separate Merge each, then two-pointer intersect
     u64cs ra2[] = {{a1, a1 + 4}, {a2, a2 + 4}};
     u64css ha = {ra2, ra2 + 2};
     u64 ma[20]; u64s mao = {ma, ma + sizeof(ma) / sizeof(u64)};
-    call(HITu64Merge, ha, mao);
+    call(HITu64Merge, mao, ha);
     size_t malen = mao[0] - ma;
 
     u64cs rb2[] = {{b1, b1 + 6}, {b2, b2 + 3}};
     u64css hb = {rb2, rb2 + 2};
     u64 mb[20]; u64s mbo = {mb, mb + sizeof(mb) / sizeof(u64)};
-    call(HITu64Merge, hb, mbo);
+    call(HITu64Merge, mbo, hb);
     size_t mblen = mbo[0] - mb;
 
     u64 ibuf[20]; size_t ilen = 0;
@@ -436,7 +453,7 @@ ok64 HIT17() {
 
     u64csss heap = {oh, oh + 3};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     // Only 1 non-empty inner HIT → intersection = merge = {1,2,3}
     size_t n = out[0] - buf;
     testeqv((long long)(n), (long long)((size_t)3), "%lld");
@@ -458,7 +475,7 @@ ok64 HIT18() {
 
     u64csss heap = {oh, oh + 2};
     u64 buf[10]; u64s out = {buf, buf + sizeof(buf) / sizeof(u64)};
-    call(HITu64sIntersectMerge, heap, out);
+    call(HITu64sIntersectMerge, out, heap);
     size_t n = out[0] - buf;
     // Both merge to {1,2,3,4,5}, intersection = {1,2,3,4,5}
     testeqv((long long)(n), (long long)((size_t)5), "%lld");
@@ -580,7 +597,7 @@ ok64 HIT23() {
 }
 
 // ABC-015: drains take a bounded slice now; a too-small output must
-// return OKNOROOM instead of writing past the end.
+// return NOROOM instead of writing past the end.
 ok64 HIT24() {
     sane(1);
     u64 a[] = {1, 3, 5, 7};
@@ -589,7 +606,7 @@ ok64 HIT24() {
     u64css heap = {runs, runs + 2};
     u64 buf[3];
     u64s out = {buf, buf + 3};
-    testeqv((long long)(HITu64Merge(heap, out)), (long long)(OKNOROOM),
+    testeqv((long long)(HITu64Merge(out, heap)), (long long)(NOROOM),
             "%lld");
     // the room it had was filled in order
     testeqv((long long)(buf[0]), (long long)((u64)1), "%lld");
@@ -601,7 +618,7 @@ ok64 HIT24() {
     u64css stack = {runs2, runs2 + 2};
     u64 small[4];
     u64s into = {small, small + 4};
-    testeqv((long long)(HITu64Compact(stack, into)), (long long)(OKNOROOM),
+    testeqv((long long)(HITu64Compact(stack, into)), (long long)(NOROOM),
             "%lld");
     done;
 }
@@ -645,7 +662,7 @@ ok64 HIT25() {
         kv64css heap = {runs, runs + n};
         kv64 buf[8];
         kv64s out = {buf, buf + 8};
-        call(HITkv64Merge, heap, out);
+        call(HITkv64Merge, out, heap);
         size_t olen = out[0] - buf;
         testeqv((long long)(olen), (long long)(K[k].wlen), "%lld");
         for (size_t i = 0; i < K[k].wlen; i++) {
@@ -680,7 +697,7 @@ ok64 HIT26() {
     done;
 }
 
-// DOG-027: one cap (HIT_MAX_RUNS) for every entry point.  Above it the leaf
+// DOG-027: one cap (ABC_HIT_MAX_RUNS) for every entry point.  Above it the leaf
 // just refuses — no windowing, no repair cascade, no youngest-N batching.
 static void hit27fill(u64 *v, u64cs *runs, u64css st, size_t n) {
     for (size_t i = 0; i < n; i++) {
@@ -694,23 +711,23 @@ static void hit27fill(u64 *v, u64cs *runs, u64css st, size_t n) {
 
 ok64 HIT27() {
     sane(1);
-    u64 v[HIT_MAX_RUNS + 1];
-    u64cs runs[HIT_MAX_RUNS + 1];
-    u64 buf[HIT_MAX_RUNS + 1];
+    u64 v[ABC_HIT_MAX_RUNS + 1];
+    u64cs runs[ABC_HIT_MAX_RUNS + 1];
+    u64 buf[ABC_HIT_MAX_RUNS + 1];
     u64css st;
     u64s out;
     u64 lo = 0, hi = 1000, key = 3;
-    size_t over = HIT_MAX_RUNS + 1;
+    size_t over = ABC_HIT_MAX_RUNS + 1;
 
-    // --- one run past the cap: every entry point returns HITTOOMANY ---
+    // --- one run past the cap: every entry point returns FULL ---
 #define HIT27OVER(EXPR)                                                     \
     hit27fill(v, runs, st, over);                                           \
     out[0] = buf;                                                           \
     out[1] = buf + over;                                                    \
-    testeqv((long long)(EXPR), (long long)(HITTOOMANY), "%lld")
-    HIT27OVER(HITu64Merge(st, out));
-    HIT27OVER(HITu64MergeBag(st, out));
-    HIT27OVER(HITu64Intersect(st, out, over));
+    testeqv((long long)(EXPR), (long long)(FULL), "%lld")
+    HIT27OVER(HITu64Merge(out, st));
+    HIT27OVER(HITu64MergeBag(out, st));
+    HIT27OVER(HITu64Intersect(out, st, over));
     HIT27OVER(HITu64Seek(st, &key));
     HIT27OVER(HITu64SeekRange(st, &lo, &hi));
     HIT27OVER(HITu64Compact(st, out));
@@ -719,21 +736,38 @@ ok64 HIT27() {
 
     // --- exactly at the cap: every entry point works ---
 #define HIT27AT(EXPR)                                                       \
-    hit27fill(v, runs, st, (size_t)HIT_MAX_RUNS);                           \
+    hit27fill(v, runs, st, (size_t)ABC_HIT_MAX_RUNS);                           \
     out[0] = buf;                                                           \
-    out[1] = buf + HIT_MAX_RUNS;                                            \
+    out[1] = buf + ABC_HIT_MAX_RUNS;                                            \
     testeqv((long long)(EXPR), (long long)(OK), "%lld")
-    HIT27AT(HITu64Merge(st, out));
-    testeqv((long long)((size_t)(out[0] - buf)), (long long)((size_t)HIT_MAX_RUNS),
+    HIT27AT(HITu64Merge(out, st));
+    testeqv((long long)((size_t)(out[0] - buf)), (long long)((size_t)ABC_HIT_MAX_RUNS),
             "%lld");
-    HIT27AT(HITu64MergeBag(st, out));
-    HIT27AT(HITu64Intersect(st, out, (size_t)HIT_MAX_RUNS));
+    HIT27AT(HITu64MergeBag(out, st));
+    HIT27AT(HITu64Intersect(out, st, (size_t)ABC_HIT_MAX_RUNS));
     HIT27AT(HITu64Seek(st, &key));
     HIT27AT(HITu64SeekRange(st, &lo, &hi));
     HIT27AT(HITu64Compact(st, out));
     testeqv((long long)($len(st)), (long long)((size_t)1), "%lld");
     HIT27AT(HITu64SkipValue(st));
 #undef HIT27AT
+    done;
+}
+
+// ABC-26B02JHe_k: with ABC_HIT_MERGE, equal keys fold in run (age) order
+ok64 HITmerge() {
+    sane(1);
+    dig64 a[] = {{1, 1}, {2, 1}, {5, 1}};
+    dig64 b[] = {{2, 2}, {3, 2}};
+    dig64 c[] = {{1, 3}, {2, 3}, {5, 3}};
+    dig64cs runs[3] = {{a, a + 3}, {b, b + 2}, {c, c + 3}};
+    dig64css st = {runs, runs + 3};
+    dig64 buf[8];
+    dig64s out = {buf, buf + 8};
+    call(HITdig64Merge, out, st);
+    testeqv((long long)(out[0] - buf), 4LL, "%lld");
+    u64 const k[] = {1, 2, 3, 5}, v[] = {13, 123, 2, 13};
+    for (int i = 0; i < 4; i++) want(buf[i].key == k[i] && buf[i].val == v[i]);
     done;
 }
 
@@ -767,6 +801,7 @@ ok64 HITtest() {
     call(HIT25);
     call(HIT26);
     call(HIT27);
+    call(HITmerge);
     done;
 }
 

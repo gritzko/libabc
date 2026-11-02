@@ -45,7 +45,7 @@ ok64 KV128hash() {
         want(g.val._64[0] == w.val._64[0] && g.val._64[1] == w.val._64[1]);
     }
     kv128 miss = kv128of(5000, 0);
-    want(HASHkv128Get(&miss, kv128bData(buf)) == HASHNONE);
+    want(HASHkv128Get(&miss, kv128bData(buf)) == NONE);
     call(kv128bUnMap, buf);
     done;
 }
@@ -55,8 +55,8 @@ ok64 KV128box() {
     sane(1);
     Bkv128 recs = {};
     call(kv128bMap, recs, 1 << 14);
-    kv128cs slots[HIT_MAX_RUNS];
-    kv128csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    kv128cs slots[ABC_HIT_MAX_RUNS];
+    kv128csb runs = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     u64 last[100] = {};
     for (u64 i = 1; i <= 2000; i++) {
         u64 k = (i * 37) % 100;
@@ -66,7 +66,7 @@ ok64 KV128box() {
     }
     for (u64 k = 0; k < 100; k++) {
         kv128 key = kv128of(k, 0), got = {};
-        call(BOXkv128Get, recs, runs, &key, &got);
+        call(BOXkv128Get, &got, recs, runs, &key);
         want(got.val._64[0] == last[k]);
     }
     call(BOXkv128Sort, recs, runs, YES);
@@ -90,7 +90,7 @@ ok64 KV128sort() {
     for (int i = 0; i < 5; i++)
         want(arr[i].key._64[0] == keys[i][0] && arr[i].key._64[1] == keys[i][1]);
     want(arr[3].val._64[0] == 0 && arr[4].val._64[0] == 3);
-    want(!kv128Z(&kv128max, &arr[4]) && kv128Z(&arr[4], &kv128max));
+    want(!kv128Z(&kv128Max, &arr[4]) && kv128Z(&arr[4], &kv128Max));
     done;
 }
 
@@ -132,10 +132,10 @@ ok64 K96V32hash() {
     call(HASHk96v32Get, &g, k96v32bData(buf));
     want(g.val == 12);
     k96v32 miss = k96v32of(5000, 0);
-    want(HASHk96v32Get(&miss, k96v32bData(buf)) == HASHNONE);
+    want(HASHk96v32Get(&miss, k96v32bData(buf)) == NONE);
     //  the value takes no part in hashing or key equality
     k96v32 a = k96v32of(7, 1), b = k96v32of(7, 2);
-    want(k96v32hash(&a) == k96v32hash(&b) && k96v32hashEq(&a, &b));
+    want(k96v32Hash(&a) == k96v32Hash(&b) && k96v32KeyEq(&a, &b));
     call(k96v32bUnMap, buf);
     done;
 }
@@ -145,8 +145,8 @@ ok64 K96V32box() {
     sane(1);
     Bk96v32 recs = {};
     call(k96v32bMap, recs, 1 << 14);
-    k96v32cs slots[HIT_MAX_RUNS];
-    k96v32csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    k96v32cs slots[ABC_HIT_MAX_RUNS];
+    k96v32csb runs = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     u32 last[100] = {};
     for (u32 i = 1; i <= 2000; i++) {
         u64 k = (i * 37) % 100;
@@ -156,7 +156,7 @@ ok64 K96V32box() {
     }
     for (u64 k = 0; k < 100; k++) {
         k96v32 key = {.k0 = k, .k1 = (u32)(k % 3)}, got = {};
-        call(BOXk96v32Get, recs, runs, &key, &got);
+        call(BOXk96v32Get, &got, recs, runs, &key);
         want(got.val == last[k]);
     }
     call(BOXk96v32Sort, recs, runs, YES);
@@ -182,8 +182,46 @@ ok64 K96V32sort() {
     want(arr[4].val == 0 && arr[5].val == 3);
     k96v32 v0 = {1, 2, u32max}, v1 = {1, 2, 0};
     want(!k96v32Z(&v0, &v1) && !k96v32Z(&v1, &v0));
-    want(!k96v32Z(&k96v32max, &arr[5]) && k96v32Z(&arr[5], &k96v32max));
+    want(!k96v32Z(&k96v32Max, &arr[5]) && k96v32Z(&arr[5], &k96v32Max));
     want(sizeof(k96v32) == 16);
+    done;
+}
+
+//  ABC-26B02JHe_k: X(,Max) is the greatest key under Z for every type
+#define MAXLAST(T, ...)                                    \
+    do {                                                   \
+        T const v_[] = {__VA_ARGS__};                      \
+        for (size_t i_ = 0; i_ < sizeof(v_) / sizeof(T); i_++) { \
+            want(T##Z(v_ + i_, &T##Max));                  \
+            want(!T##Z(&T##Max, v_ + i_));                 \
+        }                                                  \
+        want(!T##Z(&T##Max, &T##Max));                     \
+    } while (0)
+ok64 MAXlast() {
+    sane(1);
+    MAXLAST(u8, 0, 1, 0xfe);
+    MAXLAST(u16, 0, 1, 0xfffe);
+    MAXLAST(u32, 0, 1, 0xfffffffe);
+    MAXLAST(u64, 0, 1, u64max - 1);
+    MAXLAST(i8, INT8_MIN, -1, 0, INT8_MAX - 1);
+    MAXLAST(i16, INT16_MIN, -1, 0, INT16_MAX - 1);
+    MAXLAST(i32, INT32_MIN, -1, 0, INT32_MAX - 1);
+    MAXLAST(i64, INT64_MIN, -1, 0, INT64_MAX - 1);
+    MAXLAST(f32, -__builtin_inff(), -1.0f, -0.0f, 0.0f, 3.4028235e38f);
+    MAXLAST(f64, -__builtin_inf(), -1.0, -0.0, 0.0, 1.7976931348623157e308);
+    MAXLAST(u128, {{0, 0}}, {{u64max, u64max - 1}}, {{0, u64max}});
+    MAXLAST(n128, {{0, 0}}, {{u64max - 1, u64max}});
+    MAXLAST(u256, {{u64max, u64max, u64max, u64max - 1}}, {{0}});
+    MAXLAST(u512, {{u64max - 1, u64max, u64max, u64max, u64max, u64max, u64max, u64max}});
+    MAXLAST(kv32, {0, u32max}, {u32max - 1, u32max});
+    MAXLAST(kv64, {0, u64max}, {u64max - 1, u64max});
+    MAXLAST(kv128, {{{u64max, u64max - 1}}, {{u64max, u64max}}});
+    MAXLAST(k96v32, {u64max, u32max - 1, u32max}, {u64max - 1, u32max, 0});
+    //  all-ones bits are a NaN as a double: unordered, never a Max
+    f64 nan = 0;
+    u64 ones = u64max;
+    memcpy(&nan, &ones, sizeof(nan));
+    want(!f64Z(&nan, &f64Max) && !f64Z(&f64Max, &nan));
     done;
 }
 
@@ -195,6 +233,7 @@ ok64 KV() {
     call(K96V32hash);
     call(K96V32box);
     call(K96V32sort);
+    call(MAXlast);
     done;
 }
 

@@ -799,7 +799,7 @@ static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
     pup256 *e = pup_mem(pups);
     if (!e) return PUPFAIL;
     call(pup_sync, e, runs, sync);
-    a_pad(u8cs, srcs, HIT_MAX_RUNS);
+    a_pad(u8cs, srcs, ABC_HIT_MAX_RUNS);
     $for(u8cs, r, u8csbData(runs)) {
         if (u8csEmpty(*r)) continue;
         call(u8csbFeed1, srcs, *r);
@@ -885,13 +885,13 @@ static ok64 pup_ladder(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
     for (;;) {
         //  DOG-035: clipped lengths — a ToC block is not run bytes, so the
         //  ladder must not weigh it and the merge must never see a cell.
-        a_pad(u8cs, srcs, HIT_MAX_RUNS);
+        a_pad(u8cs, srcs, ABC_HIT_MAX_RUNS);
         call(PUPAllDataRow, srcs, pups, row);
         u8cs *sl = u8csbDataHead(srcs);
         u8css stack = {sl, sl + u8csbDataLen(srcs)};
         //  The ladder reads run LENGTHS only — byte lengths here, element
         //  counts in a HIT stack; HIT.h stays the one home of the 1/8 policy.
-        a_pad(u64, lens, HIT_MAX_RUNS);
+        a_pad(u64, lens, ABC_HIT_MAX_RUNS);
         $for(u8cs, r, stack) call(u64bFeed1, lens, (u64)u8csLen(*r));
         size_t m = HITLadderOverRuns(u64bDataC(lens));
         if (m < 2) done;
@@ -948,7 +948,7 @@ ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
     }
     call(u8bFeed, mem, rec);
     e->data[1] = mem[2];
-    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, PUPx.h's BOXx_C) the segment becomes a run
+    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, PUPx.h's ABC_BOX_SEG) the segment becomes a run
     if (u8bDataLen(mem) > PUP_COLLAPSE) call(pup_sync, e, runs, sync);
     done;
 }

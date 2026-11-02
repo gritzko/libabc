@@ -32,7 +32,7 @@ ok64 $test1() {
 
     i32Swap(&a1, &a2);
     want(a1 == 0 && a2 == 1);
-    i32mv(&a1, &a2);
+    i32Mv(&a1, &a2);
     want(a1 == a2 && a1 == 1);
     done;
 }
@@ -337,6 +337,37 @@ ok64 offtest() {
     done;
 }
 
+//  ABC-26B02JHe_k: sCopy is overlap-safe and refuses a short target
+ok64 copytest() {
+    sane(1);
+    i32 a[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    //  forward overlap: [0,5) onto [2,7)
+    i32s fwd = {a + 2, a + 7};
+    i32cs fsrc = {a, a + 5};
+    call(i32sCopy, fwd, fsrc);
+    i32 const f[8] = {0, 1, 0, 1, 2, 3, 4, 7};
+    for (int i = 0; i < 8; i++) want(a[i] == f[i]);
+    //  backward overlap: [3,8) onto [0,5)
+    i32s bwd = {a, a + 5};
+    i32cs bsrc = {a + 3, a + 8};
+    call(i32sCopy, bwd, bsrc);
+    i32 const b[8] = {1, 2, 3, 4, 7, 3, 4, 7};
+    for (int i = 0; i < 8; i++) want(a[i] == b[i]);
+    //  short target: NOROOM, nothing written
+    i32 t[3] = {9, 9, 9};
+    i32s shrt = {t, t + 3};
+    i32cs four = {a, a + 4};
+    want(i32sCopy(shrt, four) == NOROOM);
+    want(t[0] == 9 && t[1] == 9 && t[2] == 9);
+    //  into is not advanced, a longer target keeps its tail
+    i32 l[5] = {9, 9, 9, 9, 9};
+    i32s lng = {l, l + 5};
+    i32cs two = {a, a + 2};
+    call(i32sCopy, lng, two);
+    want(lng[0] == l && l[0] == 1 && l[1] == 2 && l[2] == 9);
+    done;
+}
+
 ok64 $test() {
     sane(1);
     call($test1);
@@ -348,6 +379,7 @@ ok64 $test() {
     call(draintest);
     call(feedftest);
     call(offtest);
+    call(copytest);
     done;
 }
 

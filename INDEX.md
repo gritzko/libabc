@@ -1,6 +1,6 @@
 #   abc — module index
 
-abc is the foundation C dialect (slices, buffers, no pointer arithmetic; see [README.md], [ABC.md]). Values live in `[head, term)` slices or four-pointer buffers; procedures return `ok64` via the `PRO.h` `call`/`try`/`done` cycle. Naming: `TypeZ(a,b)` is the `a<b` comparator, `Typehash`/`TypehashEq` hash key + key-eq, `*Feed`/`*Drain` serialize, `*Used`/`*Shed`/`*Fed` move borders. Deeper prose lives in the linked per-module `.md` docs.
+abc is the foundation C dialect (slices, buffers, no pointer arithmetic; see [README.md], [ABC.md]). Values live in `[head, term)` slices or four-pointer buffers; procedures return `ok64` via the `PRO.h` `call`/`try`/`done` cycle. Naming: `TypeZ(a,b)` is the `a<b` comparator, `TypeHash`/`TypeKeyEq` hash key + key-eq, `TypeMax` the greatest key (the tombstone), `*Feed`/`*Drain` serialize, `*Used`/`*Shed`/`*Fed` move borders. Deeper prose lives in the linked per-module `.md` docs.
 
 ##  Foundation
 
@@ -64,7 +64,7 @@ A buffer is four pointers splitting memory into PAST/DATA/IDLE; the verb that cr
 Typed integer slice helpers plus little-endian put/get of fixed-width ints into byte slices — the raw layer under ZINT/TLV. Guide: [INT.md].
 
  -  `u8sFeed8`/`u8sFeed16`/`u8sFeed32`/`u8sFeed64` and `u8sDrain8…64` — read/write a fixed-width LE integer.
- -  `u64hash`/`u32hash`/`u64hashEq` — the integer hashers and key-equality used by scalar-keyed `HASHx`.
+ -  `u64Hash`/`u32Hash`/`u64KeyEq` — the integer hashers and key-equality used by scalar-keyed `HASHx`; `u64Max`, `i64Max`, `f64Max`... (01.h) the greatest key under Z: all-ones unsigned, INT_MAX signed, +INF float.
  -  `u128Z`/`u256Z`/`u512Z` — multi-word less-than comparators (big-endian digit order) for the wide word types.
  -  `a_u64cs`/`a_u32cs`/`a_i64cs` — make a const integer slice from a static C array.
 
@@ -146,9 +146,9 @@ A rapidhash wrapper for hash tables and bloom-style keying.
 
  -  `kv32`/`kv64`/`kv128` — 32-, 64- and 128-bit key/value pair records.
  -  `k96v32` — a 16-byte `{u64 k0; u32 k1; u32 val}` map record: a 96-bit key (`k1` high) and a 32-bit value; use it, not a packed `u128`, when the value must stay out of the hash.
- -  `kv32hash`/`kv64hash`/`kv128hash`/`k96v32hash` (+`hashEq`) — key hasher and key-equality, the value never read.
+ -  `kv32Hash`/`kv64Hash`/`kv128Hash`/`k96v32Hash` (+`KeyEq`) — key hasher and key-equality, the value never read.
  -  `kv32Z`/`kv64Z`/`kv128Z`/`k96v32Z` — comparators ordering pairs by key (value ignored).
- -  `kv32max`/`kv64max`/`kv128max`/`k96v32max` — all-ones tombstone records; the all-zero record is empty.
+ -  `kv32Max`/`kv64Max`/`kv128Max`/`k96v32Max` — all-ones tombstone records; the all-zero record is empty.
 
 ##  Containers
 
@@ -156,11 +156,11 @@ A rapidhash wrapper for hash tables and bloom-style keying.
 
 A bucketed linear-probe table laid out directly in a buffer slice; the length MUST be a power of two. Guide: [HASH.md].
 
- -  `HASHGet`/`HASHPut`/`HASHDel`/`HASHfind` — point lookup, insert/upsert, backward-shift delete.
- -  `HASHGrow`/`HASHPutGrow` — a growable table is a buffer's DATA, its IDLE the room: `Grow` doubles DATA in place (phases `GrowCopy`, flip, `GrowClean`), `BNOROOM` when IDLE < DATA, never maps.
- -  `HASHMove` — rehash every entry of one table (a buffer's DATA) into another the caller set up (pow2, any size, no maps); `HASHNOROOM` on a full line, the target partially filled, nothing lost, the source intact.
- -  `HASHProbe`/`HASHProbeGrow` — single-probe get-or-insert: `OK` with `*slot` at the resident, `HASHNONE` with `*slot` at the zeroed slot the caller fills, `HASHNOROOM` (Probe only) on a full line; one hash, no copy of `rec`; under `ABC_HASH_CONVERGE` the fill leaves Put's layout.
- -  Each instantiating type supplies `Typehash` + `TypehashEq`; `HASHx` keys and probes through those, never the name.
+ -  `HASHGet`/`HASHAt`/`HASHPut`/`HASHDel`/`HASHDelAt`/`HASHNext` — point lookup, insert/upsert (an `ABC_HASH_MERGE` fold), backward-shift delete, iteration; codes `NONE`, `FULL` (a full line), `NOROOM`, `BADARG`.
+ -  `HASHGrow`/`HASHPutGrow` — a growable table is a buffer's DATA, its IDLE the room: `Grow` doubles DATA in place (phases `_growCopy`, flip, `_growClean`), `NOROOM` when IDLE < DATA, never maps.
+ -  `HASHMove` — rehash every entry of one table (a buffer's DATA) into another the caller set up (pow2, any size, no maps); `FULL` on a full line, the target partially filled, nothing lost, the source intact.
+ -  `HASHProbe`/`HASHProbeGrow` — single-probe get-or-insert: `OK` with `*slot` at the resident, `NONE` with `*slot` at the zeroed slot the caller fills, `FULL` (Probe only) on a full line; one hash, no copy of `rec`; under `ABC_HASH_CONVERGE` the fill leaves Put's layout.
+ -  Each instantiating type supplies `TypeHash` + `TypeKeyEq`; `HASHx` keys and probes through those, never the name.
  -  `ABC_HASH_LINE`/`ABC_HASH_CONVERGE` — compile-time knobs for probe-line width and Robin-Hood-style convergence on insert.
 
 ###  HEAPx.h — binary heap
@@ -190,11 +190,11 @@ Index-based prev/next links living inside buffer records (no pointers).
 
 ###  BOX.h, BOXx.h — sorted runs in one record buffer
 
-An in-memory sorted container (BOX-26A26EbjLj): a record buffer (PAST = sorted runs back to back, DATA = the unsorted segment) plus a buffer of run slices fed to HITx as they are. Needs `X(,Z)` and `X(,max)` (the tombstone, sorts last); optional `BOXx_MERGE`, `BOXx_C` (segment bytes, 512). The PUPS memtable runs on it.
+An in-memory sorted container (BOX-26A26EbjLj): a record buffer (PAST = sorted runs back to back, DATA = the unsorted segment) plus a buffer of run slices fed to HITx as they are. Needs `X(,Z)`, `X(,KeyEq)` and `X(,Max)` (the tombstone, sorts last, tested by key); optional `ABC_BOX_MERGE` (+ `X(,Merge)`), `ABC_BOX_SEG` (segment bytes, 512). The PUPS memtable runs on it. Guide: [BOX.md].
 
- -  `BOXPut` — append; past c the segment becomes a run (`BOXSort`).
+ -  `BOXPut`/`BOXPutBatch` — append (a Max key is `BADARG`, no room `NOROOM`, no run slot `FULL`; a failed put stores nothing); past c the segment becomes a run (`BOXSort`).
  -  `BOXSort` — seal the segment, collapse the tailing runs by the 1/8 ladder (or all of them): parallel in-place combine, qsort, trim the max tail.
- -  `BOXGet`/`BOXRange` — point lookup (newest wins, or the merge fold); the runs trimmed to `[lo, hi)`.
+ -  `BOXGet(out, recs, runs, key)`/`BOXRange` — point lookup (newest wins, or the merge fold); the runs trimmed to `[lo, hi)`.
 
 ###  BIT.h — `u1` bitmap (bit addressing over u64 words)
 
@@ -254,8 +254,8 @@ Compile a pattern to a Thompson NFA and simulate it over text (full or prefix ma
 `LSM` merges sorted record streams via a heap of cursors; `Yx` is the generic slicer/merger glue; `HITx` is a heap-of-iterators for set ops; `HIT.h` is its comparator-free ladder policy. Guides: [LSM.md], [HIT.md].
 
  -  `LSM`/`LSMMore`/`LSMNext`/`LSMMerge`/`LSMSort` — feed a sorted run, step the merge, drain it.
- -  `HITMerge`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union, intersection.
- -  `HIT_MAX_RUNS`/`HIT_LADDER_DIV`/`HITTOOMANY` (HIT.h) — the one run cap, the 1/8 ratio, the past-the-cap code.
+ -  `HITMerge(into, runs)`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union (an `ABC_HIT_MERGE` fold), intersection; `NOROOM` the output filled, `NONE` nothing left.
+ -  `ABC_HIT_MAX_RUNS`/`ABC_HIT_LADDER_DIV` (HIT.h) — the one run cap (past it: `FULL`), the 1/8 ratio.
  -  `HITLadderOK`/`HITLadderOverRuns` (HIT.h) — 1/8 predicate and cascade count over run LENGTHS, no element type; `HIT*IsCompact`/`HIT*CompactRuns` just measure a stack and call these.
  -  `Yx` (`_X(push)`/`_X(next)`/`_X(merge)`/`_X(sort)`) — the lower-level push/merge primitives the `SORT`/`LSM` users.
 
@@ -404,6 +404,7 @@ Tracks open/close of nested markup or container contexts in a buffer, with splic
 [ZINT.md]: ./ZINT.md
 [TLV.md]: ./TLV.md
 [HASH.md]: ./HASH.md
+[BOX.md]: ./BOX.md
 [HEAP.md]: ./HEAP.md
 [BIN.md]: ./BIN.md
 [LSM.md]: ./LSM.md

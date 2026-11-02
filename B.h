@@ -284,6 +284,7 @@ fun b8 range32Z(range32 const *a, range32 const *b) {
     if (a->lo != b->lo) return a->lo < b->lo;
     return a->hi < b->hi;
 }
+con range32 range32Max = {u32max, u32max};
 
 // Match range: pairs haystack and needle byte ranges
 typedef struct { range32 hay; range32 ndl; } match32;
@@ -294,5 +295,6 @@ fun b8 match32Z(match32 const *a, match32 const *b) {
     if (a->ndl.lo != b->ndl.lo) return a->ndl.lo < b->ndl.lo;
     return a->ndl.hi < b->ndl.hi;
 }
+con match32 match32Max = {{u32max, u32max}, {u32max, u32max}};
 
 #endif

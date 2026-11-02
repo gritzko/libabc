@@ -53,7 +53,7 @@ ok64 X(G, grow)() {
         if (!x) continue;
         T r = X(G, of)(x, YES);
         size_t ndx = 0;
-        while (HASHNOROOM == X(HASH, find)(&ndx, X(, bData)(buf), &r)) {
+        while (FULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) {
             size_t was = X(, bDataLen)(buf);
             call(X(HASH, Grow), buf);
             want(X(, bDataLen)(buf) == was * 2);
@@ -87,14 +87,14 @@ ok64 X(G, phases)() {
         x = x * 6364136223846793005ULL + 1442695040888963407ULL;
         T r = X(G, of)(x | 1, YES);
         size_t ndx = 0;
-        if (HASHNOROOM == X(HASH, find)(&ndx, X(, bData)(buf), &r)) break;
+        if (FULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) break;
         call(X(HASH, Put), X(, bData)(buf), &r);
         call(u64bFeed1, keys, x | 1);
     }
     size_t len = X(, bDataLen)(buf), n = u64bDataLen(keys);
     X($, ) wide = {buf[1], buf[2] + len};
-    X(HASH, GrowCopy)(wide);
-    X(HASH, GrowCopy)(wide);
+    X(HASH, _growCopy)(wide);
+    X(HASH, _growCopy)(wide);
     call(X(G, all), X(, bData)(buf), u64bDataC(keys));
     want(X(G, live)(X(, bData)(buf)) == n);
     want(X(G, live)(wide) > n);  // the stale copies
@@ -104,7 +104,7 @@ ok64 X(G, phases)() {
     while (was != steps) {  // sweep until clean, as GrowClean does
         was = steps;
         for (size_t i = 0; i < len; ++i)
-            while (OK == X(HASH, unstale)(wide, i)) {
+            while (OK == X(HASH, _unstale)(wide, i)) {
                 ++steps;
                 call(X(G, all), X(, bData)(buf), u64bDataC(keys));
             }
@@ -114,7 +114,7 @@ ok64 X(G, phases)() {
     X(B, ) cpy = {};
     call(X(, bMap), cpy, len * 2);
     memcpy(cpy[0], wide[0], len * 2 * sizeof(T));
-    X(HASH, GrowClean)(wide);
+    X(HASH, _growClean)(wide);
     want(0 == memcmp(cpy[0], wide[0], len * 2 * sizeof(T)));
     if (GCONV) call(X(G, same), wide, u64bDataC(keys));
     call(X(, bUnMap), cpy);
@@ -123,7 +123,7 @@ ok64 X(G, phases)() {
     done;
 }
 
-//  Grow never maps: IDLE shorter than DATA is BNOROOM, table untouched
+//  Grow never maps: IDLE shorter than DATA is NOROOM, table untouched
 ok64 X(G, room)() {
     sane(1);
     X(B, ) buf = {};
@@ -134,7 +134,7 @@ ok64 X(G, room)() {
     call(X(HASH, Grow), buf);
     call(X(HASH, Grow), buf);
     want(X(, bDataLen)(buf) == GLINE * 4);
-    want(BNOROOM == X(HASH, Grow)(buf));
+    want(NOROOM == X(HASH, Grow)(buf));
     want(X(, bDataLen)(buf) == GLINE * 4);
     T g = X(G, of)(7, NO);
     call(X(HASH, Get), &g, X(, bData)(buf));
@@ -157,7 +157,7 @@ ok64 X(G, fulldel)() {
     for (u64 k = 1; u64bIdleLen(keys); ++k) {
         T r = X(G, of)(k, YES);
         size_t ndx = 0;
-        if (HASHNOROOM == X(HASH, find)(&ndx, X(, bData)(buf), &r)) continue;
+        if (FULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) continue;
         call(X(HASH, Put), X(, bData)(buf), &r);
         call(u64bFeed1, keys, k);
     }

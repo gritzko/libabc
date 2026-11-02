@@ -33,6 +33,7 @@ fun void SHAClose(SHAstate* state, sha256* hash) {
 fun b8 sha256Z(sha256 const* a, sha256 const* b) {
     return memcmp(a, b, sizeof(sha256)) < 0;
 }
+con sha256 sha256Max = {{[0 ... crypto_hash_sha256_BYTES - 1] = 0xff}};
 
 fun int sha256eq(sha256 const* a, sha256 const* b) {
     return memcmp(a, b, sizeof(sha256)) == 0;

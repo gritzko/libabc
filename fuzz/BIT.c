@@ -17,8 +17,8 @@ FUZZ(u8, BITfuzz) {
     Bu1 ba = {}, bb = {};
     must(u1bMap(ba, NBITS) == OK, "map a");
     must(u1bMap(bb, NBITS) == OK, "map b");
-    u64s a; u64sDup(a, u1bData(ba));
-    u64s b; u64sDup(b, u1bData(bb));
+    u64s a; u64sMv(a, u1bData(ba));
+    u64s b; u64sMv(b, u1bData(bb));
 
     //  Reference: byte-per-bit.  Even-index input bytes set bits in `a`,
     //  odd-index in `b` (index = byte % NBITS).
@@ -55,7 +55,7 @@ FUZZ(u8, BITfuzz) {
     do {                                                                 \
         Bu1 bd = {};                                                     \
         must(u1bMap(bd, NBITS) == OK, "map d");                          \
-        u64s d; u64sDup(d, u1bData(bd));                                 \
+        u64s d; u64sMv(d, u1bData(bd));                                 \
         must(u1sOr(d, u1sConst(a)) == OK, "seed d = a");                 \
         must(opfn(d, u1sConst(b)) == OK, "op");                          \
         for (int i = 0; i < NBITS; i++) {                                \
@@ -75,7 +75,7 @@ FUZZ(u8, BITfuzz) {
     {
         Bu1 bc = {};
         must(u1bMap(bc, NBITS) == OK, "map c");
-        u64s c; u64sDup(c, u1bData(bc));
+        u64s c; u64sMv(c, u1bData(bc));
         must(u1sOr(c, u1sConst(a)) == OK, "copy a");
         must(u1sEq(u1sConst(c), u1sConst(a)), "eq copy");
         u1sPut(c, 0, !u1At(u1sConst(c), 0));

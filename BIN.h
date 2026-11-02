@@ -56,7 +56,7 @@ typedef u64 bin64;
 #define bin64fmt "(" FMTu64 "@%u)"
 #define bin64fmtd(x) bin64offset(x), (u32)bin64level(x)
 
-fun h64 X(, hash)(T a) { return mix64(a); }
+fun h64 X(, Hash)(T a) { return mix64(a); }
 
 #include "B.h"
 
@@ -184,6 +184,7 @@ fun bin64 bin64patch_next(u64 *len, u64 newlen) {
 fun bin64 bin64next(bin64 b) { return b + (bin64level_bits(b) + 1); }
 
 fun b8 bin64Z(bin64 const *a, bin64 const *b) { return *a < *b; }
+con bin64 bin64Max = u64max;
 
 #define X(M, name) M##bin64##name
 #include "Bx.h"

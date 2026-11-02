@@ -10,7 +10,7 @@
 #include "PRO.h"
 #include "TEST.h"
 
-#define BOXx_C 8  //  4 rows
+#define ABC_BOX_SEG 8  //  4 rows
 #define X(M, name) M##u16##name
 #include "HITx.h"
 #include "BOXx.h"
@@ -24,19 +24,19 @@ FUZZ(u16, BOXfuzz) {
     if ($empty(input)) done;
 
     a_pad(u16, recs, MAX_INPUT_N + 1);
-    a_pad(u16cs, runs, HIT_MAX_RUNS);
+    a_pad(u16cs, runs, ABC_HIT_MAX_RUNS);
     u8 seen[1 << 16] = {};
 
     $for(u16c, p, input) {
         u16 v = *p;
         if (v == u16max) {
-            must(BOXu16Put(recs, runs, &v) == BOXFAIL, "tombstone taken");
+            must(BOXu16Put(recs, runs, &v) == BADARG, "tombstone taken");
             continue;
         }
         must(BOXu16Put(recs, runs, &v) == OK, "Put");
         seen[v] = 1;
         u16 const *at = recs[0];
-        a_pad(u64, lens, HIT_MAX_RUNS);
+        a_pad(u64, lens, ABC_HIT_MAX_RUNS);
         for (u16cs *r = runs[1]; r < runs[2]; r++) {
             must((*r)[0] == at, "runs not back to back");
             for (u16 const *q = (*r)[0] + 1; q < (*r)[1]; q++)
@@ -49,7 +49,7 @@ FUZZ(u16, BOXfuzz) {
     }
     for (u32 k = 0; k < u16max; k++) {
         u16 key = (u16)k, got = 0;
-        ok64 o = BOXu16Get(recs, runs, &key, &got);
+        ok64 o = BOXu16Get(&got, recs, runs, &key);
         must(seen[k] ? (o == OK && got == key) : o == NONE, "Get");
     }
     must(BOXu16Sort(recs, runs, YES) == OK, "Sort all");

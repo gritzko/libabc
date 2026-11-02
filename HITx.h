@@ -18,8 +18,7 @@
 #define HIT_E X(, cs)    // entry = const slice
 #define HIT_H X(, csps)  // heap = slice of pointers to entries
 
-// The heap's buffer: the pointers live in its DATA (a_pad(X(, csp), ...)).
-typedef X(, csp) *X(, cspb)[4];
+// The heap's buffer X(,cspb) (Sx.h): the pointers live in its DATA.
 
 // --- Comparator: compare entries by head element ---
 
@@ -73,10 +72,10 @@ fun void X(HIT, Eject)(X(, csps) heap, size_t at) {
 // DOG-027: SIDE EFFECT on `runs` — empty entries are dropped, survivors
 // shift down keeping age order, runs[1] moves back; the heap aims at those.
 // The heap is the DATA of `heap`, reset here.  More runs than its room
-// (HIT_MAX_RUNS: the stack is damaged or foreign): HITTOOMANY, no window.
+// (ABC_HIT_MAX_RUNS: the stack is damaged or foreign): FULL, no window.
 
 fun ok64 X(HIT, Load)(X(, cspb) heap, X(, css) runs) {
-    if ($len(runs) > heap[3] - heap[0]) return HITTOOMANY;
+    if ($len(runs) > heap[3] - heap[0]) return FULL;
     heap[1] = heap[2] = heap[0];
     HIT_E *w = runs[0];
     for (HIT_E *r = runs[0]; r < runs[1]; r++) {
@@ -142,15 +141,16 @@ fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
 
 // --- MergeBag: drain heap producing sorted output (keeps duplicates) ---
 // ABC-015: drains write into a bounded slice (head advances past the
-// output) and return OKNOROOM when it fills.
+// output) and return NOROOM when it fills.  ABC-26B02JHe_k: the
+// destination first, as in memcpy.
 
-fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
-    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+fun ok64 X(HIT, MergeBag)(X(, s) into, X(, css) runs) {
+    a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
     X(, csp) **heap = slots_data;
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap)) {
-        if ($empty(into)) return OKNOROOM;
+        if ($empty(into)) return NOROOM;
         *into[0]++ = *(*heap[0])[0];
         X(HIT, Step)(heap);
     }
@@ -158,21 +158,44 @@ fun ok64 X(HIT, MergeBag)(X(, css) runs, X(, s) into) {
 }
 
 // --- Merge: drain heap producing sorted deduplicated output ---
+// Equal keys: the youngest run's row wins, or with ABC_HIT_MERGE defined
+// the rows fold oldest first, X(,Merge)(acc, younger).
 
-fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
-    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+#ifdef ABC_HIT_MERGE
+//  fold the ntops equal heads in age order (entry pointer order)
+fun void X(HIT, _fold)(HIT_T *acc, X(, csps) heap, size_t ntops) {
+    X(, csp) prev = NULL;
+    for (size_t k = 0; k < ntops; k++) {
+        X(, csp) next = NULL;
+        for (size_t i = 0; i < ntops; i++) {
+            X(, csp) e = heap[0][i];
+            if ((!prev || e > prev) && (!next || e < next)) next = e;
+        }
+        if (k == 0)
+            *acc = *next[0];
+        else
+            X(, Merge)(acc, next[0]);
+        prev = next;
+    }
+}
+#endif
+
+fun ok64 X(HIT, Merge)(X(, s) into, X(, css) runs) {
+    a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
     X(, csp) **heap = slots_data;
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap)) {
-        HIT_T val = *(*heap[0])[0];
-        if ($empty(into)) return OKNOROOM;
-        *into[0]++ = val;
+        if ($empty(into)) return NOROOM;
         size_t ntops = X(HIT, Tops)(heap);
+        HIT_T val = *(*heap[0])[0];
+#ifdef ABC_HIT_MERGE
+        X(HIT, _fold)(&val, heap, ntops);
+#endif
+        *into[0]++ = val;
         X(HIT, AdvanceTops)(heap, ntops);
         // skip remaining duplicates
-        while (!$empty(heap) && !X(, Z)((*heap[0])[0], &val)
-                              && !X(, Z)(&val, (*heap[0])[0]))
+        while (!$empty(heap) && X(, KeyEq)((*heap[0])[0], &val))
             X(HIT, Step)(heap);
     }
     return OK;
@@ -180,8 +203,8 @@ fun ok64 X(HIT, Merge)(X(, css) runs, X(, s) into) {
 
 // --- Intersect: emit values present in ALL nruns iterators ---
 
-fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
-    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+fun ok64 X(HIT, Intersect)(X(, s) into, X(, css) runs, size_t nruns) {
+    a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
     X(, csp) **heap = slots_data;
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
@@ -189,13 +212,12 @@ fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
         if (ntops >= nruns) {
-            if ($empty(into)) return OKNOROOM;
+            if ($empty(into)) return NOROOM;
             *into[0]++ = val;
         }
         X(HIT, AdvanceTops)(heap, ntops);
         // skip remaining duplicates of val
-        while (!$empty(heap) && !X(, Z)((*heap[0])[0], &val)
-                              && !X(, Z)(&val, (*heap[0])[0]))
+        while (!$empty(heap) && X(, KeyEq)((*heap[0])[0], &val))
             X(HIT, Step)(heap);
     }
     return OK;
@@ -204,7 +226,7 @@ fun ok64 X(HIT, Intersect)(X(, css) runs, X(, s) into, size_t nruns) {
 // --- Seek: advance all entries until heap top >= key ---
 
 fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
-    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
     X(, csp) **heap = slots_data;
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
@@ -218,7 +240,7 @@ fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
         }
         X(HIT, Down)(heap, 0);
     }
-    return $empty(heap) ? NODATA : OK;  // DOG-027: the heap is the live set
+    return $empty(heap) ? NONE : OK;  // DOG-027: the heap is the live set
 }
 
 // --- SeekRange: trim all entries to [lo, hi), eject empty ---
@@ -226,7 +248,7 @@ fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
 // (Load + Step) emits them in order with no prefix checks needed.
 
 fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
-    if ($len(heap) > HIT_MAX_RUNS) return HITTOOMANY;  // DOG-027: uniform cap
+    if ($len(heap) > ABC_HIT_MAX_RUNS) return FULL;  // DOG-027: uniform cap
     HIT_E *w = heap[0];
     for (HIT_E *r = heap[0]; r < heap[1]; r++) {
         if ($empty(*r)) continue;
@@ -239,7 +261,7 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
         }
     }
     heap[1] = w;
-    if ($empty(heap)) return NODATA;
+    if ($empty(heap)) return NONE;
     return OK;
 }
 
@@ -248,7 +270,7 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
 // lives entirely in its (oldest-first, in-place-advanced) entries.
 
 fun ok64 X(HIT, SkipValue)(X(, css) runs) {
-    a_pad(X(, csp), slots, HIT_MAX_RUNS);
+    a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
     X(, csp) **inner = slots_data;
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
@@ -256,8 +278,7 @@ fun ok64 X(HIT, SkipValue)(X(, css) runs) {
     HIT_T val = *(*inner[0])[0];
     size_t ntops = X(HIT, Tops)(inner);
     X(HIT, AdvanceTops)(inner, ntops);
-    while (!$empty(inner) && !X(, Z)((*inner[0])[0], &val)
-                           && !X(, Z)(&val, (*inner[0])[0]))
+    while (!$empty(inner) && X(, KeyEq)((*inner[0])[0], &val))
         X(HIT, Step)(inner);
     // DOG-027: re-Load to compact `runs` — sIntersectMerge's cssTop reads
     // the inner's entries directly, with no Load of its own to filter them.
@@ -274,26 +295,24 @@ fun ok64 X(HIT, SkipValue)(X(, css) runs) {
 //   outers[i][0] = runs_i; outers[i][1] = runs_i + nruns_i;
 //   u64csss oh = {outers, outers + N};
 //   u64 buf[...]; u64p out = buf;
-//   HITu64sIntersectMerge(oh, &out);
-
-typedef X(, css) *X(, csss)[2];
+//   HITu64sIntersectMerge(out, oh);
 
 // Top value pointer of an inner HIT
 // DOG-027: entries are no longer heap-ordered — scan for the min head.
-fun X(, cp) X(HIT, cssTop)(X(, css) *hit) {
+fun X(, cp) X(HIT, _cssTop)(X(, css) *hit) {
     X(, cp) m = (*(*hit)[0])[0];
     for (X(, cs) *r = (*hit)[0] + 1; r < (*hit)[1]; r++)
         if (X(, Z)((*r)[0], m)) m = (*r)[0];
     return m;
 }
 
-fun void X(, cssSwap)(X(, css) *a, X(, css) *b) {
+fun void X(HIT, _cssSwap)(X(, css) *a, X(, css) *b) {
     X(, cs) *t0 = (*a)[0], *t1 = (*a)[1];
     (*a)[0] = (*b)[0]; (*a)[1] = (*b)[1];
     (*b)[0] = t0; (*b)[1] = t1;
 }
 
-fun void X(HIT, cssDown)(X(, csss) oh, size_t at) {
+fun void X(HIT, _cssDown)(X(, csss) oh, size_t at) {
     size_t n = (size_t)$len(oh);
     size_t i = at;
     for (;;) {
@@ -301,27 +320,27 @@ fun void X(HIT, cssDown)(X(, csss) oh, size_t at) {
         if (left >= n || left < i) break;
         size_t right = left + 1;
         size_t j = left;
-        if (right < n && X(, Z)(X(HIT, cssTop)($atp(oh, right)),
-                                 X(HIT, cssTop)($atp(oh, left))))
+        if (right < n && X(, Z)(X(HIT, _cssTop)($atp(oh, right)),
+                                 X(HIT, _cssTop)($atp(oh, left))))
             j = right;
-        if (!X(, Z)(X(HIT, cssTop)($atp(oh, j)),
-                     X(HIT, cssTop)($atp(oh, i)))) break;
-        X(, cssSwap)($atp(oh, i), $atp(oh, j));
+        if (!X(, Z)(X(HIT, _cssTop)($atp(oh, j)),
+                     X(HIT, _cssTop)($atp(oh, i)))) break;
+        X(HIT, _cssSwap)($atp(oh, i), $atp(oh, j));
         i = j;
     }
 }
 
-fun size_t X(HIT, cssTops)(X(, csss) oh) {
+fun size_t X(HIT, _cssTops)(X(, csss) oh) {
     size_t l = (size_t)$len(oh);
     if (l == 0) return 0;
     size_t eqlen = 1;
     size_t lim = 2;
     for (size_t i = 1; i < l && i <= lim; ++i) {
-        if (X(, Z)(X(HIT, cssTop)($atp(oh, 0)),
-                    X(HIT, cssTop)($atp(oh, i)))) continue;
+        if (X(, Z)(X(HIT, _cssTop)($atp(oh, 0)),
+                    X(HIT, _cssTop)($atp(oh, i)))) continue;
         if (eqlen != i) {
-            X(, cssSwap)($atp(oh, eqlen), $atp(oh, i));
-            X(HIT, cssDown)(oh, i);
+            X(HIT, _cssSwap)($atp(oh, eqlen), $atp(oh, i));
+            X(HIT, _cssDown)(oh, i);
             --i;
         } else {
             lim = i * 2 + 2;
@@ -331,12 +350,12 @@ fun size_t X(HIT, cssTops)(X(, csss) oh) {
     return eqlen;
 }
 
-fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
+fun ok64 X(HIT, sIntersectMerge)(X(, s) into, X(, csss) oheap) {
     // Filter empty inner HITs
     X(, css) *w = oheap[0];
     for (X(, css) *r = oheap[0]; r < oheap[1]; r++) {
         if (!$empty(*r)) {
-            if (w != r) X(, cssSwap)(w, r);
+            if (w != r) X(HIT, _cssSwap)(w, r);
             w++;
         }
     }
@@ -346,14 +365,14 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
 
     // Heapify outer
     for (size_t i = nruns / 2; i > 0; --i)
-        X(HIT, cssDown)(oheap, i - 1);
+        X(HIT, _cssDown)(oheap, i - 1);
 
     while ((size_t)$len(oheap) == nruns) {
-        size_t ntops = X(HIT, cssTops)(oheap);
-        HIT_T val = *X(HIT, cssTop)($atp(oheap, 0));
+        size_t ntops = X(HIT, _cssTops)(oheap);
+        HIT_T val = *X(HIT, _cssTop)($atp(oheap, 0));
 
         if (ntops >= nruns) {
-            if ($empty(into)) return OKNOROOM;
+            if ($empty(into)) return NOROOM;
             *into[0]++ = val;
         }
 
@@ -363,7 +382,7 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
             ok64 so = X(HIT, SkipValue)(*$atp(oheap, i));
             if (so != OK) return so;
             if ($empty(*$atp(oheap, i))) return OK;
-            X(HIT, cssDown)(oheap, i);
+            X(HIT, _cssDown)(oheap, i);
         }
     }
     return OK;
@@ -383,9 +402,9 @@ fun ok64 X(HIT, sIntersectMerge)(X(, csss) oheap, X(, s) into) {
 // DOG-027: HIT is now the ONE ladder home — MSET is deleted, so ABC-015's
 // deferred "unify IsCompact/Compact into one home" follow-up is closed.
 // The predicate itself is comparator-free (HIT.h); this measures the runs.
-// Past HIT_MAX_RUNS the stack is damaged, hence never compact.
+// Past ABC_HIT_MAX_RUNS the stack is damaged, hence never compact.
 fun b8 X(HIT, IsCompact)(X(, css) stack) {
-    a_pad(u64, lens, HIT_MAX_RUNS);
+    a_pad(u64, lens, ABC_HIT_MAX_RUNS);
     $for(HIT_E, r, stack) if (u64bFeed1(lens, (u64)$len(*r)) != OK) return NO;
     return HITLadderOK(u64bDataC(lens));
 }
@@ -402,22 +421,22 @@ fun b8 X(HIT, IsCompact)(X(, css) stack) {
 // HITLadderOverRuns (HIT.h, no comparator); this only measures the runs, so a
 // length-only caller like dog's Pup calls HIT.h directly.
 fun size_t X(HIT, CompactRuns)(X(, css) stack) {
-    a_pad(u64, lens, HIT_MAX_RUNS);
+    a_pad(u64, lens, ABC_HIT_MAX_RUNS);
     $for(HIT_E, r, stack) if (u64bFeed1(lens, (u64)$len(*r)) != OK) return 0;
     return HITLadderOverRuns(u64bDataC(lens));
 }
 
 fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     size_t n = $len(stack);
-    if (n > HIT_MAX_RUNS) return HITTOOMANY;  // DOG-027: uniform cap
+    if (n > ABC_HIT_MAX_RUNS) return FULL;  // DOG-027: uniform cap
     size_t m = X(HIT, CompactRuns)(stack);
     if (m < 2) return OK;
     size_t total = 0;
     for (size_t i = n - m; i < n; i++) total += (size_t)$len(stack[0][i]);
-    if ($len(into) < (i64)total) return OKNOROOM;
+    if ($len(into) < (i64)total) return NOROOM;
     HIT_T *base = *into;
     X(, css) sub = {stack[0] + (n - m), stack[0] + n};
-    ok64 o = X(HIT, Merge)(sub, into);
+    ok64 o = X(HIT, Merge)(into, sub);
     if (o != OK) return o;
     stack[0][n - m][0] = base;
     stack[0][n - m][1] = *into;
@@ -428,3 +447,4 @@ fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
 #undef HIT_H
 #undef HIT_E
 #undef HIT_T
+#undef ABC_HIT_MERGE

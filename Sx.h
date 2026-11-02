@@ -35,6 +35,8 @@ typedef T const *const *X(, cspc);
 typedef X(, s) * X(, ss)[2];
 typedef X(, cs) * X(, css)[2];
 typedef X(, csp) * X(, csps)[2];
+typedef X(, csp) *X(, cspb)[4];  //  HITx's heap buffer
+typedef X(, css) *X(, csss)[2];  //  HITx's heap of inner HITs
 typedef X(, p) * X(, ps)[2];
 
 typedef T *X(, g)[3];
@@ -136,16 +138,9 @@ fun ok64 X(, cgFedP)(X(, cg) g, X(, cp) * p) {
     *p = g[1]++;
     return OK;
 }
+//  ABC-26B02JHe_k: Mv assigns a record (wiki/Containers.mkd "Mv, Copy, Move")
 fun void X(, Mv)(X(, p) a, X(, cp) b) {
     *a = *b;
-}
-fun void X(, sMv)(X(, s) a, X(, s) b) {
-    a[0] = b[0];
-    a[1] = b[1];
-}
-fun void X(, csMv)(X(, cs) a, X(, csc) b) {
-    a[0] = b[0];
-    a[1] = b[1];
 }
 fun void X(, sMv0)(X(, s) a) {
     a[0] = 0;
@@ -481,10 +476,12 @@ fun ok64 X($, part)(X($, c) into, X($c, c) orig, size_t from, size_t till) {
     return OK;
 }
 
-fun size_t X(, sCopy)(X(, sc) into, X(, csc) from) {
-    size_t l = $minlen(into, from);
-    memcpy((void *)*into, (void *)*from, l * sizeof(T));
-    return l;
+//  ABC-26B02JHe_k: copy the records of `from` to the head of `into`,
+//  overlap-safe; NOROOM (nothing written) if `into` is shorter.
+fun ok64 X(, sCopy)(X(, sc) into, X(, csc) from) {
+    if ($len(into) < $len(from)) return NOROOM;
+    memmove((void *)*into, (void *)*from, $size(from));
+    return OK;
 }
 
 /* TODO define Z on all types
@@ -613,12 +610,6 @@ fun ok64 X($, take)(X(, c$) prefix, X($, c) from, size_t len) {
     return OK;
 }
 
-fun ok64 X($, move)(X($, ) into, X($, c) from) {
-    if ($len(into) < $len(from)) return SNOROOM;
-    memmove((void *)*into, (void *)*from, $size(from));
-    return OK;
-}
-
 // non null, fits non-franctional number of records
 fun b8 X(, csOK)(X(, csc) s) {
     return s != NULL && s[1] >= s[0] &&
@@ -626,10 +617,6 @@ fun b8 X(, csOK)(X(, csc) s) {
 }
 
 fun b8 X(, sOK)(X(, sc) s) { return X(, csOK)((T const **)s); }
-
-fun void X(, mv)(T *into, T const *from) { Ocopy(into, from); }
-
-fun void X(, Move)(X(, p) into, X(, cp) from) { Ocopy(into, from); }
 
 // Stack operations on gauges (data portion is the stack)
 #ifndef ABC_X_$
@@ -639,7 +626,7 @@ fun T X(, gTop)(X(, g) g) {
 }
 fun ok64 X(, gPop)(X(, g) g, X(, p) x) {
     if (X(, gEmpty)(g)) return SNODATA;
-    X(, mv)(x, X(, sLast)(X(, gLeft)(g)));
+    X(, Mv)(x, X(, sLast)(X(, gLeft)(g)));
     return X(, gShed1)(g);
 }
 fun ok64 X(, gPopN)(X(, g) g, size_t n, X(, cs) popped) {
@@ -667,7 +654,7 @@ fun ok64 X(, gPopN)(X(, g) g, size_t n, X(, cs) popped) {
 fun ok64 X(, sFeed1)(X(, s) into, T what) {
     if ($empty(into)) return SNOROOM;
 #ifndef ABC_X_$
-    X(, mv)(*into, (T const *)&what);
+    X(, Mv)(*into, (T const *)&what);
 #else
     memcpy((void *)*into, (void *)what, sizeof(T));
 #endif
@@ -712,7 +699,7 @@ fun ok64 X(, sPuked)(X(, s) from, size_t len) {
 fun ok64 X(, sDrain1)(X(, cs) from, T *into) {
     if ($empty(from)) return SNODATA;
 #ifndef ABC_X_$
-    X(, mv)(into, *from);
+    X(, Mv)(into, *from);
 #else
     Ocopy(into, *from);
 #endif
@@ -721,10 +708,8 @@ fun ok64 X(, sDrain1)(X(, cs) from, T *into) {
 }
 fun ok64 X(, sFeed2)(X($, ) into, T a, T b) {
     if ($len(into) < 2) return SNOROOM;
-    X(, mv)(*into, (T const *)&a);
-    ++*into;
-    X(, mv)(*into, (T const *)&b);
-    ++*into;
+    X(, sFeed1)(into, a);
+    X(, sFeed1)(into, b);
     return OK;
 }
 
@@ -737,13 +722,13 @@ fun ok64 X(, sFeed3)(X(, s) into, T a, T b, T c) {
 }
 fun ok64 X(, sFeedP)(X(, s) into, T const *what) {
     if ($empty(into)) return SNOROOM;
-    X(, mv)(*into, what);
+    Ocopy(*into, what);  //  Mv is not defined for ABC_X_$ types
     ++*into;
     return OK;
 }
 
 fun void X($, drop)(X($, ) into, T const *from) {
-    X(, mv)(*into, from);
+    Ocopy(*into, from);
     ++*into;
 }
 
@@ -774,12 +759,12 @@ fun size_t X($, offset)(X($c, c) outer, X($c, c) inner) {
     return inner[0] - outer[0];
 }
 
-fun void X(, csDup)(X(, csp) a, X(, cspc) b) {
+//  slice Mv: assign the two pointers (retired: sDup, csDup)
+fun void X(, sMv)(X(, s) a, X(, sc) b) {
     a[0] = b[0];
     a[1] = b[1];
 }
-
-fun void X(, sDup)(X(, sp) a, X(, spc) b) {
+fun void X(, csMv)(X(, cs) a, X(, csc) b) {
     a[0] = b[0];
     a[1] = b[1];
 }

@@ -111,6 +111,7 @@ con ok64 NODATA = 0x5d834a74a;
 con ok64 END = 0xe5cd;
 con ok64 NOROOM = 0x5d86d8616;
 con ok64 NONE = 0x5d85ce;
+con ok64 FULL = 0x3de555;  //  a structural limit: a full line, page, run slot
 con ok64 NOEQ = 0x5d839a;
 con ok64 NOTIMPLYET = 0x5d875259956239d;
 con ok64 BADARG = 0x2ca34a6d0;
@@ -325,7 +326,7 @@ fun h64 mix64(u64 a) {
 #define u16max 0xffff
 #define u32max 0xffffffff
 #define u64max 0xffffffffffffffffUL
-con u128 u128max = {{u64max, u64max}};
+con u128 u128Max = {{u64max, u64max}};
 
 #define LESS 0x54e71c
 #define GREQ 0
@@ -454,6 +455,19 @@ fun b8 i16Z(i16cp a, i16cp b) { return *a < *b; }
 fun b8 i32Z(i32cp a, i32cp b) { return *a < *b; }
 fun b8 i64Z(i64cp a, i64cp b) { return *a < *b; }
 fun b8 u8Z(u8cp a, u8cp b) { return *a < *b; }
+
+//  ABC-26B02JHe_k: X(,Max), the greatest key under Z (wiki/Containers.mkd):
+//  all-ones unsigned, INT_MAX signed, +INF float (NaN keys are banned).
+con u8 u8Max = u8max;
+con u16 u16Max = u16max;
+con u32 u32Max = u32max;
+con u64 u64Max = u64max;
+con i8 i8Max = INT8_MAX;
+con i16 i16Max = INT16_MAX;
+con i32 i32Max = INT32_MAX;
+con i64 i64Max = INT64_MAX;
+con f32 f32Max = __builtin_inff();
+con f64 f64Max = __builtin_inf();
 
 fun u64 i64Zig(i64 i) { return (u64)(i * 2) ^ (u64)(i >> 63); }
 

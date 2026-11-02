@@ -163,7 +163,7 @@ ok64 TLVEndAny($u8 tlv, u8 type, Bu8p stack) {
         if (len < 0x100) {
             u8cs from = {start + 1 + 4, tlv[0]};
             $u8 into = {start + 1 + 1, tlv[0] - 4 + 1};
-            $u8move(into, from);
+            u8sCopy(into, from);
             tlv[0] -= 4 - 1;
             *start |= TLVaA;
             *(start + 1) = (u8)len;
@@ -177,7 +177,7 @@ ok64 TLVEndAny($u8 tlv, u8 type, Bu8p stack) {
             test($len(tlv) >= 4 - 1, TLVNOROOM);
             u8cs from = {start + 1 + 1, tlv[0]};
             $u8 into = {start + 1 + 4, tlv[0] + 4 - 1};
-            $u8move(into, from);
+            u8sCopy(into, from);
             tlv[0] += 4 - 1;
             *start &= ~TLVaA;
             *(u32*)(start + 1) = len;

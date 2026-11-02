@@ -102,7 +102,7 @@ fun ok64 X(SKIP, finish)(u8bp buf, X(SKIP, tab) * k) {
         a$tail(u8, tail, u8bData(buf), k->pos);
         a_dup(u8c, rest, tail);
         call(TLVDrain$, lastk, rest);
-        call($u8move, tail, rest);
+        call(u8sCopy, tail, rest);
         call($u8retract, u8bDataC(buf), $len(lastk));
     }
     a$raw(w, k->off);

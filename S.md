@@ -50,7 +50,7 @@ Always prefer typed functions over generic macros:
 | Consume N      | `u8sUsed(s, n)`   | `s[0]+=n`     |
 | Trim end by N  | `u8sShed(s, n)`   | `s[1]-=n`     |
 | Copy slice ptrs| `u8sMv(a, b)`     | `$mv(a, b)`   |
-| Copy data      | `u8sCopy(to, fr)` | `$copy()`     |
+| Copy data      | `u8sCopy(to, fr)` (memmove, NOROOM if short) | `$copy()` (memcpy, truncates) |
 | Feed data      | `u8sFeed(to, fr)` | `$feed()`     |
 | Feed one       | `u8sFeed1(s, v)`  | `$feed1()`    |
 | Find element   | `u8sFind(s, v)`   | -             |

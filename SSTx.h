@@ -92,7 +92,7 @@ fun int X(SST, cmp)($cc a, $cc b) {
     a$dup(u8c, bb, b);  // TODO fast and robust
     TLVDrainKeyVal(&ta, ka, va, aa);
     TLVDrainKeyVal(&tb, kb, vb, bb);
-    X(SST, key) keya = X(, max), keyb = X(, max);
+    X(SST, key) keya = X(, Max), keyb = X(, Max);
     X(, unpack)(&keya, ka);
     X(, unpack)(&keyb, kb);
     if (X(, Z)(&keya, &keyb)) return -1;
@@ -108,7 +108,7 @@ fun b8 X(SST, Z)(u8csc a, u8csc b) {
     a_dup(u8c, bb, b);
     TLVDrainKeyVal(&ta, ka, va, aa);
     TLVDrainKeyVal(&tb, kb, vb, bb);
-    X(SST, key) keya = X(, max), keyb = X(, max);
+    X(SST, key) keya = X(, Max), keyb = X(, Max);
     X(, unpack)(&keya, ka);
     X(, unpack)(&keyb, kb);
     if (X(, Z)(&keya, &keyb)) return YES;

@@ -129,7 +129,7 @@ ok64 ORDER128() {
     want(!n128Z(&d, &c));
     n128 e = {._64 = {1, 10}};
     want(n128Z(&c, &e));    //  equal first u64: the second breaks the tie
-    want(!n128Z(&c, &c) && n128hashEq(&c, &c) && !n128hashEq(&c, &e));
+    want(!n128Z(&c, &c) && n128KeyEq(&c, &c) && !n128KeyEq(&c, &e));
     done;
 }
 

@@ -50,10 +50,10 @@ ok64 X(M, src)(X(B, ) src, Bu64 keys, size_t small, size_t n) {
         x = x * 6364136223846793005ULL + 1442695040888963407ULL;
         if (!x) continue;
         T r = X(M, of)(x, YES);
-        size_t line = (X(, hash)(&r) & (small - 1)) / MLINE;
+        size_t line = (X(, Hash)(&r) & (small - 1)) / MLINE;
         if (cnt[line] >= MLINE / 2) continue;
         size_t ndx = 0;
-        if (HASHNOROOM == X(HASH, find)(&ndx, X(, bData)(src), &r)) continue;
+        if (FULL == X(HASH, _find)(&ndx, X(, bData)(src), &r)) continue;
         call(X(HASH, Put), X(, bData)(src), &r);
         call(u64bFeed1, keys, x);
         ++cnt[line];
@@ -100,10 +100,10 @@ ok64 X(M, sizes)() {
     done;
 }
 
-//  smaller that does not fit: one line, more keys than slots: HASHNOROOM,
+//  smaller that does not fit: one line, more keys than slots: FULL,
 //  the target full of src's records (each found, value and all), src
 //  intact; then a Move of the same into the same is all upserts: no room
-//  needed for the keys already in, HASHNOROOM again at the same key
+//  needed for the keys already in, FULL again at the same key
 ok64 X(M, noroom)() {
     sane(1);
     X(B, ) src = {}, dst = {}, cpy = {};
@@ -115,7 +115,7 @@ ok64 X(M, noroom)() {
     memcpy(cpy[0], src[1], slen * sizeof(T));
     call(X(, bMap), dst, MLINE);
     call(X(, bFed), dst, MLINE);
-    want(HASHNOROOM == X(HASH, Move)(dst, src));
+    want(FULL == X(HASH, Move)(dst, src));
     want(X(M, live)(X(, bData)(dst)) == MLINE);
     size_t found = 0;
     $for(u64c, k, u64bDataC(keys)) {
@@ -127,7 +127,7 @@ ok64 X(M, noroom)() {
     want(found == MLINE);
     want(0 == memcmp(cpy[0], src[1], slen * sizeof(T)));
     memcpy(cpy[0], dst[1], MLINE * sizeof(T));
-    want(HASHNOROOM == X(HASH, Move)(dst, src));
+    want(FULL == X(HASH, Move)(dst, src));
     want(0 == memcmp(cpy[0], dst[1], MLINE * sizeof(T)));
     call(X(, bUnMap), cpy);
     call(X(, bUnMap), dst);
@@ -136,7 +136,7 @@ ok64 X(M, noroom)() {
     done;
 }
 
-//  sanity: a non-power-of-2 or overlapping target is FAILSANITY
+//  sanity: a non-power-of-2 or overlapping target is BADARG
 ok64 X(M, insane)() {
     sane(1);
     X(B, ) buf = {};
@@ -144,8 +144,8 @@ ok64 X(M, insane)() {
     call(X(, bFed), buf, MLINE * 3);
     X(B, ) a = {buf[0], buf[0], buf[0] + MLINE * 3, buf[3]};
     X(B, ) b = {buf[0], buf[0], buf[0] + MLINE * 2, buf[3]};
-    want(FAILSANITY == X(HASH, Move)(a, b));  // 3 lines: not pow2
-    want(FAILSANITY == X(HASH, Move)(b, a));  // overlap
+    want(BADARG == X(HASH, Move)(a, b));  // 3 lines: not pow2
+    want(BADARG == X(HASH, Move)(b, a));  // overlap
     call(X(, bUnMap), buf);
     done;
 }

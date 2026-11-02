@@ -94,8 +94,8 @@ static ok64 PUPKeyFloor(void) {
     want(o.floor > k2);
 
     //  a seal of the memtable: its run lands past the counter too
-    kv64cs slots[HIT_MAX_RUNS];
-    kv64cs *runs[4] = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    kv64cs slots[ABC_HIT_MAX_RUNS];
+    kv64cs *runs[4] = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     u64 f2 = o.floor;
     kv64 r2 = {2, 20};
     a_dup(u8c, rec2, ((u8cs){(u8c *)&r2, (u8c *)(&r2 + 1)}));
@@ -174,8 +174,8 @@ static ok64 PUPKeyDead(void) {
     call(PUPClose, fresh);
 
     //  a seal through the same opt re-scans the dir: the sources stay out
-    kv64cs slots[HIT_MAX_RUNS];
-    kv64cs *runs[4] = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    kv64cs slots[ABC_HIT_MAX_RUNS];
+    kv64cs *runs[4] = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     kv64 row = {20, 200};
     a_dup(u8c, rec, ((u8cs){(u8c *)&row, (u8c *)(&row + 1)}));
     call(PUPkv64PutOpt, pups, runs, $path(dir), ext, rec, 0, &o);

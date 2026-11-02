@@ -266,7 +266,7 @@ ok64 URITestTable() {
         a_pad(u8, relbuf, 512);
         call(URIutf8Feed, relbuf_idle, &rel);
         u8cs rel_result;
-        u8csDup(rel_result, u8bDataC(relbuf));
+        u8csMv(rel_result, u8bDataC(relbuf));
 
         // Compare with expected
         u8cs expected_rel = {(u8cp)expected_rel_str, (u8cp)(expected_rel_str + strlen(expected_rel_str))};
@@ -498,14 +498,14 @@ ok64 URITestFeedSafe() {
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         uri u = {};
         char const **c = cases[i].comp;
-        if (c[SC]) { a_cstr(s, c[SC]); u8csDup(u.scheme, s); }
-        if (c[AU]) { a_cstr(s, c[AU]); u8csDup(u.authority, s); }
-        if (c[HO]) { a_cstr(s, c[HO]); u8csDup(u.host, s); }
-        if (c[PO]) { a_cstr(s, c[PO]); u8csDup(u.port, s); }
-        if (c[US]) { a_cstr(s, c[US]); u8csDup(u.user, s); }
-        if (c[PA]) { a_cstr(s, c[PA]); u8csDup(u.path, s); }
-        if (c[QU]) { a_cstr(s, c[QU]); u8csDup(u.query, s); }
-        if (c[FR]) { a_cstr(s, c[FR]); u8csDup(u.fragment, s); }
+        if (c[SC]) { a_cstr(s, c[SC]); u8csMv(u.scheme, s); }
+        if (c[AU]) { a_cstr(s, c[AU]); u8csMv(u.authority, s); }
+        if (c[HO]) { a_cstr(s, c[HO]); u8csMv(u.host, s); }
+        if (c[PO]) { a_cstr(s, c[PO]); u8csMv(u.port, s); }
+        if (c[US]) { a_cstr(s, c[US]); u8csMv(u.user, s); }
+        if (c[PA]) { a_cstr(s, c[PA]); u8csMv(u.path, s); }
+        if (c[QU]) { a_cstr(s, c[QU]); u8csMv(u.query, s); }
+        if (c[FR]) { a_cstr(s, c[FR]); u8csMv(u.fragment, s); }
 
         a_pad(u8, out, 256);
         ok64 o = URIutf8FeedSafe(out_idle, &u);

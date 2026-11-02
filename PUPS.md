@@ -77,7 +77,7 @@ the process dies, and reads never take it. `.lock` is not a run: a scan skips it
 
 A rescan also remaps a run whose file another writer replaced (an older ladder
 renamed its merge onto the youngest source's name; since PUPS-005 none does). Known limit (DOG-046): a long-lived handle keeps the mappings of
-runs other writers unlinked, so after more than `HIT_MAX_RUNS` of them a view
+runs other writers unlinked, so after more than `ABC_HIT_MAX_RUNS` of them a view
 overflows (`SNOROOM`); reopen the stack.
 
 ### Caller-published runs (PUPS-26A309qbG9)
@@ -128,8 +128,8 @@ The memtable's run slices belong to the caller: a typed `X(,csb)` held next
 to the stack for as long as the stack, and passed to `Put`, `Commit`,
 `AllRuns` and `Read` (NULL is fine where the stack never had a memtable):
 
-    kv64cs slots[HIT_MAX_RUNS];
-    kv64csb runs = {slots, slots, slots, slots + HIT_MAX_RUNS};
+    kv64cs slots[ABC_HIT_MAX_RUNS];
+    kv64csb runs = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     PUPkv64Put(pups, runs, dir, ext, rec);
 
 The core sees it as a `u8csb` and passes it through; `PUP<T>Sync` casts it

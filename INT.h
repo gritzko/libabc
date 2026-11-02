@@ -23,10 +23,17 @@ con ok64 INTBAD = 0x49774b28d;
 #define I64_MIN INT64_MIN
 #define I64_MIN_ABS 0x8000000000000000
 
-fun u64 u64hash(u64 const *v) { return mix64(*v); }
-fun b8 u64hashEq(u64 const *a, u64 const *b) { return *a == *b; }
-fun u64 u32hash(u32 const *v) { return mix32(*v); }
-fun b8 u32hashEq(u32 const *a, u32 const *b) { return *a == *b; }
+fun u64 u64Hash(u64 const *v) { return mix64(*v); }
+fun b8 u64KeyEq(u64 const *a, u64 const *b) { return *a == *b; }
+fun u64 u32Hash(u32 const *v) { return mix32(*v); }
+fun b8 u32KeyEq(u32 const *a, u32 const *b) { return *a == *b; }
+fun b8 u16KeyEq(u16 const *a, u16 const *b) { return *a == *b; }
+fun b8 u8KeyEq(u8 const *a, u8 const *b) { return *a == *b; }
+fun b8 i32KeyEq(i32 const *a, i32 const *b) { return *a == *b; }
+fun b8 i64KeyEq(i64 const *a, i64 const *b) { return *a == *b; }
+//  NaN keys are banned (wiki/Containers.mkd), so == is !Z && !Z here
+fun b8 f32KeyEq(f32 const *a, f32 const *b) { return *a == *b; }
+fun b8 f64KeyEq(f64 const *a, f64 const *b) { return *a == *b; }
 
 fun b8 u128Z(u128 const *a, u128 const *b) {
     if (a->_64[1] != b->_64[1]) return a->_64[1] < b->_64[1];
@@ -40,10 +47,10 @@ fun b8 n128Z(n128 const *a, n128 const *b) {
     return a->_64[1] < b->_64[1];
 }
 
-//  BOX-26A26EbjLj: the max records (u128max sits in 01.h)
-con n128 n128max = {{u64max, u64max}};
-con u256 u256max = {{u64max, u64max, u64max, u64max}};
-con u512 u512max = {{u64max, u64max, u64max, u64max, u64max, u64max, u64max, u64max}};
+//  BOX-26A26EbjLj: the max records (u128Max sits in 01.h)
+con n128 n128Max = {{u64max, u64max}};
+con u256 u256Max = {{u64max, u64max, u64max, u64max}};
+con u512 u512Max = {{u64max, u64max, u64max, u64max, u64max, u64max, u64max, u64max}};
 
 fun b8 u256Z(u256 const *a, u256 const *b) {
     for (int i = 3; i >= 0; --i) {
@@ -228,18 +235,18 @@ fun u64 u64hash2(u64 low, u64 high) {
     return b;
 }
 
-fun u64 u128hash(u128cp val) {
+fun u64 u128Hash(u128cp val) {
     u64 low = val->_64[0];
     u64 high = val->_64[1];
     return u64hash2(low, high);
 }
 
-fun b8 u128hashEq(u128cp a, u128cp b) {
+fun b8 u128KeyEq(u128cp a, u128cp b) {
     return a->_64[0] == b->_64[0] && a->_64[1] == b->_64[1];
 }
 
-fun u64 n128hash(n128cp val) { return mix64(val->_64[0] ^ val->_64[1]); }
-fun b8 n128hashEq(n128cp a, n128cp b) {
+fun u64 n128Hash(n128cp val) { return mix64(val->_64[0] ^ val->_64[1]); }
+fun b8 n128KeyEq(n128cp a, n128cp b) {
     return a->_64[0] == b->_64[0] && a->_64[1] == b->_64[1];
 }
 

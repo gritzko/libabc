@@ -55,7 +55,7 @@ fun ok64 X(, sDown)(X($c, ) heap) { return X(, sDownAt)(heap, 0); }
 fun ok64 X(HEAP, Pop)(T *v, X(, bp) buf) {
     T **data = X(, bData)(buf);
     if ($empty(data)) return BNODATA;
-    X(, mv)(v, $head(data));
+    Ocopy(v, $head(data));  //  any T, also ABC_X_$ slices (no Mv)
     X(, Swap)($head(data), $last(data));
     --$term(data);
     if ($empty(data)) return OK;
@@ -77,7 +77,7 @@ fun ok64 X(HEAP, Push1)(X(, bp) buf, T v) {
 fun ok64 X(HEAP, PopZ)(T *v, X(, bp) buf, X(, z) z) {
     T **data = X(, bData)(buf);
     if ($empty(data)) return BNODATA;
-    X(, mv)(v, $head(data));
+    Ocopy(v, $head(data));  //  any T, also ABC_X_$ slices (no Mv)
     X(, Swap)($head(data), $last(data));
     --$term(data);
     if ($empty(data)) return OK;

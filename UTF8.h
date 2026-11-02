@@ -24,6 +24,7 @@ con ok64 UTFBADNUM = 0x1e74f2ca357796;
 
 typedef unsigned char utf8;
 fun b8 utf8Z(utf8 const *a, utf8 const *b) { return *a < *b; }
+con utf8 utf8Max = u8max;
 #define X(M, name) M##utf8##name
 #include "Bx.h"
 #undef X
