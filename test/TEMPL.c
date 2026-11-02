@@ -15,10 +15,14 @@
 #define X(M, name) M##u32##name
 #define ABC_HASH_CONVERGE 1
 #define ABC_HASH_LINE 16  // 16-slot tables below
+#define ABC_HASH_MISSSTOP 1
 #include "HASHx.h"
 #undef X
 #ifdef ABC_HASH_CONVERGE
 #error "HASHx.h leaked ABC_HASH_CONVERGE"
+#endif
+#ifdef ABC_HASH_MISSSTOP
+#error "HASHx.h leaked ABC_HASH_MISSSTOP"
 #endif
 
 #define X(M, name) M##u32##name

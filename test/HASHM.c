@@ -9,6 +9,7 @@
 #define X(M, name) M##u64##name
 #define ABC_HASH_CONVERGE 1
 #define ABC_HASH_LINE 16
+#define ABC_HASH_MISSSTOP 1
 #include "HASHx.h"
 fun u64 Mu64of(u64 k, b8 val) { return k; }
 #define MLINE 16
@@ -28,6 +29,7 @@ fun kv64 Mkv64of(u64 k, b8 val) { return (kv64){k, val ? ~k : 0}; }
 #define X(M, name) M##k96v32##name
 #define ABC_HASH_CONVERGE 1
 #define ABC_HASH_LINE 16
+#define ABC_HASH_MISSSTOP 1
 #include "HASHx.h"
 fun k96v32 Mk96v32of(u64 k, b8 val) {
     return (k96v32){k, (u32)(k >> 17), val ? (u32)k * 7 : 0};

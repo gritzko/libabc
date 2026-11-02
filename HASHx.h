@@ -20,6 +20,13 @@
 #define ABC_HASH_CONVERGE 0
 #endif
 
+// HASH-26B02GfveW: CONVERGE keeps a key behind every resident of its
+// probe path with a greater hash, so a Get miss may stop at the first
+// one: a hash per probed resident.  Pays where hashing is cheap.
+#ifndef ABC_HASH_MISSSTOP
+#define ABC_HASH_MISSSTOP 0
+#endif
+
 #define MASK (ABC_HASH_LINE - 1)
 #define LMASK (X(, sLen)(data) - 1)
 
@@ -50,7 +57,7 @@ fun ok64 X(HASH, find)(size_t *ndx, X($, ) data, T const *rec) {
     return X(HASH, scan)(ndx, data, rec);
 }
 
-fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx) {
+fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx, u64 hash) {
     size_t off = ndx & MASK;
     size_t base = ndx & ~MASK;
     for (size_t i = (off + 1) & MASK; i != off; i = (i + 1) & MASK) {
@@ -60,6 +67,9 @@ fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx) {
             *rec = $at(data, ndx);
             return OK;
         }
+        if (ABC_HASH_CONVERGE && ABC_HASH_MISSSTOP &&
+            X(, hash)($atp(data, ndx)) > hash)
+            return HASHNONE;
     }
     return HASHNONE;
 }
@@ -72,7 +82,10 @@ fun ok64 X(HASH, Get)(T *rec, X($, ) data) {
         *rec = $at(data, ndx);  // TODO mv
         return OK;
     }
-    return X(HASH, _get)(rec, data, ndx);
+    if (ABC_HASH_CONVERGE && ABC_HASH_MISSSTOP &&
+        X(, hash)($atp(data, ndx)) > hash)
+        return HASHNONE;
+    return X(HASH, _get)(rec, data, ndx, hash);
 }
 
 // HASH-26B02G3r5y: read-only lookup, no copies, no mutation (unlike
@@ -336,4 +349,5 @@ fun ok64 X(HASH, ProbeGrow)(T **slot, X(B, ) buf, T const *rec) {
 #undef ABC_HASH_LINE
 // ABC-015: per-instantiation knob, undef like ABC_HASH_LINE
 #undef ABC_HASH_CONVERGE
+#undef ABC_HASH_MISSSTOP
 #undef T
