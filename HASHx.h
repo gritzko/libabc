@@ -85,37 +85,16 @@ fun ok64 X(HASH, At)(T const **slot, X($, ) data, T const *rec) {
     return OK;
 }
 
-fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
-    T r;
-    X(, mv)(&r, rec);
-    size_t fit = hash & LMASK;
-    size_t off = fit & MASK;
-    size_t base = fit & ~MASK;
-    for (size_t i = 0; i < ABC_HASH_LINE; ++i) {
-        size_t ndx = base + ((off + i) & MASK);
-        if (X($, is0)(data, ndx) || X(, hashEq)(&r, $atp(data, ndx))) {
-            X(, mv)($atp(data, ndx), &r);
-            return OK;
-        }
-        u64 hash2 = X(, hash)($atp(data, ndx));
-        // ABC-015: after Swap the carried record is the ex-occupant, so
-        // carry its hash too; a stale hash made layout depend on op order
-        if (ABC_HASH_CONVERGE && hash2 > hash) {
-            X(, Swap)(&r, $atp(data, ndx));
-            hash = hash2;
-        }
-    }
-    return HASHNOROOM;
-}
+fun ok64 X(HASH, _probe)(T **slot, X($, ) data, T const *rec, u64 hash);
 
+// OK (rec's key now holds rec) or HASHNOROOM (rec's line is full, the
+// table untouched): Probe + mv, the same layout either way.
 fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
-    u64 hash = X(, hash)(rec);
-    size_t ndx = hash & LMASK;
-    if (X($, is0)(data, ndx) || X(, hashEq)(rec, $atp(data, ndx))) {
-        X(, mv)($atp(data, ndx), rec);
-        return OK;
-    }
-    return X(HASH, _put)(rec, data, hash);
+    T *slot = NULL;
+    ok64 o = X(HASH, _probe)(&slot, data, rec, X(, hash)(rec));
+    if (o == HASHNOROOM) return o;
+    X(, mv)(slot, rec);
+    return OK;
 }
 
 // Backward-shift deletion: zero slot ndx, refilling it from later slots
@@ -189,7 +168,9 @@ fun void X(HASH, GrowCopy)(X($, ) data) {
         for (T *p = data[0] + b; p < data[0] + b + ABC_HASH_LINE; ++p) {
             if (X(, IsZero)(p)) continue;
             u64 h = X(, hash)(p);  // hashed once, Put would rehash
-            if (h & half) X(HASH, _put)(p, data, h);  // <= LINE into 0s
+            T *s = NULL;  // <= LINE into 0s: fits
+            if ((h & half) && HASHNONE == X(HASH, _probe)(&s, data, p, h))
+                X(, mv)(s, p);
         }
     }
 }
@@ -244,8 +225,8 @@ fun ok64 X(HASH, Grow)(X(B, ) buf) {
 // from is read only; the two tables must not overlap.  Use: the
 // fallback when Grow fails BNOROOM, shrinking, another ABC_HASH_LINE.
 // HASHNOROOM: an entry's line in into is full; into is left partially
-// filled (from's entries before it, in slot order, moved; none lost,
-// as find is probed before each Put), from intact.
+// filled (from's entries before it, in slot order, moved; none lost),
+// from intact.
 fun ok64 X(HASH, Move)(X(B, ) into, X(B, ) from) {
     sane(into != NULL && into[0] != NULL && from != NULL && from[0] != NULL);
     X($, ) data = {into[1], into[2]};
@@ -254,8 +235,6 @@ fun ok64 X(HASH, Move)(X(B, ) into, X(B, ) from) {
     test(from[2] <= into[1] || into[2] <= from[1], FAILSANITY);
     for (T const *p = from[1]; p < from[2]; ++p) {
         if (X(, IsZero)(p)) continue;
-        size_t ndx = 0;
-        if (HASHNOROOM == X(HASH, find)(&ndx, data, p)) fail(HASHNOROOM);
         call(X(HASH, Put), data, p);
     }
     done;
@@ -263,15 +242,12 @@ fun ok64 X(HASH, Move)(X(B, ) into, X(B, ) from) {
 
 // Put into a growable table (DATA, see Grow), Grow-ing first if rec's
 // line is full.
-// Probes with find before Put: with ABC_HASH_CONVERGE a NOROOM Put
-// has already swapped some resident out, i.e. lost it.
 fun ok64 X(HASH, PutGrow)(X(B, ) buf, T const *rec) {
     sane(buf != NULL && buf[0] != NULL);
-    size_t ndx = 0;
     for (;;) {
         X($, ) data = {buf[1], buf[2]};
-        if (HASHNOROOM != X(HASH, find)(&ndx, data, rec))
-            return X(HASH, Put)(data, rec);
+        ok64 o = X(HASH, Put)(data, rec);
+        if (o != HASHNOROOM) return o;
         call(X(HASH, Grow), buf);
     }
 }
@@ -284,10 +260,9 @@ fun ok64 X(HASH, PutGrow)(X(B, ) buf, T const *rec) {
 // HASHNOROOM: rec's line is full, *slot and the table untouched.
 // ABC_HASH_CONVERGE: on HASHNONE the residents Put would have displaced
 // are moved first (hashed, as Put does), so Probe+fill leaves the very
-// layout Put leaves; unlike Put, a NOROOM evicts nothing.  As Put, no
+// layout Put leaves; a NOROOM evicts nothing.  As Put, no
 // guard for a table shorter than ABC_HASH_LINE.
-fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
-    u64 hash = X(, hash)(rec);
+fun ok64 X(HASH, _probe)(T **slot, X($, ) data, T const *rec, u64 hash) {
     size_t fit = hash & LMASK;
     size_t off = fit & MASK;
     T *line = data[0] + (fit & ~MASK);
@@ -331,6 +306,10 @@ fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
         }
     }
     return HASHNOROOM;
+}
+
+fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
+    return X(HASH, _probe)(slot, data, rec, X(, hash)(rec));
 }
 
 // HASH-26B02GitHz: undo a HASHNONE Probe left unfilled (lookup-only use,

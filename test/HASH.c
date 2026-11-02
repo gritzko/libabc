@@ -239,15 +239,13 @@ ok64 HASHgrow() {
     call(u32bFed, buf, 16);
     u32 grows = 0;
     for (u32 i = 1; i <= 5000; ++i) {
-        // CONVERGE Put may evict a record on NOROOM: probe with find first
-        size_t ndx = 0;
-        while (HASHNOROOM == HASHu32find(&ndx, u32bData(buf), &i)) {
+        // HASH-26B02GiUYZ: a NOROOM Put loses nothing, Grow and retry
+        while (HASHNOROOM == HASHu32Put(u32bData(buf), &i)) {
             size_t was = u32bDataLen(buf);
             call(HASHu32Grow, buf);
             want(u32bDataLen(buf) > was);
             ++grows;
         }
-        call(HASHu32Put, u32bData(buf), &i);
     }
     want(grows > 3);
     want(0 == (u32bDataLen(buf) & (u32bDataLen(buf) - 1)));
@@ -477,6 +475,33 @@ ok64 HASHunprobe() {
     done;
 }
 
+// HASH-26B02GiUYZ: CONVERGE Put into a full line is NOROOM, keeps
+// every resident and leaves the table byte-identical
+ok64 HASHputfull() {
+    sane(1);
+    a_pad(u64, f, 16);
+    a_pad(u64, g, 16);
+    zerob(f);
+    u64 n = 0, extra = 0;
+    for (u64 j = 1; n < 16; ++j)
+        if (OK == HASHu64Put(f_idle, &j)) ++n;
+    memcpy(g[0], f[0], sizeof(u64) * 16);
+    for (u64 j = 1; !extra; ++j) {
+        u64 v = j;
+        if (HASHNONE == HASHu64Get(&v, f_idle)) extra = j;
+    }
+    want(HASHNOROOM == HASHu64Put(f_idle, &extra));
+    want(0 == memcmp(g[0], f[0], sizeof(u64) * 16));
+    for (u64 const *p = g[0]; p < g[0] + 16; ++p) {
+        u64 v = *p;
+        want(v != 0);
+        call(HASHu64Get, &v, f_idle);
+    }
+    u64 v = g[0][7];
+    call(HASHu64Put, f_idle, &v);  // a resident's key still fits
+    done;
+}
+
 ok64 RAPtest() {
     sane(1);
     u8c hello[] = "hello world";
@@ -614,6 +639,7 @@ ok64 HASH() {
     call(HASHprobeconv);
     call(HASHunprobe);
     call(HASHdelat);
+    call(HASHputfull);
     call(RAPtest);
     call(HASHzero);
     done;
