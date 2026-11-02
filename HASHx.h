@@ -127,13 +127,15 @@ fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
 // move or not, harmless) the last hole could land on the path of an
 // entry moved earlier in the lap, losing it.
 // HASH-26B02Ggncg: OK if ndx got refilled, HASHNONE if only zeroed.
-fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
-    sane($ok(data) && (i64)ndx < $len(data));
-    size_t base = ndx & ~MASK;
-    size_t hole = ndx;
+// YES: the scan ran past one lap, i.e. past the first hole, and may
+// have carried an entry from after it to before it (see GrowClean).
+fun b8 X(HASH, _shift)(X($, ) data, size_t ndx) {
+    size_t base = ndx & ~MASK, at = ndx;
+    b8 lap = NO;
     for (size_t x = base + ((ndx + 1) & MASK); x != ndx;
          x = base + ((x + 1) & MASK)) {
         if (X($, is0)(data, x)) break;
+        if (x == at) lap = YES;
         size_t nom = X(, hash)(*data + x) & LMASK;
         if (((ndx - nom) & MASK) < ((x - nom) & MASK)) {
             Bat(data, ndx) = Bat(data, x);
@@ -141,7 +143,13 @@ fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
         }
     }
     zero(Bat(data, ndx));
-    return ndx == hole ? HASHNONE : OK;
+    return lap;
+}
+
+fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
+    sane($ok(data) && (i64)ndx < $len(data));
+    X(HASH, _shift)(data, ndx);
+    return X($, is0)(data, ndx) ? HASHNONE : OK;  // refilled: nonzero
 }
 
 // HASHNONE if absent (std::erase count 0); callers that don't care ignore it
@@ -178,9 +186,11 @@ fun void X(HASH, GrowCopy)(X($, ) data) {
     for (size_t b = 0; b < half; b += ABC_HASH_LINE) {
         T *up = data[0] + half + b;
         for (T *z = up; z < up + ABC_HASH_LINE; ++z) zerop(z);
-        for (T *p = data[0] + b; p < data[0] + b + ABC_HASH_LINE; ++p)
-            if (!X(, IsZero)(p) && (X(, hash)(p) & half))
-                X(HASH, Put)(data, p);  // <= LINE into a zero line: fits
+        for (T *p = data[0] + b; p < data[0] + b + ABC_HASH_LINE; ++p) {
+            if (X(, IsZero)(p)) continue;
+            u64 h = X(, hash)(p);  // hashed once, Put would rehash
+            if (h & half) X(HASH, _put)(p, data, h);  // <= LINE into 0s
+        }
     }
 }
 
@@ -196,16 +206,18 @@ fun ok64 X(HASH, unstale)(X($, ) data, size_t ndx) {
 }
 
 // Phase 3: unstale the whole lower half, line by line.  A shift running
-// past one lap may carry a not yet checked entry back before ndx, so a
-// line is swept again until a sweep finds nothing.  Idempotent.
+// past one lap may carry a not yet checked entry back before ndx, so
+// then the line is swept again; otherwise slots before ndx only ever
+// get checked entries and one sweep is enough.  Idempotent.
 fun void X(HASH, GrowClean)(X($, ) data) {
     size_t half = $len(data) >> 1;
     for (size_t b = 0; b < half; b += ABC_HASH_LINE) {
         b8 dirty = YES;
         while (dirty) {
             dirty = NO;
-            for (size_t i = b; i < b + ABC_HASH_LINE; ++i)
-                while (OK == X(HASH, unstale)(data, i)) dirty = YES;
+            for (T *p = data[0] + b; p < data[0] + b + ABC_HASH_LINE; ++p)
+                while (!X(, IsZero)(p) && (X(, hash)(p) & half))
+                    dirty |= X(HASH, _shift)(data, p - data[0]);
         }
     }
 }
