@@ -414,6 +414,36 @@ ok64 HASHprobeconv() {
     done;
 }
 
+// HASH-26B02GitHz: an unfilled CONVERGE Probe, Unprobe-d, loses nobody
+ok64 HASHunprobe() {
+    sane(1);
+    a_pad(u64, put, 1 << 10);
+    a_pad(u64, prb, 1 << 10);
+    zerob(put);
+    zerob(prb);
+    u64 x = 0x9e3779b97f4a7c15ULL;
+    for (u64 i = 0; i < 600; ++i) {  // ~60% load
+        x = x * 6364136223846793005ULL + 1442695040888963407ULL;
+        u64 v = (x >> 20) | 1, *slot = NULL;
+        ok64 o = HASHu64Probe(&slot, prb_idle, &v);
+        if (o == HASHNOROOM) continue;
+        if (o == HASHNONE) {  // undo, then the real insert
+            call(HASHu64Unprobe, prb_idle, slot);
+            want(0 == memcmp(put[0], prb[0], sizeof(u64) << 10));
+            want(HASHNONE == HASHu64Probe(&slot, prb_idle, &v));
+            *slot = v;
+            call(HASHu64Put, put_idle, &v);
+        }
+        want(0 == memcmp(put[0], prb[0], sizeof(u64) << 10));
+    }
+    for (u64 const *p = put[0]; p < put[0] + (1 << 10); ++p) {
+        if (!*p) continue;
+        u64 v = *p;
+        call(HASHu64Get, &v, prb_idle);
+    }
+    done;
+}
+
 ok64 RAPtest() {
     sane(1);
     u8c hello[] = "hello world";
@@ -453,6 +483,7 @@ ok64 HASH() {
     call(HASHprobe);
     call(HASHprobegrow);
     call(HASHprobeconv);
+    call(HASHunprobe);
     call(RAPtest);
     done;
 }

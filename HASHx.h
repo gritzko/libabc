@@ -240,7 +240,8 @@ fun ok64 X(HASH, PutGrow)(X(B, ) buf, T const *rec) {
 // HASH-26A274tV3C: get-or-insert in one probe, rec hashed once, never
 // copied.  OK: *slot is the resident with rec's key.  HASHNONE: *slot
 // is the zeroed slot Put would have put rec into; the caller fills it
-// (a nonzero record with rec's key) before any other op on the table.
+// (a nonzero record with rec's key) or Unprobe-s it before any other op
+// on the table: under CONVERGE an unfilled slot hides displaced residents.
 // HASHNOROOM: rec's line is full, *slot and the table untouched.
 // ABC_HASH_CONVERGE: on HASHNONE the residents Put would have displaced
 // are moved first (hashed, as Put does), so Probe+fill leaves the very
@@ -291,6 +292,12 @@ fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
         }
     }
     return HASHNOROOM;
+}
+
+// HASH-26B02GitHz: undo a HASHNONE Probe left unfilled (lookup-only use,
+// an error path): a backward shift at the slot, the Put layout restored.
+fun ok64 X(HASH, Unprobe)(X($, ) data, T *slot) {
+    return X(HASH, shift)(data, slot - data[0]);
 }
 
 // Probe a growable table (DATA, see Grow), Grow-ing it while rec's line is full: OK or
