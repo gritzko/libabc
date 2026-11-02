@@ -13,7 +13,6 @@
 #define FMTd64 "%" PRId64
 
 #define fun static inline
-#define funi static __always_inline
 #define con static const
 
 typedef void *$[2];

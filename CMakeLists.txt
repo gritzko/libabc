@@ -29,7 +29,7 @@ endif()
 
 #  BOOT-26A25Jhvsy: OFF builds abc without CURL.c/CURL.h, no libcurl
 #  needed or linked, and drops the CURL tests (POLtest drives CURL too)
-option(WITH_CURL "build CURL.c (libcurl) into abc" ON)
+option(WITH_CURL "build CURL.c (libcurl) into abc" OFF)
 
 option(WITH_ASAN "build with ASAN" OFF)
 if (WITH_ASAN)
@@ -58,7 +58,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 if (NOT WASM_MODE)
 find_library(sodium NAMES sodium HINTS /usr /usr/local /opt/homebrew)
 find_path(SODIUM_INCLUDE_DIR NAMES sodium.h HINTS /usr/include /usr/local/include /opt/homebrew/include)
-#  curl is a HARD dependency of the full `abc` unless WITH_CURL is OFF:
+#  curl is a dependency of the full `abc` only with WITH_CURL ON (default OFF):
 #  CURL.c is part of it, and the test tree links `abc` unconditionally.  A
 #  QUIET find turned a missing libcurl-dev into ~45 `cannot find -labc` link
 #  errors, with the real cause buried in one STATUS line.  Fail at configure
@@ -193,7 +193,7 @@ if (WASM_MODE)
     return()
 endif()
 
-# Full abc: curl is required above (unless WITH_CURL is OFF); lz4 and sodium are optional.
+# Full abc: curl only with WITH_CURL ON (default OFF); lz4 and sodium are optional.
 # BOOT-26A23Apv3i: without lz4 (Alpine: lz4-dev) PACK.c and the PACK
 # tests drop out; without sodium (libsodium-dev) the SHA/NACL tests do.
 # Everything else builds and tests.  ABC_SKIPPED names what was left out.
