@@ -75,6 +75,16 @@ fun ok64 X(HASH, Get)(T *rec, X($, ) data) {
     return X(HASH, _get)(rec, data, ndx);
 }
 
+// HASH-26B02G3r5y: read-only lookup, no copies, no mutation (unlike
+// Probe under CONVERGE).  OK: *slot is the resident with rec's key;
+// HASHNONE: absent, *slot untouched.
+fun ok64 X(HASH, At)(T const **slot, X($, ) data, T const *rec) {
+    size_t ndx = 0;
+    if (OK != X(HASH, find)(&ndx, data, rec)) return HASHNONE;
+    *slot = data[0] + ndx;
+    return OK;
+}
+
 fun ok64 X(HASH, _put)(T const *rec, X($, ) data, size_t hash) {
     T r;
     X(, mv)(&r, rec);

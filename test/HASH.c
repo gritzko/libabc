@@ -332,6 +332,39 @@ ok64 HASHprobe() {
     done;
 }
 
+// HASH-26B02G3r5y: At is a pointer lookup, never mutates (CONVERGE too)
+ok64 HASHat() {
+    sane(1);
+    a_pad(kv64, line, 16);
+    zerob(line);
+    kv64 const *at = NULL;
+    for (u64 k = 1; k <= 16; ++k) {
+        kv64 x = {.key = k, .val = k * 3};
+        call(HASHkv64Put, line_idle, &x);
+    }
+    for (u64 k = 1; k <= 16; ++k) {
+        kv64 x = {.key = k};
+        want(OK == HASHkv64At(&at, line_idle, &x) && at->val == k * 3);
+        want(at >= line_idle[0] && at < line_idle[1]);
+    }
+    kv64 no = {.key = 17};  // full line: NONE, not NOROOM
+    at = NULL;
+    want(HASHNONE == HASHkv64At(&at, line_idle, &no) && at == NULL);
+    a_pad(u64, cv, 256);
+    zerob(cv);
+    for (u64 k = 1; k <= 192; ++k) call(HASHu64Put, cv_idle, &k);
+    a_pad(u64, cp, 256);
+    zerob(cp);
+    memcpy(cp_idle[0], cv_idle[0], 256 * sizeof(u64));
+    u64 const *a = NULL;
+    for (u64 k = 1; k <= 384; ++k) {
+        ok64 o = HASHu64At(&a, cv_idle, &k);
+        want(k <= 192 ? (o == OK && *a == k) : o == HASHNONE);
+    }
+    want(0 == memcmp(cp_idle[0], cv_idle[0], 256 * sizeof(u64)));
+    done;
+}
+
 // ProbeGrow: get-or-insert across growth, one entry per key
 ok64 HASHprobegrow() {
     sane(1);
@@ -508,6 +541,7 @@ ok64 HASH() {
     call(HASHgrow);
     call(HASHputgrow);
     call(HASHprobe);
+    call(HASHat);
     call(HASHprobegrow);
     call(HASHprobeconv);
     call(HASHunprobe);
