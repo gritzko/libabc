@@ -126,9 +126,11 @@ fun ok64 X(HASH, Put)(X($, ) data, T const *rec) {
 // copies (their home is another line, here a meaningless offset: they
 // move or not, harmless) the last hole could land on the path of an
 // entry moved earlier in the lap, losing it.
+// HASH-26B02Ggncg: OK if ndx got refilled, HASHNONE if only zeroed.
 fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
     sane($ok(data) && (i64)ndx < $len(data));
     size_t base = ndx & ~MASK;
+    size_t hole = ndx;
     for (size_t x = base + ((ndx + 1) & MASK); x != ndx;
          x = base + ((x + 1) & MASK)) {
         if (X($, is0)(data, x)) break;
@@ -139,7 +141,7 @@ fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
         }
     }
     zero(Bat(data, ndx));
-    done;
+    return ndx == hole ? HASHNONE : OK;
 }
 
 // HASHNONE if absent (std::erase count 0); callers that don't care ignore it
@@ -147,6 +149,19 @@ fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
     size_t ndx = 0;
     ok64 o = X(HASH, find)(&ndx, data, rec);
     if (o == HASHNONE || o == HASHNOROOM) return HASHNONE;
+    o = X(HASH, shift)(data, ndx);
+    return o == HASHNONE ? OK : o;
+}
+
+// HASH-26B02Ggncg: delete the entry at slot ndx, e.g. while iterating.
+// OK: a later entry moved into ndx, re-examine the slot before going on;
+// HASHNONE: ndx is now empty.  Erase-while-iterating:
+//     for (size_t i = 0; i < $len(data);)
+//         if (!IsZero(data[0] + i) && match(data[0] + i))
+//             { if (OK != DelAt(data, i)) ++i; } else ++i;
+// An unvisited entry only moves into ndx, never before it; a visited
+// one (a wrapped line) may move forward and be seen twice.
+fun ok64 X(HASH, DelAt)(X($, ) data, size_t ndx) {
     return X(HASH, shift)(data, ndx);
 }
 
@@ -176,7 +191,8 @@ fun void X(HASH, GrowCopy)(X($, ) data) {
 fun ok64 X(HASH, unstale)(X($, ) data, size_t ndx) {
     T const *p = data[0] + ndx;
     if (X(, IsZero)(p) || !(X(, hash)(p) & ($len(data) >> 1))) return HASHNONE;
-    return X(HASH, shift)(data, ndx);
+    ok64 o = X(HASH, shift)(data, ndx);
+    return o == HASHNONE ? OK : o;
 }
 
 // Phase 3: unstale the whole lower half, line by line.  A shift running
@@ -308,7 +324,8 @@ fun ok64 X(HASH, Probe)(T **slot, X($, ) data, T const *rec) {
 // HASH-26B02GitHz: undo a HASHNONE Probe left unfilled (lookup-only use,
 // an error path): a backward shift at the slot, the Put layout restored.
 fun ok64 X(HASH, Unprobe)(X($, ) data, T *slot) {
-    return X(HASH, shift)(data, slot - data[0]);
+    ok64 o = X(HASH, shift)(data, slot - data[0]);
+    return o == HASHNONE ? OK : o;
 }
 
 // Probe a growable table (DATA, see Grow), Grow-ing it while rec's line is full: OK or

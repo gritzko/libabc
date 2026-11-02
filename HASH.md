@@ -19,6 +19,18 @@ Macro parameters:
     For example, "put 1, put 2, remove 1, put 3" and "put 3, put 2" would
     result in the same bit-state of the *buffer*.
 
+##  Delete while iterating (HASH-26B02Ggncg)
+
+`Del` refills the hole by a backward shift: a later entry of the line
+may move into the slot just deleted.  To erase while scanning slots, use
+`DelAt(data, ndx)`: OK means ndx got refilled, re-examine it; HASHNONE
+means ndx is empty now, step on.  An unvisited entry never moves before
+ndx; a visited one may move forward and be seen again.
+
+    for (size_t i = 0; i < $len(data);)
+        if (!kv64IsZero(data[0] + i) && match(data[0] + i))
+            { if (OK != HASHkv64DelAt(data, i)) ++i; } else ++i;
+
 ##  Growth in place (HASH-26A275TmIX)
 
 A growable table lives in a buffer: the table is the buffer's DATA (a

@@ -531,6 +531,74 @@ ok64 HASHzero() {
     done;
 }
 
+// HASH-26B02Ggncg: delete-all-matching (odd keys) while iterating, by
+// DelAt re-examining a refilled slot; u64 is CONVERGE, kv64 is not
+ok64 HASHdelat() {
+    sane(1);
+    a_pad(u64, u, 64);
+    a_pad(kv64, v, 64);
+    zerob(u);
+    zerob(v);
+    size_t n = 0, refill = 0;
+    for (u64 k = 1; n < 56 && k < 1000; ++k) {
+        size_t ndx = 0;
+        u64 x = k;
+        kv64 y = {.key = k, .val = k};
+        if (HASHNOROOM == HASHu64find(&ndx, u_idle, &x) ||
+            HASHNOROOM == HASHkv64find(&ndx, v_idle, &y))
+            continue;
+        call(HASHu64Put, u_idle, &x);
+        call(HASHkv64Put, v_idle, &y);
+        ++n;
+    }
+    want(n == 56);
+    for (size_t i = 0; i < 64;) {
+        if (u[0][i] & 1) {
+            ok64 o = HASHu64DelAt(u_idle, i);
+            if (o == OK) ++refill;
+            else if (o == HASHNONE) ++i;
+            else fail(o);
+        } else ++i;
+    }
+    for (size_t i = 0; i < 64;) {
+        if (v[0][i].key & 1) {
+            ok64 o = HASHkv64DelAt(v_idle, i);
+            if (o == OK) ++refill;
+            else if (o == HASHNONE) ++i;
+            else fail(o);
+        } else ++i;
+    }
+    want(refill > 0);
+    size_t ul = 0, vl = 0;
+    $for(u64, p, u_idle) if (*p) ++ul;
+    $for(kv64, p, v_idle) if (p->key) ++vl;
+    for (u64 k = 1; k < 1000; ++k) {
+        u64 x = k;
+        kv64 y = {.key = k};
+        if (HASHu64Get(&x, u_idle) == OK) {
+            want(!(k & 1));
+            --ul;
+        }
+        if (HASHkv64Get(&y, v_idle) == OK) {
+            want(!(k & 1) && y.val == k);
+            --vl;
+        }
+    }
+    want(ul == 0 && vl == 0);  // every resident is findable
+    // the review repro: two keys of one home, both deleted
+    a_pad(u64, e, 16);
+    zerob(e);
+    u64 a = 0, b = 0;
+    for (u64 j = 1; !(a && b); ++j)
+        if ((u64hash(&j) & 15) == 5) *(a ? &b : &a) = j;
+    call(HASHu64Put, e_idle, &a);
+    call(HASHu64Put, e_idle, &b);
+    for (size_t i = 0; i < 16;)
+        if (!e[0][i] || OK != HASHu64DelAt(e_idle, i)) ++i;
+    $for(u64, p, e_idle) want(*p == 0);
+    done;
+}
+
 ok64 HASH() {
     sane(1);
     call(HASH0);
@@ -545,6 +613,7 @@ ok64 HASH() {
     call(HASHprobegrow);
     call(HASHprobeconv);
     call(HASHunprobe);
+    call(HASHdelat);
     call(RAPtest);
     call(HASHzero);
     done;
