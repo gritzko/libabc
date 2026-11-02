@@ -471,6 +471,33 @@ ok64 RAPtest() {
     done;
 }
 
+// HASH-26B02GXXEm: the all-zero record is the empty slot; find and Get
+// agree it is absent, also with its home slot taken (the _get scan)
+ok64 HASHzero() {
+    sane(1);
+    a_pad(u64, t, 16);
+    zerob(t);
+    u64 z = 0;
+    size_t ndx = 0;
+    want(HASHNONE == HASHu64find(&ndx, t_idle, &z));
+    want(HASHNONE == HASHu64Get(&z, t_idle));
+    u64 home = u64hash(&z) & 15;
+    u64 k = 1;
+    while ((u64hash(&k) & 15) != home) ++k;
+    call(HASHu64Put, t_idle, &k);
+    want(HASHNONE == HASHu64find(&ndx, t_idle, &z));
+    want(HASHNONE == HASHu64Get(&z, t_idle));
+    a_pad(kv64, kt, 16);
+    zerob(kt);
+    kv64 z7 = {.key = 0, .val = 7}, q = {};
+    call(HASHkv64Put, kt_idle, &z7);
+    call(HASHkv64Get, &q, kt_idle);
+    want(q.val == 7);
+    call(HASHkv64Del, kt_idle, &q);
+    want(HASHNONE == HASHkv64Get(&q, kt_idle));
+    done;
+}
+
 ok64 HASH() {
     sane(1);
     call(HASH0);
@@ -485,6 +512,7 @@ ok64 HASH() {
     call(HASHprobeconv);
     call(HASHunprobe);
     call(RAPtest);
+    call(HASHzero);
     done;
 }
 

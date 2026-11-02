@@ -44,8 +44,9 @@ fun ok64 X(HASH, scan)(size_t *ndx, X($, ) data, T const *rec) {
 fun ok64 X(HASH, find)(size_t *ndx, X($, ) data, T const *rec) {
     u64 hash = X(, hash)(rec);
     *ndx = hash & LMASK;
-    if (X(, hashEq)(rec, $atp(data, *ndx))) return OK;
+    // is0 first: the all-zero record is the empty slot, never found
     if (X($, is0)(data, *ndx)) return HASHNONE;
+    if (X(, hashEq)(rec, $atp(data, *ndx))) return OK;
     return X(HASH, scan)(ndx, data, rec);
 }
 
@@ -54,11 +55,11 @@ fun ok64 X(HASH, _get)(T *rec, X($, ) data, size_t ndx) {
     size_t base = ndx & ~MASK;
     for (size_t i = (off + 1) & MASK; i != off; i = (i + 1) & MASK) {
         ndx = base + i;
+        if (X($, is0)(data, ndx)) return HASHNONE;
         if (X(, hashEq)(rec, $atp(data, ndx))) {
             *rec = $at(data, ndx);
             return OK;
         }
-        if (X($, is0)(data, ndx)) return HASHNONE;
     }
     return HASHNONE;
 }
