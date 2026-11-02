@@ -12,6 +12,7 @@ Macro parameters:
   - ABC_HASH_LINE the length of a line. Cells can only be displaced
     within their line. If a line is full, `HASHxXput()` returns `HASHnoroom`.
     The line length and the buffer length MUST be powers of 2!
+    Default 64; a table shorter than its line is not guarded.
   - ABC_HASH_CONVERGE whether we want the hash table to be convergent.
     A "bit state" of a convergent table does not depend on the order of
     operations, if only the resulting "API state" is the same.
@@ -30,6 +31,21 @@ ndx; a visited one may move forward and be seen again.
     for (size_t i = 0; i < $len(data);)
         if (!kv64IsZero(data[0] + i) && match(data[0] + i))
             { if (OK != HASHkv64DelAt(data, i)) ++i; } else ++i;
+
+##  Load (HASH-26B02G8j_E)
+
+A line is full long before the table is: the load at the first
+`HASHNOROOM`, random u64 keys, and the load a `PutGrow` table keeps
+while growing 16K..4M entries (avg, min..max):
+
+    LINE  2^16  2^20  2^24   PutGrow avg (min..max)
+      16  0.35  0.26  0.19   0.22 (0.12..0.39)
+      32  0.39  0.45  0.40   0.34 (0.21..0.55)
+      64  0.65  0.53  0.52   0.44 (0.30..0.65)
+
+kv128 is the same within 0.05.  At an equal load (0.25) Get and Put
+cost the same at any LINE; at its own max load LINE 64 misses scan
+longer (2^24: 39ns vs 12ns at 16).  A Swiss table keeps 0.44..0.87.
 
 ##  Growth in place (HASH-26A275TmIX)
 

@@ -5,12 +5,14 @@
 #include "TEST.h"
 
 #define X(M, name) M##kv128##name
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #include "HITx.h"
 #include "BOXx.h"
 #undef X
 
 #define X(M, name) M##k96v32##name
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #include "HITx.h"
 #include "BOXx.h"

@@ -14,6 +14,7 @@
 
 #define X(M, name) M##u32##name
 #define ABC_HASH_CONVERGE 1
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #undef X
 #ifdef ABC_HASH_CONVERGE

@@ -13,7 +13,7 @@
 #define T X(, )
 
 #ifndef ABC_HASH_LINE
-#define ABC_HASH_LINE 16
+#define ABC_HASH_LINE 64
 #endif
 
 #ifndef ABC_HASH_CONVERGE

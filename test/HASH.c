@@ -12,24 +12,29 @@
 
 #define X(M, name) M##u32##name
 #define ABC_HASH_CONVERGE 1
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #undef X
 
 #define X(M, name) M##kv32##name
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #undef X
 
 // HASH-26A274tV3C: Probe/ProbeGrow on u64 (convergent), kv64, k96v32
 #define X(M, name) M##u64##name
 #define ABC_HASH_CONVERGE 1
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #undef X
 
 #define X(M, name) M##kv64##name
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #undef X
 
 #define X(M, name) M##k96v32##name
+#define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
 #undef X
 
