@@ -83,7 +83,8 @@ ok64 TEMPL1() {
     call(HASHu32Put, data, &k);
     u32 g = 42;
     call(HASHu32Get, &g, data);
-    want(HASHNONE == HASHu32Del(data, &g) || OK == HASHu32Del(data, &g));
+    want(OK == HASHu32Del(data, &g));
+    want(HASHNONE == HASHu32Del(data, &g));
     done;
 }
 

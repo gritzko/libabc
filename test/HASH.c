@@ -42,6 +42,7 @@ ok64 HASH0() {
     call(HASHu32Get, &one, pad_idle);
     call(HASHu32Del, pad_idle, &one);
     want(HASHNONE == HASHu32Get(&one, pad_idle));
+    want(HASHNONE == HASHu32Del(pad_idle, &one));
     done;
 }
 

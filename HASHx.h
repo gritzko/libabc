@@ -131,10 +131,11 @@ fun ok64 X(HASH, shift)(X($, ) data, size_t ndx) {
     done;
 }
 
+// HASHNONE if absent (std::erase count 0); callers that don't care ignore it
 fun ok64 X(HASH, Del)(X($, ) data, T const *rec) {
     size_t ndx = 0;
     ok64 o = X(HASH, find)(&ndx, data, rec);
-    if (o == HASHNONE || o == HASHNOROOM) return OK;
+    if (o == HASHNONE || o == HASHNOROOM) return HASHNONE;
     return X(HASH, shift)(data, ndx);
 }
 
