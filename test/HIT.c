@@ -697,8 +697,8 @@ ok64 HIT26() {
     done;
 }
 
-// DOG-027: one cap (ABC_HIT_MAX_RUNS) for every entry point.  Above it the leaf
-// just refuses — no windowing, no repair cascade, no youngest-N batching.
+// DOG-027: one cap (ABC_HIT_MAX_RUNS) for every entry point.  Above it the
+// leaf just refuses: no windowing, no repair cascade, no youngest-N batching.
 static void hit27fill(u64 *v, u64cs *runs, u64css st, size_t n) {
     for (size_t i = 0; i < n; i++) {
         v[i] = (u64)i;

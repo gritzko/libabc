@@ -1,13 +1,11 @@
-// HITx.h — Heap of ITerators template
-// A HIT is a min-heap of sorted slices (iterators).
-// Instantiate with element type: #define X(M, name) M##u64##name
+// HITx.h — Heap of ITerators template: a min-heap of sorted slices (iterators).
+// Instantiate with the element type: #define X(M, name) M##u64##name
 // Entry type: X(,cs) (e.g. u64cs = u64 const *[2])
-// Heap type:  X(,csps) — slice of POINTERS to entries (DOG-027); the
-//             entries sit in the caller's oldest-first array, never move,
-//             and only the pointers permute, so csp order = age.
+// Heap type:  X(,csps) — slice of POINTERS to entries (DOG-027); the entries
+//             sit in the caller's oldest-first array, never move, and only
+//             the pointers permute, so csp order = age.
 // Comparator: X(,Z) on element pointers; ties by entry pointer, highest
-//             (= youngest run) wins
-// Advance:    ++(*entry)[0], eject when $empty(*entry)
+//             (= youngest run) wins.  Advance: ++(*entry)[0], eject when empty.
 
 #include "B.h"
 #include "HIT.h"
@@ -68,11 +66,8 @@ fun void X(HIT, Eject)(X(, csps) heap, size_t at) {
     --heap[1];
 }
 
-// --- Load: compact `runs` in place, build the pointer heap over it ---
-// DOG-027: SIDE EFFECT on `runs` — empty entries are dropped, survivors
-// shift down keeping age order, runs[1] moves back; the heap aims at those.
-// The heap is the DATA of `heap`, reset here.  More runs than its room
-// (ABC_HIT_MAX_RUNS: the stack is damaged or foreign): FULL, no window.
+// --- Load: compact `runs` IN PLACE, build the pointer heap over it ---
+// DOG-027: empties drop out of `runs`, runs[1] moves back; past the cap: FULL.
 
 fun ok64 X(HIT, Load)(X(, cspb) heap, X(, css) runs) {
     if ($len(runs) > heap[3] - heap[0]) return FULL;
@@ -139,10 +134,8 @@ fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
     }
 }
 
-// --- MergeBag: drain heap producing sorted output (keeps duplicates) ---
-// ABC-015: drains write into a bounded slice (head advances past the
-// output) and return NOROOM when it fills.  ABC-26B02JHe_k: the
-// destination first, as in memcpy.
+// --- MergeBag: drain heap into `into` (destination first, ABC-26B02JHe_k) ---
+// ABC-015: sorted, duplicates kept, head advances; NOROOM when `into` fills.
 
 fun ok64 X(HIT, MergeBag)(X(, s) into, X(, css) runs) {
     a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
@@ -157,9 +150,8 @@ fun ok64 X(HIT, MergeBag)(X(, s) into, X(, css) runs) {
     return OK;
 }
 
-// --- Merge: drain heap producing sorted deduplicated output ---
-// Equal keys: the youngest run's row wins, or with ABC_HIT_MERGE defined
-// the rows fold oldest first, X(,Merge)(acc, younger).
+// --- Merge: drain heap into sorted deduplicated output; equal keys: the
+// youngest run's row wins, or with ABC_HIT_MERGE they fold oldest first ---
 
 #ifdef ABC_HIT_MERGE
 //  fold the ntops equal heads in age order (entry pointer order)
@@ -243,9 +235,8 @@ fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
     return $empty(heap) ? NONE : OK;  // DOG-027: the heap is the live set
 }
 
-// --- SeekRange: trim all entries to [lo, hi), eject empty ---
-// After this, the entries only contain elements in [lo, hi); a drain
-// (Load + Step) emits them in order with no prefix checks needed.
+// --- SeekRange: trim all entries to [lo, hi), eject empty; a drain (Load +
+// Step) then emits them in order with no prefix checks ---
 
 fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
     if ($len(heap) > ABC_HIT_MAX_RUNS) return FULL;  // DOG-027: uniform cap
@@ -266,8 +257,7 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
 }
 
 // --- SkipValue: advance inner HIT past its current top merged value ---
-// DOG-027: rebuilds the pointer heap per call — an inner HIT's state
-// lives entirely in its (oldest-first, in-place-advanced) entries.
+// DOG-027: rebuilds the pointer heap per call; the state lives in the entries.
 
 fun ok64 X(HIT, SkipValue)(X(, css) runs) {
     a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
@@ -285,17 +275,8 @@ fun ok64 X(HIT, SkipValue)(X(, css) runs) {
     return X(HIT, Load)(slots, runs);
 }
 
-// --- IntersectMerge: intersect the merged outputs of N inner HITs ---
-// Each inner HIT is a X(,css) (heap of sorted runs producing merged output).
-// The outer heap walks N such inner HITs in lockstep: emit a value only
-// when ALL inner HITs produce it. Zero intermediate allocations.
-//
-// Usage:
-//   u64cs *outers[N][2];   // N inner HITs
-//   outers[i][0] = runs_i; outers[i][1] = runs_i + nruns_i;
-//   u64csss oh = {outers, outers + N};
-//   u64 buf[...]; u64p out = buf;
-//   HITu64sIntersectMerge(out, oh);
+// --- IntersectMerge: intersect the merged outputs of N inner HITs (each a
+// X(,css)) in lockstep, no intermediate allocation; usage in HIT.md ---
 
 // Top value pointer of an inner HIT
 // DOG-027: entries are no longer heap-ordered — scan for the min head.
@@ -388,16 +369,8 @@ fun ok64 X(HIT, sIntersectMerge)(X(, s) into, X(, csss) oheap) {
     return OK;
 }
 
-// --- LSM-stack compaction (1/8 size-tiered ladder) ---
-//
-// `stack` is an oldest-first sequence of sorted runs (each run is
-// itself sorted; the stack as a whole is *not* — we maintain the
-// 1/8 invariant: each newer (higher-index) run is strictly less
-// than 1/8 of its predecessor).  IsCompact is the predicate; Compact
-// merges the youngest runs that violate it into a single sorted+
-// dedup'd run, cascading until the invariant holds again.  The merge
-// uses HIT's stream-merge-with-dedup (HITMerge), so
-// identical full-element rows across runs collapse to one.
+// --- LSM-stack compaction: the 1/8 size-tiered ladder over an oldest-first
+// stack of sorted runs; IsCompact tests it, Compact merges to restore it ---
 
 // DOG-027: HIT is now the ONE ladder home — MSET is deleted, so ABC-015's
 // deferred "unify IsCompact/Compact into one home" follow-up is closed.
@@ -409,17 +382,10 @@ fun b8 X(HIT, IsCompact)(X(, css) stack) {
     return HITLadderOK(u64bDataC(lens));
 }
 
-// Merge youngest runs to restore the 1/8 invariant.  Stack is
-// oldest-first; youngest at the tail.  Cascades: if merging tail m
-// runs still violates the invariant against the run before them,
-// includes that run too, and so on.  `into` is a slice of free
-// space; its head advances past the merged elements.  The merged
-// run is spliced back into the stack at position n-m, and the
-// stack's idle pointer is moved up so $len(stack) drops by m-1.
-// DOG-027: the cascade count alone — how many youngest runs the ladder must
-// collapse (0 when the invariant already holds).  The arithmetic is
-// HITLadderOverRuns (HIT.h, no comparator); this only measures the runs, so a
-// length-only caller like dog's Pup calls HIT.h directly.
+// DOG-027: the cascade count alone: how many youngest runs the ladder must
+// collapse to restore the 1/8 invariant (0 when it already holds).  The
+// arithmetic is HITLadderOverRuns (HIT.h, no comparator); this only measures
+// the runs, so a length-only caller like dog's Pup calls HIT.h directly.
 fun size_t X(HIT, CompactRuns)(X(, css) stack) {
     a_pad(u64, lens, ABC_HIT_MAX_RUNS);
     $for(HIT_E, r, stack) if (u64bFeed1(lens, (u64)$len(*r)) != OK) return 0;

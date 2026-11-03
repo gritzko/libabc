@@ -1,26 +1,11 @@
-//  PUPx.h — Pup template for one record type.
-//
-//  Instantiate with the record type:  #define X(M, name) M##u64##name
-//                                     #include "abc/PUPx.h"
-//                                     #undef X
-//
-//  Generates, for type T (names follow abc: X(PUP, Sync) is PUPu64Sync):
-//    PUP<T>Sync, PUP<T>Merge    the whole-range functions the core PUPS.c calls
-//    PUP<T>Put, PutMem, Commit, CommitAs, Ladder, AllRuns, AllRunsToc, Read,
-//    PutOpt, CommitOpt, LadderOpt (PUPS-26A309qbG9)
-//                               thin typed entry points: the core's functions
-//                               with sync, merge and sizeof(T) filled in, the
-//                               memtable runs taken as the caller's X(,csb)
-//
-//  PUPx_DEAD(row): optional tombstone test, a macro over a `T const *`.  Define
-//  it before including when a row can say "this key is gone" (PUPS-001).  Reads
-//  (PUP<T>Read) never surface a dead row, and a ladder merge that spans the
-//  WHOLE stack drops dead rows; a partial merge keeps them, since an older run
-//  may still hold the key.  Left undefined it is 0: nothing is ever dead.
-//
-//  Needs, instantiated BEFORE this header (abc already does kv64 and u64):
-//    T, T##Z, T##KeyEq, T##Max (BOX-26A26EbjLj: the tombstone, sorts last), the T##s / T##cs / T##css slices and T##b buffer (Bx),
-//    QSORTx for T (QSORT<T>InSort, <T>sSort, <T>sDedup), HITx for T.
+//  PUPx.h — the Pup template for one record type T.  Instantiate as abc does:
+//  `#define X(M, name) M##u64##name`, `#include "abc/PUPx.h"`, `#undef X`.
+//  It generates PUP<T>Sync and PUP<T>Merge, the whole-range functions the
+//  core PUPS.c calls, and the typed entry points (Put, PutMem, Commit,
+//  CommitAs, Ladder, AllRuns, AllRunsToc, Read, *Opt per PUPS-26A309qbG9):
+//  the core's functions with sync, merge and sizeof(T) filled in.  Needs T,
+//  T##Z, T##KeyEq, T##Max and its Bx, QSORTx, HITx instantiated BEFORE it.
+//  PUPx_DEAD(row), the optional tombstone test (PUPS-001): PUPS.md "Deletes".
 
 #include "FILE.h"
 #include "HIT.h"

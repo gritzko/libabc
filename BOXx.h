@@ -1,35 +1,11 @@
 //  abc/BOXx.h — BOX-26A26EbjLj: an in-memory sorted container of fixed-size
-//  records: a record buffer plus a buffer of slices, one per sorted run.
-//
-//  recs  X(,b)    the records (bMap the whole max range once):
-//                 PAST = the sorted runs back to back, oldest first;
-//                 DATA = the unsorted last segment the puts append to;
-//                 IDLE = room.
-//  runs  X(,csb)  DATA = one slice per run, oldest first; each run is
-//                 ASCENDING by X(,Z) and holds at most one row per key.
-//                 Fed to HITx as they are (DATA is an X(,css)).
-//
-//  Puts append to the segment until it is longer than c (ABC_BOX_SEG bytes,
-//  512).  Then X(BOX,Sort): (1) stable-sort the segment and fold its own equal keys, the
-//  segment becomes the youngest run; (2) select the tailing runs by the 1/8
-//  ladder (HITLadderOverRuns); (3) one parallel pass over the selected runs,
-//  in place: equal keys (one per run) are combined by X(,Merge) in run order
-//  (else the youngest wins), the result goes into the last equal slot, the
-//  others become the tombstone; (4) QSORTx the selected range ascending, the
-//  tombstones sink to the tail; (5) trim them: the range is one run.
-//
-//  Tombstone: a X(,Max) row, the greatest key under X(,Z); no real record
-//  carries that key (Put refuses it, BADARG).  Tested by key, trimmed last.
-//
-//  Instantiate (Bx, QSORTx, HITx for T first; X(,Z), X(,KeyEq), X(,Max)):
-//      #define X(M, name) M##u64##name
-//      #define ABC_BOX_MERGE      // optional: X(,Merge)(acc, younger) folds
-//      #define ABC_BOX_SEG 512    // optional: c, segment BYTES
-//      #include "abc/BOXx.h"
-//      #undef X
-//  Codes: OK, NONE, NOROOM (recs IDLE out), FULL (no run slot or more than
-//  ABC_HIT_MAX_RUNS runs), BADARG (a Max-key row).  A failed write stores
-//  nothing.  See BOX.md.
+//  records, an LSM in two caller-mapped buffers (BOX.md "Layout"): `recs`
+//  X(,b), the sorted runs in PAST and the unsorted segment in DATA; `runs`
+//  X(,csb), one ascending slice per run, oldest first, fed to HITx as is.
+//  Past ABC_BOX_SEG bytes, X(BOX,Sort) seals the segment: (1) stable-sort and
+//  fold it, (2) pick the tail by the 1/8 ladder (HITLadderOverRuns), (3) one
+//  in-place pass folds equal keys (X(,Merge), else the youngest wins), (4)
+//  QSORTx the range, (5) trim the X(,Max) tombstones.  Codes, knobs: BOX.md.
 
 #include "B.h"
 #include "BOX.h"
@@ -166,11 +142,9 @@ fun ok64 X(BOX, Put)(X(, b) recs, X(, csb) runs, BOX_T const *rec) {
 }
 
 //  Append a batch as ONE run: seal the pending segment, qsort the batch in
-//  place, fold its equal keys, then run the ladder once.  The sort is not
-//  stable: equal keys INSIDE one batch fold in no particular order (the
-//  merge op must not care, else one of them survives); across batches and
-//  puts, younger still wins.  NOROOM: no recs room; FULL: no run slot;
-//  BADARG: a Max-key row.  On an error no row of the batch is stored.
+//  place (NOT stable: equal keys inside a batch fold in no order, the merge op
+//  must not care), fold it, then run the ladder once.  Codes as Put; on an
+//  error no row of the batch is stored.
 fun ok64 X(BOX, PutBatch)(X(, b) recs, X(, csb) runs, BOX_T const *rows,
                           size_t n) {
     BOX_T **rb = (BOX_T **)recs;

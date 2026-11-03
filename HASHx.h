@@ -20,9 +20,8 @@
 #define ABC_HASH_CONVERGE 0
 #endif
 
-// HASH-26B02GfveW: CONVERGE keeps a key behind every resident of its
-// probe path with a greater hash, so a Get miss may stop at the first
-// one: a hash per probed resident.  Pays where hashing is cheap.
+// HASH-26B02GfveW: a CONVERGE Get miss may stop at the first resident hashing
+// above the key, a hash per probed resident; see HASH.md "Knobs".
 #ifndef ABC_HASH_MISSSTOP
 #define ABC_HASH_MISSSTOP 0
 #endif
@@ -57,7 +56,6 @@ fun ok64 X(HASH, _scan)(size_t *ndx, X($, ) data, HASH_T const *rec) {
     return FULL;
 }
 
-// OK, NONE, FULL
 fun ok64 X(HASH, _find)(size_t *ndx, X($, ) data, HASH_T const *rec) {
     u64 hash = X(, Hash)(rec);
     *ndx = hash & LMASK;
@@ -127,17 +125,10 @@ fun ok64 X(HASH, Put)(X($, ) data, HASH_T const *rec) {
     return OK;
 }
 
-// Backward-shift deletion: zero slot ndx, refilling it from later slots
-// of the line (copy-before-zero).  An entry moves into the hole iff the
-// hole is on its probe path, home..slot, cyclic in the line.
-// HASH-26A275TmIX: the scan runs until an empty slot or the hole itself,
-// not one lap from the first hole: in a full line holding stale Grow
-// copies (their home is another line, here a meaningless offset: they
-// move or not, harmless) the last hole could land on the path of an
-// entry moved earlier in the lap, losing it.
-// HASH-26B02Ggncg: OK if ndx got refilled, NONE if only zeroed.
-// YES: the scan ran past one lap, i.e. past the first hole, and may
-// have carried an entry from after it to before it (see GrowClean).
+// Backward-shift deletion: zero slot ndx, refill it from later slots of the
+// line (copy-before-zero) whose probe path covers the hole.  The scan runs to
+// an empty slot or the hole itself (HASH-26A275TmIX: stale Grow copies).  YES
+// if it ran past one lap, so an entry may have moved before ndx (_growClean).
 fun b8 X(HASH, _shiftlap)(X($, ) data, size_t ndx) {
     size_t base = ndx & ~MASK, at = ndx;
     b8 lap = NO;
@@ -170,13 +161,10 @@ fun ok64 X(HASH, Del)(X($, ) data, HASH_T const *rec) {
     return o == NONE ? OK : o;
 }
 
-// HASH-26B02Ggncg: delete the entry at slot ndx, e.g. while iterating.
-// OK: a later entry moved into ndx, re-examine the slot before going on;
-// NONE: ndx is now empty.  Erase-while-iterating:
-//     for (size_t i = 0; OK == Next(&i, data);)
-//         if (!match(data[0] + i) || OK != DelAt(data, i)) ++i;
-// An unvisited entry only moves into ndx, never before it; a visited
-// one (a wrapped line) may move forward and be seen twice.
+// HASH-26B02Ggncg: delete the entry at slot ndx while iterating.  OK: a later
+// entry moved into ndx, re-examine it; NONE: ndx is empty now.  An unvisited
+// entry never moves before ndx; a visited one (a wrapped line) may be seen
+// twice.  The loop: HASH.md "Delete while iterating".
 fun ok64 X(HASH, DelAt)(X($, ) data, size_t ndx) {
     return X(HASH, _shift)(data, ndx);
 }
@@ -189,14 +177,10 @@ fun ok64 X(HASH, Next)(size_t *ndx, X($, ) data) {
     return NONE;
 }
 
-// HASH-26A275TmIX: in-place growth.  A growable table is the buffer's
-// DATA (pow2 length n >= ABC_HASH_LINE), its IDLE is the room it grows
-// into: bMap the max range once, bFed the initial length.  Grow doubles
-// DATA into the first n slots of IDLE in three phases, each leaving a
-// valid table (stale duplicates, no holes); `data` is the doubled view.
-// Phase 1: every entry of a lower line b whose home under 2n is line b+n
-// is Put there; the upper half is invisible under length n.  Each upper
-// line is zeroed first, so a re-run (and dirty room) is harmless.
+// HASH-26A275TmIX: in-place growth (HASH.md "Growth in place"): DATA is the
+// pow2 table, IDLE the room it grows into; Grow doubles DATA into IDLE's first
+// n slots in three phases, each leaving a valid table.  Phase 1: an entry of
+// lower line b homed at b+n under 2n is Put there; upper lines zeroed first.
 fun void X(HASH, _growCopy)(X($, ) data) {
     size_t half = $len(data) >> 1;
     for (size_t b = 0; b < half; b += ABC_HASH_LINE) {
@@ -255,15 +239,10 @@ fun ok64 X(HASH, Grow)(X(B, ) buf) {
     done;
 }
 
-// HASH-26A275ba4V: rehash every entry of from's DATA into into's DATA,
-// a table the caller set up (bMap + bFed, a power-of-2 length >=
-// ABC_HASH_LINE, any size: bigger, same, smaller), never maps; into's
-// residents stay, a key in both ends up with from's record (Put).
-// from is read only; the two tables must not overlap.  Use: the
-// fallback when Grow fails NOROOM, shrinking, another ABC_HASH_LINE.
-// FULL: an entry's line in into is full; into is left partially
-// filled (from's entries before it, in slot order, moved; none lost),
-// from intact.
+// HASH-26A275ba4V: rehash every entry of from's DATA into into's DATA, a
+// table the caller set up at any power-of-2 length; never maps, from is read
+// only, the tables must not overlap (BADARG).  FULL: into is left partially
+// filled, none lost, from intact.  HASH.md "Move into another table".
 fun ok64 X(HASH, Move)(X(B, ) into, X(B, ) from) {
     sane(into != NULL && into[0] != NULL && from != NULL && from[0] != NULL);
     X($, ) data = {into[1], into[2]};
@@ -289,16 +268,10 @@ fun ok64 X(HASH, PutGrow)(X(B, ) buf, HASH_T const *rec) {
     }
 }
 
-// HASH-26A274tV3C: get-or-insert in one probe, rec hashed once, never
-// copied.  OK: *slot is the resident with rec's key.  NONE: *slot
-// is the zeroed slot Put would have put rec into; the caller fills it
-// (a nonzero record with rec's key) or Unprobe-s it before any other op
-// on the table: under CONVERGE an unfilled slot hides displaced residents.
-// FULL: rec's line is full, *slot and the table untouched.
-// ABC_HASH_CONVERGE: on NONE the residents Put would have displaced
-// are moved first (hashed, as Put does), so Probe+fill leaves the very
-// layout Put leaves; a NOROOM evicts nothing.  As Put, no
-// guard for a table shorter than ABC_HASH_LINE.
+// HASH-26A274tV3C: get-or-insert in one probe, rec hashed once, never copied.
+// OK: *slot is the resident.  NONE: *slot is the zeroed slot Put would use;
+// fill it or Unprobe it before any other op (under CONVERGE it hides the
+// displaced residents, moved as Put moves them).  FULL: nothing touched.
 fun ok64 X(HASH, _probe)(HASH_T **slot, X($, ) data, HASH_T const *rec,
                          u64 hash) {
     size_t fit = hash & LMASK;
@@ -357,8 +330,8 @@ fun ok64 X(HASH, Unprobe)(X($, ) data, HASH_T *slot) {
     return o == NONE ? OK : o;
 }
 
-// Probe a growable table (DATA, see Grow), Grow-ing it while rec's line is full: OK or
-// NONE as Probe, *slot into the (grown) table; else Grow's failure.
+// Probe a growable table (DATA, see Grow), Grow-ing it while rec's line is
+// full: OK or NONE as Probe, *slot into the (grown) table; else Grow's failure.
 fun ok64 X(HASH, ProbeGrow)(HASH_T **slot, X(B, ) buf, HASH_T const *rec) {
     sane(buf != NULL && buf[0] != NULL);
     for (;;) {

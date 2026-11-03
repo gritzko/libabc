@@ -1,0 +1,7 @@
+# Line budgets for `be budget`, per meta/comment.mkd (ABC-26B035VRmt).
+# `Key: value` lines; a deeper dir's file overrides per key.
+FileComment: 8
+FunctionComment: 4
+Comment: 2
+CommitCodeLoC: 100
+TestPath: /test/i

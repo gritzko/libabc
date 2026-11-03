@@ -1,5 +1,3 @@
-#ifndef PUPS_PUPS_H
-#define PUPS_PUPS_H
 //  libpups: a basic, generic LSM-ish store of small fixed-size records with a
 //  fixed bit layout and a caller-supplied comparator.  It sits BELOW key-value
 //  stores: sorted immutable runs on disk (mmap'd), a small memtable, and a
@@ -7,44 +5,24 @@
 //  The row type enters only through two whole-range functions (`pupsync`,
 //  `pupmerge`) and the record width.  Callers do not write them: PUPx.h
 //  generates both, plus typed entry points, from the type name and `<T>Z`.
-//  Depends on libabc only.
+//  Depends on libabc only.  PUPS.md tells the whole story.
+#ifndef PUPS_PUPS_H
+#define PUPS_PUPS_H
 #include "KV.h"
 #include "PATH.h"
 #include "RON.h"
 
-// --- Puppies: stack of `<seqno>.<ext>` files ---
-//
-// A "puppy" is one immutable, mmap'd file of fixed-size sorted records.
-// The record type is the caller's: the library moves bytes and file names
-// and never looks inside a row, except through the `pupsync` and
-// `pupmerge` functions it is handed for sorting, dedup and merging.  A stack of puppies lives in
-// one directory, each named `<seqno><ext>`, where `<seqno>` is a 10-char
-// zero-padded RON64 integer and `<ext>` is chosen by the caller (it also
-// names the on-disk format, so one directory can hold several stacks).
-//
-// PUPS-26A276Xh2e: state is one `pup256b`, a buffer of fixed-layout records
-// (pup256, below), one per run: the pup_key plus the run's read-only mapping
-// itself.  A run holds NO fd: it is closed right after mmap (a mapping
-// outlives close), so the number of open runs is bounded by address space,
-// not by fds or FILE_MAX_OPEN.  File names are derived, never stored:
-// `<dir>/<10-RON64 pup_key><ext>`, dir and ext caller-owned and re-passed
-// per call, so the same primitive serves multiple stacks per directory, told
-// apart by `ext`.  The typed merge during compaction stays caller-side
-// (HIT*Compact); this API only does fs-level housekeeping.
-//
-// Pup keys are 60-bit ron60-style values (10-char RON64 filename).
-// Callers that write several stacks in lockstep pass a globally monotonic
-// value of their own so two writers / collapsed sub-shards can't collide.
+// A "puppy" is one immutable mmap'd file of sorted records, `<dir>/<10-RON64
+// pup_key><ext>`; a stack is a pup256b of them (PUPS-26A276Xh2e, PUPS.md).
+
+// Pup keys are 60-bit ron60 values.  Callers that write several stacks in
+// lockstep pass a globally monotonic value of their own, so they never clash.
 #define PUP_SEQNO_W 10
 
-// PUPS-26A276Xh2e: one stack entry — 32 bytes, fixed layout (64-bit only):
-//   run       key = pup_key, val = st_ino of the mapped file (the rescan's
-//             "another writer replaced it" check), data = the mapped bytes;
-//   memtable  key = PUP_MEM_KEY, val = its mapped bytes, data = [base, end
-//             of DATA) of the anonymous memtable buffer (PAST ends where the
-//             caller's last memtable run ends).
-// One record instead of kv64 + a parallel slice buffer: one buffer to size,
-// push, drop and sort, and an entry can never lose its mapping.
+// PUPS-26A276Xh2e: one stack entry, 32 bytes (64-bit only).  A run: key =
+// pup_key, val = st_ino of the mapped file (the rescan's replaced-file check),
+// data = the mapping.  The memtable: key = PUP_MEM_KEY, val = its mapped bytes,
+// data = [base, end of DATA).  One record, so an entry never loses its mapping.
 typedef struct pup256 {
     u64 key;
     u64 val;
@@ -59,10 +37,8 @@ fun b8 pup256Z(pup256 const *a, pup256 const *b) { return a->key < b->key; }
 #undef X
 
 con ok64 PUPFAIL = 0x197993ca495;
-//  CODE-26A23CSStk: PUPOpenAll found a run it cannot read.  PUPEMPTY: the run
-//  is 0 bytes, what a crash leaves of a non-durable create.  PUPNOMAP: it could
-//  not be opened or mapped (fds, perms).  PUPNOROOM: more runs than one scan
-//  holds (PUP_SCAN_MAX).
+//  CODE-26A23CSStk: PUPOpenAll met a run it cannot read: 0 bytes (a crashed
+//  non-durable create), unmappable (fds, perms), or more than PUP_SCAN_MAX.
 con ok64 PUPEMPTY = 0x65e64e599762;
 con ok64 PUPNOMAP = 0x65e657616299;
 con ok64 PUPNOROOM = 0x197995d86d8616;
@@ -74,31 +50,10 @@ con ok64 PUPGONE = 0x197994185ce;
 // map-max-once key buffer; idle pages cost nothing).
 #define PUP_SCAN_MAX (1UL << 24)
 
-// Scan `dir` for files matching `<10-RON64><ext>`, sort by pup_key,
-// map each read-only (fd closed at once), push (pup_key, mapping) into `pups`.
-// Empty or absent dir → OK with pups left empty.  Caller must have allocated `pups` first.
-// CODE-26A23CSStk: never OK with a run missing.  A run it cannot map fails the
-// open (PUPNOMAP; PUPEMPTY for a 0-byte one), more than PUP_SCAN_MAX runs
-// fail with PUPNOROOM; entries already pushed stay for PUPClose.
-// PUPS-26A276Xh2e: a mapped run holds no fd and no FILE_MAX_OPEN slot.
-// Crash policy: a 0-byte run is NOT unlinked nor skipped — PUPS cannot tell a
-// crashed create from a committed run that lost its bytes, so the owner, who
-// knows what it committed on top, decides (re-derive, unlink, or refuse).  A
-// durable create (PUPCreateAs) never leaves one.
-// PUPS-26A24FhuO9: an EMPTY run is legal: PUPCreate* of no bytes writes the
-// 7-byte trailer of an empty ToC (`len` 0, "TC"), which maps and reads as no
-// rows at every row width, so a 0-byte file still means a crashed create.  A
-// ladder merge whose output is empty still books no run (PUPS-001).
-// A run truncated to a non-zero length is not detected here (no row width); row-aware readers
-// check the residue.
-// Not idempotent: every file in `dir` becomes a new entry, even if a
-// matching pup_key already sits in PAST/DATA — same basename in a
-// different dir is a different file.  Avoiding double-scans is the
-// caller's responsibility (e.g. skip a prefix of the stack already loaded
-// from a shared parent directory).
-// DOG-027: a file that ends in `<ext>` but carries no 10-char seqno is NOT a
-// run — jab's retired JS writer padded to 8 — so it is SKIPPED, never
-// unlinked; an open leaves whatever it cannot read on disk.
+// Map `dir`'s `<10-RON64><ext>` runs read-only into `pups` (the caller's),
+// sorted by key; an absent or empty dir is OK.  A run it cannot map fails the
+// open (CODE-26A23CSStk); a 0-byte one is the owner's to judge, never unlinked
+// (PUPS-26A24FhuO9); a misnamed file is skipped (DOG-027).  Not idempotent.
 ok64 PUPOpenAll(pup256b pups, path8sc dir, u8csc ext);
 
 // PUPS-26A309qbG9: PUPOpenAll bounded by a key ceiling — a run keyed above
@@ -107,16 +62,10 @@ ok64 PUPOpenAll(pup256b pups, path8sc dir, u8csc ext);
 // vanishes between the listing and its mapping fails with PUPGONE (both).
 ok64 PUPOpenTo(pup256b pups, path8sc dir, u8csc ext, u64 ceil);
 
-// PUPS-26A309qbG9: the caller's say in how a WRITE keys and retires runs, for
-// a caller that publishes runs itself (e.g. by a key ceiling, PUPOpenTo).
-//   floor  every run the call creates (create, seal, ladder output) takes a
-//          key at or above it; on return it is past every key created, so
-//          ONE pupopt passed to many stacks draws their keys from one counter;
-//   dead   NULL: merged-away runs are unlinked at once (the plain entry
-//          points).  Else they are unmapped and dropped from the stack, their
-//          files left on disk, their keys appended here; a later scan through
-//          this pupopt skips them.  Hand the keys to PUPUnlink once readers no
-//          longer need them; keep passing the same list until then.
+// PUPS-26A309qbG9: how a caller that publishes runs by its own protocol keys
+// and retires them (PUPS.md "Caller-published runs").  `floor`: every run a
+// call creates takes a key at or above it, and it is left past the last key
+// used.  `dead`: NULL unlinks merged-away runs at once, else their keys go here
 typedef struct pupopt {
     u64 floor;
     u64bp dead;
@@ -127,23 +76,16 @@ typedef struct pupopt {
 // outlives the rows it shadows.  A file already gone is fine (a retry).
 ok64 PUPUnlink(path8s dir, u8cs ext, u64s keys);
 
-// Cross-branch load: flip the current DATA into PAST (collapse the
-// previously-loaded branch into the read-only context), then open
-// `dir`'s pup files into the now-empty DATA.  Mirror of "open first
-// branch, then `pups[1]=pups[2]`, then open the second" — the call
-// sequence becomes one helper.  The active leaf becomes the dir just
-// loaded; subsequent PUPCreate writes target this
-// new DATA.  Like PUPOpenAll, this primitive does not dedup against
-// already-loaded entries.
+// Cross-branch load: flip DATA into PAST (the branch loaded so far becomes the
+// read-only context), then open `dir` into the now-empty DATA, which later
+// PUPCreate writes target.  One helper for "open, `pups[1]=pups[2]`, open".
+// Like PUPOpenAll, no dedup against entries already loaded.
 ok64 PUPOpenAside(pup256b pups, path8sc dir, u8csc ext);
 
-// Atomically write `bytes` to `<max(now_ron60, max(DATA)+1)>.<ext>`
-// (tmp+rename), map it, push (new_pup_key, mapping) onto `pups`.
-// New key picks `RONNow()` (60-bit ron60) when it dominates the local
-// max, else `max(DATA)+1` — a monotonic invariant, so independent writers
-// across sub-shards converge to non-overlapping key ranges.
-// DOG-027: then bumped past any key whose NAME is already on disk — RON64 is
-// case-sensitive, APFS/HFS+/NTFS are not, so two keys compose one filename.
+// Atomically write `bytes` as a new run (tmp + rename), map it, push it onto
+// `pups`.  The key is max(RONNow(), max(DATA)+1): monotonic, so independent
+// writers converge on disjoint key ranges; DOG-027: then bumped past any key
+// whose NAME is on disk already (RON64 is case-sensitive, APFS/NTFS are not).
 ok64 PUPCreate(pup256b pups, path8s dir, u8cs ext, u8cs bytes);
 // CODE-26A23C8gS9: PUPCreate is the FAST path: no fsync, so after a power loss
 // the renamed run may be 0 bytes (see PUPOpenAll).  A caller that commits
@@ -154,13 +96,10 @@ ok64 PUPCreateAs(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable);
 ok64 PUPCreateOpt(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable,
                   pupopt *opt);
 
-// Same as PUPCreate but the caller picks the pup_key explicitly.
-// Refuses with PUPFAIL when a live entry with the same pup_key
-// already sits in DATA (caller should PUPThinTail first when
-// replacing the tail).  For callers that keep several stacks' file-ids in
-// lockstep.
-// DOG-027: refuses the same way when a FILE already holds that key's name —
-// the key is the caller's, so the library cannot bump it the way PUPCreate does.
+// PUPCreate with the caller's own pup_key, for callers that keep several
+// stacks' file-ids in lockstep.  PUPFAIL when a live DATA entry already holds
+// that key (PUPThinTail first when replacing the tail) or, DOG-027, when a
+// file already has that name: the key is the caller's, so no bump.
 ok64 PUPCreateAt(pup256b pups, path8s dir, u8cs ext, u8cs bytes,
                     u64 pup_key);
 // CODE-26A23C8gS9: PUPCreateAt with PUPCreateAs's `durable`; the bare name is
@@ -178,24 +117,21 @@ ok64 PUPDropAt(pup256b pups, path8s dir, u8cs ext, u32 i);
 // Unmap every puppy and the memtable (unsealed puts are dropped), free `pups`.
 ok64 PUPClose(pup256b pups);
 
-// DOG-027: the ONE reserved dict key — ALL-ONES, so it sorts past every ron60
-// pup_key and lives as the dict's tail.  NOTHING about the record type is ever dicted:
-// the dict holds committed runs and, on an rw stack, the memtable last.
+// DOG-027: the ONE reserved dict key, ALL-ONES, so the memtable sorts past
+// every ron60 pup_key and sits as the tail entry of an rw stack's dict.
 #define PUP_MEM_KEY   (~0ULL)
 
-// Write lock on `dir` (the file `<dir>/.lock`, flock): ONE per directory, since
-// a forward and a reverse stack change together.  Every entry point that writes
-// (seal, create, ladder) takes it itself; hold it around several calls to keep
-// them one update.  Reentrant per process, blocking, dropped by the kernel on
-// death; reads never take it.  `*slot` is the token for PUPUnlock.
+// Write lock on `dir` (flock on `<dir>/.lock`): ONE per directory, since a
+// forward and a reverse stack change together.  Writing entry points take it
+// themselves; hold it around several calls to make them one update.  Reentrant
+// per process, dropped on death, never read-side; `*slot` is PUPUnlock's token.
 ok64 PUPLock(int *slot, path8s dir);
 void PUPUnlock(int *slot);
 
-// Number of live puppies in the stack — DATA only (the active leaf,
-// when callers use the PAST/DATA partition; see abc/Bx.h §PastDataS).  For "every loaded
-// run" reads (cross-branch lookups, LSM merges), use `PUPCountAll`.
-// DOG-027: the memtable is not a run — this bound is what keeps the
-// legacy readers (Data, AllData, ThinTail) off it.
+// Live puppies in DATA only (the active leaf under the PAST/DATA partition,
+// abc/Bx.h §PastDataS); every loaded run is `PUPCountAll`.  DOG-027: the
+// memtable is not a run, and this bound is what keeps the legacy readers
+// (Data, AllData, ThinTail) off it.
 fun u32 PUPCount(pup256b pups) {
     u32 n = (u32)pup256bDataLen(pups);
     pup256 const *base = (pup256 const *)pup256bDataHead(pups);
@@ -210,14 +146,11 @@ fun u32 PUPCountAll(pup256b pups) {
            ((u32)pup256bDataLen(pups) - PUPCount(pups));
 }
 
-// DOG-035: a run may carry a sparse page index — `[data][toc][len:5]["TC"]`.
-// The 5 little-endian length bytes count the ToC block's BYTES, so the clip
-// needs no row width; 7 is ODD, so the residue check below refuses a plain run
-// at every row width but 1 and 7.  A ToC cell is that page's FIRST RECORD
-// verbatim and cell `i` covers page `i` — no page number, no offset, and both
-// search steps share the record type's own comparator.  Derived, droppable, never
-// load-bearing: dropping the block leaves a valid run.
+// DOG-035: a run may end in a sparse page index, `[data][toc][len:5]["TC"]`:
+// cell i is page i's FIRST RECORD verbatim, searched by the type's own Z.
 #define PUP_TOC_LEN_W  5
+// The 5 length bytes count the block's BYTES, so the clip needs no row width;
+// 7 is ODD, so the residue check rejects a plain run at any width but 1 and 7.
 #define PUP_TOC_TAIL_W 7
 
 // DOG-035: records per ToC page for a `row`-byte record — the ONE place the cell
@@ -225,35 +158,28 @@ fun u32 PUPCountAll(pup256b pups) {
 // walks it.  0 when `row` is 0 or a record straddles a page.
 size_t PUPTocRows(u32 row);
 
-// Byte slice of the i-th puppy's contents (the entry's mapping).
-// Indexes into DATA only — see `PUPCount` caveats.  For an
-// "every loaded run" indexer, use `PUPDataAll`.
-// Writes [data_start, data_end) into `out`; out becomes empty when
-// `i` is out-of-range or the file's mapping has been released.
+// Byte slice of the i-th puppy's mapping, DATA only (see PUPCount; every
+// loaded run is `PUPDataAll`).  `out` is empty when `i` is out of range or
+// the mapping has been released.
 void PUPData(u8csp out, pup256b pups, u32 i);
 // Like PUPData but indexes into PastData — every loaded run.
 void PUPDataAll(u8csp out, pup256b pups, u32 i);
 
-// DOG-035: the row-aware twins — `row` is the record width, so the
-// trailer is CHECKED per FILE (magic, the length fits, the data residue is 0
-// mod row) and the ToC block clipped OFF.  This clip is the correctness core:
-// a cell carries a REAL key, so an unclipped source would feed the keep-last
-// dedup duplicate rows.  The bare names above are these at row 0 — no probe,
-// no clip — which is what a caller that never opts in gets.
+// DOG-035: the row-aware twins: with `row`, the record width, the trailer is
+// CHECKED per file (magic, length, residue 0 mod row) and the ToC block clipped
+// OFF.  The clip is the correctness core: a cell carries a REAL key, so an
+// unclipped source feeds the keep-last dedup duplicates.  Bare names: row 0.
 void PUPDataRow(u8csp out, pup256b pups, u32 i, u32 row);
 void PUPDataAllRow(u8csp out, pup256b pups, u32 i, u32 row);
 
 // DOG-035: the i-th run's ToC block — the ONE way a reader reaches it, empty
-// when the run carries none.  Cells are records, so search them with the record type's
-// comparator, then search the page they name.
+// when the run carries none.  Cells are records, so search them with the
+// record type's comparator, then search the page they name.
 void PUPToc(u8csp out, pup256b pups, u32 i, u32 row);
 
-// Fill `out` with one [data_start, data_end) slice per live puppy
-// (oldest → newest, matching the stack's pup_key order from
-// PUPOpenAll).  Resets `out` first.  Skips puppies whose slot has
-// been released — the resulting slice count may be less than
-// PUPCount.  Used by the LSM merge / lookup loops
-// to view the whole stack as one `u8css`.
+// Fill `out` (reset first) with one slice per live puppy, oldest to newest as
+// PUPOpenAll keyed them, skipping released slots, so it may hold fewer than
+// PUPCount.  The LSM merge and lookup loops view the stack as one `u8css`.
 ok64 PUPAllData(u8csb out, pup256b pups);
 // DOG-035: the row-aware twin — every slice clipped past its ToC block.
 ok64 PUPAllDataRow(u8csb out, pup256b pups, u32 row);
@@ -266,58 +192,42 @@ fun u64 PUPSeqno(pup256b pups, u32 i) {
     return base[i].key;
 }
 
-// PUPS-26A276Xh2e: the memtable is NOT a file: an anonymous buffer mapped once
-// per handle (bMap), dicted under the ALL-ONES key.  PAST holds its sorted runs,
-// DATA the unsorted segment the puts append to (BOX, BOXx.h).  A seal merges
-// its runs straight into a new run file (tmp, ToC, optional fsync, rename):
-// that one streamed write IS the save.  Unsealed puts die with the process.
+// PUPS-26A276Xh2e: the memtable is no file but an anonymous BOX (BOXx.h) mapped
+// once per handle under PUP_MEM_KEY; a seal streams it into one new run file.
 #define PUP_MEM_BYTES 4096
-// PUPS-26A275OQK0: c, the memtable segment limit in bytes; PUPx.h sets ABC_BOX_SEG to it.
+// PUPS-26A275OQK0: c, the memtable segment limit in bytes (PUPx.h: ABC_BOX_SEG)
 #define PUP_COLLAPSE  512
 
 // DOG-032: the memtable's size is an OPEN-TIME parameter counted in WHOLE OS
 // pages (`FILESysPage`, never a hardcoded 4096); 0 means one page, the default.
 #define PUP_MEM_PAGES 1
 
-// PUPS-26A276Xh2e: the memtable's run slices are the CALLER's — a typed
-// X(,csb) (slot array + buffer header, DATA = one slice per run, oldest first)
-// held next to its pups, on its stack or in its struct, as long as the pups,
-// and passed to every entry point that touches the memtable.  The core sees it
-// as a u8csb and passes it through; it resets it whenever the memtable starts
-// empty.  ABC_HIT_MAX_RUNS slots are plenty: the BOX ladder keeps runs few.
-//   a_pad(kv64cs, runs, ABC_HIT_MAX_RUNS);   // a struct member: a_wrap (B.h)
-//
-// DOG-027: family-side typed hook over the memtable.
-// BOX-26A26EbjLj: the hook seals DATA into a run and collapses the tailing
-// runs by the 1/8 ladder (X(BOX,Sort)).
+// PUPS-26A276Xh2e: `runs`, the memtable's run slices, is the CALLER's typed
+// X(,csb), held as long as the pups and passed to every memtable entry point
+// (PUPS.md "State"); the core passes it through.  DOG-027: the type's hook;
+// BOX-26A26EbjLj: it seals DATA into a run, then ladders the tail (BOX Sort).
 typedef ok64 (*pupsync)(u8bp mem, u8csb runs);
 
-// DOG-027: family-side typed compaction merge — HIT<type>Merge over the
-// oldest-first byte slices `srcs`; `into`'s head advances past the merged
-// bytes (the ABC-015 drain convention).  Pup is generic, the record type is not.
-// PUPS-001: `bottom` is YES when `srcs` is the WHOLE stack — no older run, no
-// inherited PAST — so a row that marks its key dead may be dropped, there being
-// nothing left for it to shadow.  A partial merge passes NO and keeps it.
+// DOG-027: the type's compaction merge, HIT<T>Merge over the oldest-first
+// slices `srcs`; `into`'s head advances past the merged bytes (ABC-015 drain).
+// PUPS-001: `bottom` is YES when `srcs` is the WHOLE stack, so a row that
+// marks its key dead may be dropped; a partial merge passes NO and keeps it.
 typedef ok64 (*pupmerge)(u8s into, u8css srcs, b8 bottom);
 
-// The entry points below take the three things the record type contributes:
-// `sync`, `merge`, and `row` — the fixed record width in BYTES, which is also
-// the ToC opt-in (0 for none).  Raw byte stacks and unsorted runs pass 0, never
-// build a block, and a run of theirs that merely ends in "TC" is never probed.
-// Typed callers use the PUPx.h wrappers (e.g. PUPu64Commit), which fill all
-// three in.  A NULL `sync` fails; a NULL `merge` turns the ladder off.
+// The entry points below take what the record type contributes: `sync`,
+// `merge` and `row`, its width in BYTES and the ToC opt-in (0: raw, unprobed).
 
-// DOG-027: append one record's bytes to the memtable's DATA (created lazily);
-// a full buffer seals into a run under a fresh pup_key, and that seal ends in
-// the ladder.
+// DOG-027: append one record to the memtable's DATA (created lazily); a full
+// buffer seals into a run under a fresh pup_key, and the seal ends in the
+// ladder.  Typed callers use the PUPx.h wrappers (PUPu64Put etc.), which fill
+// `sync`, `merge` and `row` in.  A NULL `sync` fails; no `merge`, no ladder.
 ok64 PUPPut(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
             pupsync sync, pupmerge merge, u32 row);
 
-// DOG-032: the same put with a SIZED memtable — `mem_pages` whole OS pages, so
-// a bulk run seals once per megabyte, not once per 4 KB.  Pup is generic over
-// bytes and knows no row size, so its unit is PAGES; 0 = the one-page default,
-// which is what `PUPPut` passes.  An EMPTY memtable of another size is
-// remapped to the new one; a non-empty one keeps its size until sealed.
+// DOG-032: the same put with a SIZED memtable: `mem_pages` whole OS pages (Pup
+// knows no row size), so a bulk run seals once per megabyte, not per 4 KB; 0 is
+// the one-page default `PUPPut` passes.  An EMPTY memtable of another size is
+// remapped; a non-empty one keeps its size until sealed.
 ok64 PUPPutMem(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
                pupsync sync, pupmerge merge, u32 row, u32 mem_pages);
 
@@ -327,11 +237,9 @@ ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
                pupopt *opt);
 
 // DOG-027: seal the memtable into `<10-RON64><ext>`: its runs merged through
-// `merge` into a tmp file, ToC, rename — atomic: a crash leaves a tmp file or
-// a complete run.  Ends, like every seal, with the ladder (below).  A NULL
-// `merge` seals only a memtable that holds one run.
-// DOG-046: the seal re-scans `dir` first, so the fresh key clears the runs
-// other writers sealed meanwhile and the read view afterwards includes them.
+// `merge` into a tmp file, ToC'd, renamed (atomic: a crash leaves a tmp or a
+// whole run), then the ladder.  A NULL `merge` seals a one-run memtable only.
+// DOG-046: re-scans `dir` first, so the key clears other writers' fresh runs.
 ok64 PUPCommit(pup256b pups, u8csb runs, path8s dir, u8cs ext, pupsync sync,
                pupmerge merge, u32 row);
 
@@ -347,13 +255,9 @@ ok64 PUPCommitOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext,
                   pupopt *opt);
 
 // DOG-027: the 1/8 size-tiered ladder (ABC_HIT_LADDER_DIV) over the committed
-// runs — every seal ends here, so a caller never sees the ladder's state.
-// Merges the youngest violating tail through `merge` into ONE
-// fresh run (same tmp + rename path, fresh pup_key), unlinks the sources,
-// and cascades until HITIsCompact holds.  No `merge` → no-op.
-// DOG-046: re-scans `dir` first so it weighs the REAL stack; only the runs it
-// merged are unlinked, and a dict entry whose file another writer already
-// unlinked keeps its mapping until PUPClose.
+// runs, where every seal ends: the youngest violating tail is merged through
+// `merge` into ONE fresh run and the sources unlinked, until HITIsCompact
+// holds; no `merge`, no-op.  DOG-046: re-scans `dir` first (see PUPS.md).
 ok64 PUPLadder(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row);
 // PUPS-26A309qbG9: the ladder keyed and retired by `opt` (NULL: as PUPLadder):
 // the merged run takes a key at or above `opt->floor`, and with `opt->dead`

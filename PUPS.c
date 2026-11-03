@@ -16,9 +16,7 @@
 // the plain policy in HIT.h — no element-typed HIT is instantiated here.
 #include "HIT.h"
 
-// =============================================================
 // --- Puppies: stack of <seqno>.<ext> files ---
-// =============================================================
 
 //  Compose `<dir>/<10-RON64-pup_key><ext>` into `out` (reset first).
 static ok64 pup_path(path8b out, path8s dir, u64 pup_key, u8cs ext) {
@@ -33,19 +31,8 @@ static ok64 pup_path(path8b out, path8s dir, u64 pup_key, u8cs ext) {
     done;
 }
 
-//  Write lock: ONE advisory lock per DIRECTORY, the file `<dir>/.lock` (not a
-//  run: a scan skips it).  A directory is one store's unit of update: a
-//  forward stack and its reverse stack change together, so a lock per stack
-//  could not keep the pair consistent.  flock(2): the kernel drops it when the
-//  process dies, so a crash leaves no stale lock; reads never take it.  It
-//  guards what a rescan cannot: picking a key, then renaming onto it, and a
-//  ladder merge (two writers collapsing one tail).
-//  Reentrant within a process (a depth count per directory, by dev/ino), so
-//  a caller may hold it across several stacks (PUPLock) while the entry
-//  points take it again.  Not thread-safe, and a forked child must not inherit a held lock.
-//  Held locks: a u64 buffer of {dev, ino, fd, depth} quads keyed by the
-//  directory's identity, so aliased paths share one entry; a slot is a quad
-//  index.  Mapped once at FILE_MAX_OPEN quads (one fd each), never moves.
+//  Write lock: ONE flock per DIRECTORY, `<dir>/.lock` (PUPS.md "Write lock").
+//  PUPS-26B034NDyT: reentrant per process; a slot is one {dev, ino, fd, depth}.
 #define PUP_LQ 4
 static Bu64 pup_held = {};
 
@@ -236,19 +223,16 @@ static b8 pup_dicted(pup256b pups, u64 key) {
     return NO;
 }
 
-// DOG-046: the ONE directory scan, shared by the cold open and the mid-flight
-// refresh.  `dedup` skips a key DATA already holds — what a refresh needs and
-// what PUPOpenAll must NOT do (the same basename in another dir is another
-// file, see the header's "not idempotent" contract).
+// DOG-046: the ONE directory scan behind the cold open and the mid-flight
+// refresh.  `dedup` skips a key DATA already holds: what a refresh needs and
+// what PUPOpenAll must NOT do (same basename, other dir: another file).
 // PUPS-26A309qbG9: keys above `ceil` and the caller's dead runs are not runs.
 static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
                      pupopt const *opt) {
     sane(pups != NULL && u8csOK(dir) && u8csOK(ext));
 
-    //  Two-phase: walk the directory with FILEIter collecting pup_keys, sort,
-    //  then map each file in order.  PUPS-26A276Xh2e: a name is derived from
-    //  its key (the 10-char RON64 pad round-trips), so only keys are kept, in
-    //  a map-max-once buffer: no FILE_MAX_OPEN cap.
+    //  Two-phase: collect the pup_keys with FILEIter, sort, map in order.
+    //  PUPS-26A276Xh2e: a name derives from its key, so only keys are kept.
     a_path(dpat, dir);
     fileit it = {};
     //  CODE-26A23CSStk: only an ABSENT dir is an empty stack; one that exists
@@ -276,10 +260,8 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
             break;
         }
     }
-    //  Close the iterator UNCONDITIONALLY: a non-END FILENext error
-    //  (e.g. PATHNOROOM on an over-long path) leaves `__ != END`, so a
-    //  bare `seen(END)` would `fail()` and skip the close — leaking the
-    //  opendir() DIR handle.  Close first, then propagate the error.
+    //  Close UNCONDITIONALLY: a non-END FILENext error (e.g. PATHNOROOM) would
+    //  make `seen(END)` fail() past the close and leak the DIR handle.
     FILEIterClose(&it);
     if (__ != END) { u64bUnMap(keys); fail(__); }
     __ = OK;
@@ -287,10 +269,8 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
     a_dup(u64, ks, u64bData(keys));
     u64sSort(ks);
 
-    //  Pup layer is not idempotent: every file in `dir` becomes a new
-    //  entry in `pups`.  Avoiding double-scans of the same dir is the
-    //  caller's job (e.g. skip a prefix already loaded from a shared
-    //  parent directory).
+    //  Not idempotent: every file in `dir` becomes a new entry; avoiding a
+    //  double scan of one dir is the caller's job (see PUPOpenAll).
     $for(u64, kp, ks) {
         a_path(fpath);
         try(pup_path, fpath, dir, *kp, ext);
@@ -301,10 +281,8 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
             pup_remap(pups, $path(fpath), *kp);
             continue;
         }
-        //  CODE-26A23CSStk: a run on disk that cannot be mapped fails the
-        //  open, never vanishes from it: PUPEMPTY for a 0-byte run (a crashed
-        //  non-durable create), PUPNOMAP for anything else (fds, perms).
-        //  PUPS-26A309qbG9: PUPGONE for one unlinked since the listing.
+        //  CODE-26A23CSStk: a run on disk that cannot be mapped fails the open,
+        //  never vanishes from it; PUPS-26A309qbG9: PUPGONE if unlinked since.
         pup256 ent = {};
         try(pup_map, &ent, $path(fpath), *kp);
         nedo break;
@@ -346,10 +324,8 @@ static ok64 pup_refresh(pup256b pups, path8s dir, u8cs ext,
 
 ok64 PUPOpenAside(pup256b pups, path8sc dir, u8csc ext) {
     sane(pups != NULL && u8csOK(dir) && u8csOK(ext));
-    //  Collapse the current DATA into PAST: the previously-active leaf
-    //  becomes part of the read-only context, leaving DATA empty and
-    //  ready for the next branch's entries.  pup256bUsedAll advances the
-    //  PAST/DATA boundary to the DATA/IDLE boundary (no buffer-poke).
+    //  Collapse DATA into PAST: the active leaf joins the read-only context and
+    //  DATA is empty for the next branch (pup256bUsedAll moves the boundary).
     if (pup256bDataLen(pups) > 0)
         pup256bUsedAll(pups);
     return PUPOpenAll(pups, dir, ext);
@@ -404,9 +380,8 @@ static ok64 pup_book(pup256b pups, path8s dir, u8cs ext, u64 pup_key) {
     call(pup_path, idxpath, dir, pup_key, ext);
     pup256 ent = {};
     call(pup_map, &ent, $path(idxpath), pup_key);
-    //  On a `pups` overflow the run just mapped above is not yet
-    //  recorded, so PUPClose can never reclaim it — unmap it before
-    //  propagating the push error.
+    //  On a `pups` overflow the run mapped above is not yet recorded, so
+    //  PUPClose could never reclaim it: unmap before propagating the error.
     try(pup256bPush, pups, &ent);
     if (__ != OK) { pup_unmap(&ent); fail(__); }
     //  DOG-027: a push lands past a live memtable entry — put that entry back
@@ -450,16 +425,8 @@ ok64 PUPCreateAt(pup256b pups, path8s dir, u8cs ext, u8cs bytes,
 ok64 PUPCreateOpt(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable,
                   pupopt *opt) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
-    //  Pick `max(RONNow, max(DATA)+1)` so two writers / two parallel
-    //  sub-shards collapsed into one project never accidentally pick
-    //  the same key.  RONNow has 1ms granularity; tight writer loops
-    //  within the same millisecond fall back to local max+1.  Both
-    //  paths preserve strict global ordering and 60-bit fit (RONNow
-    //  is ron60-bounded; the +1 bump only triggers when we're already
-    //  ron60-shaped).
-    //  DOG-027: hoisted into pup_next_key — flush/commit share it; then
-    //  past any name a case-folding filesystem already has a file on.
-    //  The lock spans the pick AND the rename onto it.
+    //  DOG-027: pup_next_key picks max(RONNow, max(DATA)+1), past any name a
+    //  case-folding fs has (PUPCreate); the lock spans the pick AND the rename.
     int lk = -1;
     call(PUPLock, &lk, dir);
     u64 new_seqno = 0;
@@ -523,9 +490,7 @@ ok64 PUPClose(pup256b pups) {
     done;
 }
 
-// =============================================================
 // --- DOG-035: the run ToC — [data][toc][len:5]["TC"] ---
-// =============================================================
 
 size_t PUPTocRows(u32 row) {
     if (row == 0) return 0;
@@ -648,9 +613,7 @@ ok64 PUPAllData(u8csb out, pup256b pups) {
     return PUPAllDataRow(out, pups, 0);
 }
 
-// =============================================================
 // --- PUPS-26A276Xh2e: the memtable — an anonymous BOX the puts land in ---
-// =============================================================
 
 // DOG-027: the live memtable is the dict's trailing ALL-ONES entry, if any.
 static pup256 *pup_mem(pup256b pups) {
@@ -711,11 +674,10 @@ static ok64 pup_sync(pup256 *e, u8csb runs, pupsync sync) {
     done;
 }
 
-// DOG-027: the caller's typed merge (or, with no merge, the copy of the ONE
-// source) straight into the output run's mapping.
-// PUPS-26A25EfKtr: the tmp file is ftruncate'd to the bound (the OS hands out
-// zero pages lazily), mapped RW, merged + ToC'd in place, then trimmed to what
-// was written.  No heap scratch, no write() copy.
+// DOG-027: the caller's typed merge (or, with no merge, a copy of the ONE
+// source) straight into the output run's mapping.  PUPS-26A25EfKtr: the tmp
+// file is ftruncate'd to the bound (zero pages come lazily), mapped RW, merged
+// and ToC'd in place, then trimmed to what was written: no scratch, no write().
 static ok64 pup_collapse_into(u8bp out, u8css srcs, u32 row, b8 bottom,
                               pupmerge merge) {
     sane(u8bOK(out));
@@ -759,9 +721,8 @@ static ok64 pup_merge_run(pup256b pups, path8s dir, u8cs ext, u64 key,
     call(FILEMapCreate, &out, $path(tmppath), bound);
     u8 *base = out[0];
     size_t full = (size_t)(out[3] - out[0]);
-    //  PUPS-26B034pwDe: no MADV_POPULATE_WRITE — the bound is the sum of the
-    //  sources, dedup and dropped tombstones leave most of it unwritten; the
-    //  merge faults in only the pages it fills.
+    //  PUPS-26B034pwDe: no MADV_POPULATE_WRITE: dedup leaves most of the bound
+    //  unwritten, the merge faults in only the pages it fills.
     try(pup_collapse_into, out, srcs, row, bottom, merge);
     b8 empty = __ == OK && u8bDataLen(out) == 0;
     //  The output is trimmed to its written length, then fsync'd, before the
@@ -790,11 +751,10 @@ static ok64 pup_merge_run(pup256b pups, path8s dir, u8cs ext, u64 key,
     done;
 }
 
-// PUPS-26A276Xh2e: seal the memtable as a run — its segment sealed, its runs
-// merged by the caller's `merge` into the new run file in one streamed write
-// (that write IS the save), then the memtable starts empty.
-// DOG-035: `row` (the record width, 0 = none) decides whether a ToC block
-// follows the data.
+// PUPS-26A276Xh2e: seal the memtable as a run: its segment sealed, its runs
+// merged by `merge` into the new run file in one streamed write (that write
+// IS the save), then the memtable starts empty.  DOG-035: `row` (the record
+// width, 0 = none) decides whether a ToC block follows the data.
 static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
                          pupsync sync, pupmerge merge, u32 row, b8 durable,
                          pupopt *opt) {
@@ -841,20 +801,16 @@ static ok64 pup_collapse(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
     //  PUPS-001: the merge spans the whole stack only when it takes every run
     //  and nothing older is inherited; only then may a tombstone be dropped.
     b8 bottom = m == n && PUPCountAll(pups) == PUPCount(pups);
-    //  PUPS-005: a run name is never reused — renaming onto the youngest
-    //  source (PUPS-004) let a crash keep older sources whose tombstones the
-    //  bottom merge had dropped.  The merged run takes the next free key past
-    //  the youngest source (sequential; the ladder holds the write lock), is
-    //  made durable, booked, and only then are the sources unlinked.
+    //  PUPS-005: a run name is never reused (renaming onto the youngest source,
+    //  PUPS-004, broke crash safety): the next free key past the youngest one.
     u64 key = PUPSeqno(pups, PUPCount(pups) - 1) + 1;
     if (key < pup_floor(opt)) key = pup_floor(opt);
     for (b8 taken = YES;; key++) {
         call(pup_key_taken, &taken, pups, dir, ext, key);
         if (!taken) break;
     }
-    //  PUPS-005: the sources go OLDEST first.  A crash part way leaves the
-    //  merged run (if any) plus a YOUNGEST suffix of the sources: every
-    //  tombstone outlives the rows it shadows, so the stack reads as before.
+    //  PUPS-005: sources go OLDEST first, so a crash leaves a YOUNGEST suffix:
+    //  every tombstone outlives the rows it shadows; the stack reads as before.
     u32 oldest = PUPCount(pups) - (u32)m;
     //  PUPS-001: nothing survived (every row was dead): no empty run — the
     //  sources just go.
@@ -957,7 +913,8 @@ ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
     }
     call(u8bFeed, mem, rec);
     e->data[1] = mem[2];
-    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, PUPx.h's ABC_BOX_SEG) the segment becomes a run
+    //  BOX-26A26EbjLj: past c (PUP_COLLAPSE, PUPx.h's ABC_BOX_SEG) the segment
+    //  becomes a run
     if (u8bDataLen(mem) > PUP_COLLAPSE) call(pup_sync, e, runs, sync);
     done;
 }
