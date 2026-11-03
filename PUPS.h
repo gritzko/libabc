@@ -36,7 +36,13 @@ fun b8 pup256Z(pup256 const *a, pup256 const *b) { return a->key < b->key; }
 #include "QSORTx.h"
 #undef X
 
-con ok64 PUPFAIL = 0x197993ca495;
+//  PUPS-26B03JQWPP: one code per failure; PUP* calls return PUP* codes only.
+con ok64 PUPBADARG = 0x197992ca34a6d0;    //  NULL sync/merge/runs, bad index
+con ok64 PUPTAKEN = 0x65e65d294397;       //  a live run holds the caller's key
+con ok64 PUPNOMEM = 0x65e657616396;       //  no memtable open on this stack
+con ok64 PUPSTAT = 0x1979971d29d;         //  PUPLock: stat(dir) failed
+con ok64 PUPNOOPEN = 0x197995d8619397;    //  PUPLock: open(.lock) failed
+con ok64 PUPLCKFULL = 0x65e6553143de555;  //  PUPLock: held-lock table full
 //  CODE-26A23CSStk: PUPOpenAll met a run it cannot read: 0 bytes (a crashed
 //  non-durable create), unmappable (fds, perms), or more than PUP_SCAN_MAX.
 con ok64 PUPEMPTY = 0x65e64e599762;
@@ -97,7 +103,7 @@ ok64 PUPCreateOpt(pup256b pups, path8s dir, u8cs ext, u8cs bytes, b8 durable,
                   pupopt *opt);
 
 // PUPCreate with the caller's own pup_key, for callers that keep several
-// stacks' file-ids in lockstep.  PUPFAIL when a live DATA entry already holds
+// stacks' file-ids in lockstep.  PUPTAKEN when a live DATA entry already holds
 // that key (PUPThinTail first when replacing the tail) or, DOG-027, when a
 // file already has that name: the key is the caller's, so no bump.
 ok64 PUPCreateAt(pup256b pups, path8s dir, u8cs ext, u8cs bytes,

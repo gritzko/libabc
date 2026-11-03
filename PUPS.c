@@ -43,7 +43,7 @@ ok64 PUPLock(int *slot, path8s dir) {
     a_path(lp);
     call(PATHu8bDup, lp, dir);
     struct stat st;
-    if (stat((char const *)u8bDataHead(lp), &st) != 0) return PUPFAIL;
+    if (stat((char const *)u8bDataHead(lp), &st) != 0) return PUPSTAT;
     u64 *h = u64bDataHead(pup_held);
     size_t n = u64bDataLen(pup_held) / PUP_LQ;
     int free_slot = -1;
@@ -55,11 +55,11 @@ ok64 PUPLock(int *slot, path8s dir) {
         *slot = (int)i;
         done;
     }
-    if (free_slot < 0 && u64bIdleLen(pup_held) < PUP_LQ) return PUPFAIL;
+    if (free_slot < 0 && u64bIdleLen(pup_held) < PUP_LQ) return PUPLCKFULL;
     a_cstr(name, ".lock");
     call(PATHu8bPush, lp, name);
     int f = open((char const *)u8bDataHead(lp), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
-    if (f < 0) return PUPFAIL;
+    if (f < 0) return PUPNOOPEN;
     try(FILELock, &f, YES);
     if (__ != OK) { close(f); fail(__); }
     if (free_slot < 0) {
@@ -399,7 +399,7 @@ static ok64 pup_create_at(pup256b pups, path8s dir, u8cs ext, u8cs bytes,
     {
         b8 taken = NO;
         call(pup_key_taken, &taken, pups, dir, ext, pup_key);
-        if (taken) return PUPFAIL;
+        if (taken) return PUPTAKEN;
     }
     call(pup_write, dir, ext, bytes, pup_key, durable);
     call(pup_book, pups, dir, ext, pup_key);
@@ -452,7 +452,7 @@ static ok64 pup_drop(pup256b pups, path8s dir, u8cs ext, u32 i, b8 rm) {
     //  DOG-027: index over RUNS, not entries — the memtable's key would unlink
     //  a file named `~0`; the memmove below keeps it last.
     u32 n = PUPCount(pups), all = (u32)pup256bDataLen(pups);
-    if (i >= n) return PUPFAIL;
+    if (i >= n) return PUPBADARG;
     pup256 *base = pup256bDataHead(pups);
     pup_unmap(base + i);
     if (rm) {
@@ -687,7 +687,7 @@ static ok64 pup_collapse_into(u8bp out, u8css srcs, u32 row, b8 bottom,
     if (merge != NULL) {
         call(merge, into, srcs, bottom);
     } else {
-        test($len(srcs) == 1, PUPFAIL);
+        test($len(srcs) == 1, PUPBADARG);
         call(u8sFeed, into, srcs[0][0]);
     }
     a_dup(u8c, merged, ((u8cs){u8bIdleHead(out), into[0]}));
@@ -765,7 +765,7 @@ static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
     //  meanwhile, and leave the dict a true oldest-first stack for the ladder.
     call(pup_refresh, pups, dir, ext, opt);
     pup256 *e = pup_mem(pups);
-    if (!e) return PUPFAIL;
+    if (!e) return PUPNOMEM;
     call(pup_sync, e, runs, sync);
     a_pad(u8cs, srcs, ABC_HIT_MAX_RUNS);
     $for(u8cs, r, u8csbData(runs)) {
@@ -901,7 +901,7 @@ ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
                pupopt *opt) {
     sane(pups != NULL && runs != NULL && $ok(dir) && $ok(ext) &&
          u8csOK(rec));
-    if (sync == NULL) return PUPFAIL;
+    if (sync == NULL) return PUPBADARG;
     call(pup_mem_open, pups, runs, mem_pages);
     pup256 *e = pup_mem(pups);
     Bu8 mem = {};
@@ -937,7 +937,7 @@ ok64 PUPCommitOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext,
                   pupsync sync, pupmerge merge, u32 row, b8 durable,
                   pupopt *opt) {
     sane(pups != NULL && runs != NULL && $ok(dir) && $ok(ext));
-    if (sync == NULL) return PUPFAIL;
+    if (sync == NULL) return PUPBADARG;
     if (pup_mem_empty(pup_mem(pups))) done;
     call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, durable, opt);
     done;
@@ -956,7 +956,7 @@ ok64 PUPCommit(pup256b pups, u8csb runs, path8s dir, u8cs ext, pupsync sync,
 ok64 PUPAllRunsToc(u8csb out, u8csb tocs, pup256b pups, u8csb runs,
                    pupsync sync, u32 row) {
     sane(out && pups != NULL);
-    if (sync == NULL) return PUPFAIL;
+    if (sync == NULL) return PUPBADARG;
     u8csbReset(out);
     if (tocs) u8csbReset(tocs);
     u8cs none = {};
@@ -972,7 +972,7 @@ ok64 PUPAllRunsToc(u8csb out, u8csb tocs, pup256b pups, u8csb runs,
     }
     pup256 *e = pup_mem(pups);
     if (pup_mem_empty(e)) done;
-    test(runs != NULL, PUPFAIL);
+    test(runs != NULL, PUPBADARG);
     //  BOX-26A26EbjLj: the segment sealed, the memtable's runs follow as
     //  they are, oldest first.
     call(pup_sync, e, runs, sync);

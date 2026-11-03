@@ -297,7 +297,7 @@ static ok64 PUPTestMemRoundTrip(void) {
     // DOG-027: no sync passed down — the memtable API refuses, never crashes
     kv64 pre = {1, 1};
     u8cs prerec = {(u8c *)&pre, (u8c *)(&pre + 1)};
-    want(PUPPut(pups, TR(pups), $path(dir), ext, prerec, NULL, NULL, 0) == PUPFAIL);
+    want(PUPPut(pups, TR(pups), $path(dir), ext, prerec, NULL, NULL, 0) == PUPBADARG);
 
     call(dog_mem_put, pups, $path(dir), ext, 7, 70);
     call(dog_mem_put, pups, $path(dir), ext, 3, 30);
@@ -929,7 +929,7 @@ static ok64 PUPTestDropAt(void) {
     testeqv((long long)PUPCount(pups), 2LL, "%lld");
     want(PUPSeqno(pups, 1) == young);
     want(PUPCount(pups) == (u32)pup256bDataLen(pups));  //  no memtable
-    want(PUPDropAt(pups, $path(dir), ext, 9) == PUPFAIL);
+    want(PUPDropAt(pups, $path(dir), ext, 9) == PUPBADARG);
 
     //  gone from disk too
     Bpup256 fresh = {};

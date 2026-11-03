@@ -137,6 +137,16 @@ back once.
 
 ### Build and test
 
+### Errors (PUPS-26B03JQWPP)
+
+Every `PUP*` call returns `OK` or a `PUP*` code, one meaning each:
+`PUPBADARG` a NULL `sync`/`merge`/`runs` or an index past the stack;
+`PUPTAKEN` a live run already holds the caller's key; `PUPNOMEM` no memtable;
+`PUPNOROOM` a key buffer (`PUP_SCAN_MAX`) or `pupopt.dead` is out of room;
+`PUPEMPTY`/`PUPNOMAP`/`PUPGONE` a run of 0 bytes, unmappable, or unlinked
+since listed; `PUPSTAT`/`PUPNOOPEN`/`PUPLCKFULL` `PUPLock` could not stat the
+directory, open `.lock`, or its held-lock table is full.
+
 libpups is part of abc (`PUPS.c` is in `abc-core`; `PUPS.h` and `PUPx.h`
 are installed with the other headers). Tests are in `test/PUPS.c`
 (`PUPStest`): error-path fd leaks, memtable round trips, collapse, flush,
