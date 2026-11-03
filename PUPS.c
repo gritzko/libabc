@@ -530,7 +530,7 @@ static ok64 pup_toc_feed(u8s into, u8csc data, u32 row) {
 }
 
 // DOG-035: split a run's mapped bytes into [data][toc].  Presence is CHECKED,
-// never inferred — magic, the length fits, the data residue is 0 mod row.
+// never inferred — magic, and the length is the cells*row the data takes.
 static void pup_toc_split(u8csp data, u8csp toc, u8csc raw, u32 row) {
     u8csMv(data, raw);
     toc[0] = toc[1] = raw[1];
@@ -549,7 +549,9 @@ static void pup_toc_split(u8csp data, u8csp toc, u8csc raw, u32 row) {
     for (u32 k = 0; k < PUP_TOC_LEN_W; k++)
         bytes |= (size_t)tail[0][k] << (8 * k);
     if (bytes + PUP_TOC_TAIL_W > size) return;
-    if ((size - PUP_TOC_TAIL_W - bytes) % row) return;
+    //  PUPS-26B034zlKV: exactly the geometry pup_toc_feed writes, else plain
+    size_t cells = pup_toc_cells(size - PUP_TOC_TAIL_W - bytes, row);
+    if (cells == 0 || bytes != cells * row) return;
     data[1] = tail[0] - bytes;
     toc[0] = data[1];
     toc[1] = tail[0];

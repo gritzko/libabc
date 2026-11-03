@@ -1270,6 +1270,17 @@ static ok64 PUPTestTocOptOut(void) {
     testeqv((long long)u8csLen(whole), (long long)sizeof fake, "%lld");
     testeqv((long long)u8csLen(data), (long long)sizeof fake, "%lld");
     want(u8csEmpty(toc));
+
+    //  PUPS-26B034zlKV: two plain rows, the last val's bytes `00 09 0 0 0 0
+    //  T C` — magic, length and residue all pass, but 16 data bytes take no
+    //  cells, so a 9-byte ToC is not this run's geometry: both rows stay.
+    kv64 two[2] = {{1, 111}, {2, 0x4354000000000900ULL}};
+    a_dup(u8c, tb, ((u8cs){(u8c *)two, (u8c *)(two + 2)}));
+    call(PUPCreateAt, raw, $path(dir), ext, tb, (u64)1001);
+    PUPDataRow(data, raw, 1, (u32)sizeof(kv64));
+    PUPToc(toc, raw, 1, (u32)sizeof(kv64));
+    testeqv((long long)u8csLen(data), (long long)sizeof two, "%lld");
+    want(u8csEmpty(toc));
     call(PUPClose, raw);
     TESTBErmrf(tmp);
     done;
