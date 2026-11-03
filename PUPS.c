@@ -750,12 +750,9 @@ static ok64 pup_merge_run(pup256b pups, path8s dir, u8cs ext, u64 key,
     call(FILEMapCreate, &out, $path(tmppath), bound);
     u8 *base = out[0];
     size_t full = (size_t)(out[3] - out[0]);
-#ifdef MADV_POPULATE_WRITE
-    //  The tmp is sparse: a first write per page traps into a read fault (a
-    //  readahead over holes) plus a page_mkwrite.  Prefault the bound for
-    //  writing in one call instead; advisory, so a refusal changes nothing.
-    madvise((void *)base, full, MADV_POPULATE_WRITE);
-#endif
+    //  PUPS-26B034pwDe: no MADV_POPULATE_WRITE — the bound is the sum of the
+    //  sources, dedup and dropped tombstones leave most of it unwritten; the
+    //  merge faults in only the pages it fills.
     try(pup_collapse_into, out, srcs, row, bottom, merge);
     b8 empty = __ == OK && u8bDataLen(out) == 0;
     //  The output is trimmed to its written length, then fsync'd, before the
