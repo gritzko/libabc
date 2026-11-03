@@ -817,20 +817,6 @@ static ok64 pup_seal_run(pup256b pups, u8csb runs, path8s dir, u8cs ext,
     done;
 }
 
-//  The seal under the stack's write lock: the key pick and the rename onto it
-//  are one critical section.
-static ok64 pup_mem_seal(pup256b pups, u8csb runs, path8s dir, u8cs ext,
-                         pupsync sync, pupmerge merge, u32 row, b8 durable,
-                         pupopt *opt) {
-    sane(pups != NULL && $ok(dir) && $ok(ext));
-    int lk = -1;
-    call(PUPLock, &lk, dir);
-    try(pup_seal_run, pups, runs, dir, ext, sync, merge, row, durable, opt);
-    PUPUnlock(&lk);
-    nedo fail(__);
-    done;
-}
-
 // DOG-027: merge the youngest `m` runs into one fresh run — the caller's
 // `merge` does the typed merge, Pup owns the tmp + rename seal and the
 // source unlinks.
@@ -873,12 +859,13 @@ static ok64 pup_collapse(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
     done;
 }
 
+//  `fresh`: the caller refreshed under the lock it still holds, no rescan.
 static ok64 pup_ladder(pup256b pups, path8s dir, u8cs ext, pupmerge merge,
-                       u32 row, pupopt *opt) {
+                       u32 row, pupopt *opt, b8 fresh) {
     sane(pups != NULL && $ok(dir) && $ok(ext));
     //  DOG-046: a ladder over a stale view collapses the wrong tail — map in
     //  what other writers sealed, then weigh.  Only merged runs are unlinked.
-    call(pup_refresh, pups, dir, ext, opt);
+    if (!fresh) call(pup_refresh, pups, dir, ext, opt);
     for (;;) {
         //  DOG-035: clipped lengths — a ToC block is not run bytes, so the
         //  ladder must not weigh it and the merge must never see a cell.
@@ -903,7 +890,7 @@ ok64 PUPLadderOpt(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row,
     //  One merger per stack: the lock covers the rescan and every collapse.
     int lk = -1;
     call(PUPLock, &lk, dir);
-    try(pup_ladder, pups, dir, ext, merge, row, opt);
+    try(pup_ladder, pups, dir, ext, merge, row, opt, NO);
     PUPUnlock(&lk);
     nedo fail(__);
     done;
@@ -911,6 +898,23 @@ ok64 PUPLadderOpt(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row,
 
 ok64 PUPLadder(pup256b pups, path8s dir, u8cs ext, pupmerge merge, u32 row) {
     return PUPLadderOpt(pups, dir, ext, merge, row, NULL);
+}
+
+//  The seal and the ladder under ONE hold of the write lock: the key pick and
+//  the rename onto it are one critical section, and the seal's rescan is the
+//  ladder's too (PUPS-26B034dToa: one directory scan per commit).
+static ok64 pup_mem_seal(pup256b pups, u8csb runs, path8s dir, u8cs ext,
+                         pupsync sync, pupmerge merge, u32 row, b8 durable,
+                         pupopt *opt) {
+    sane(pups != NULL && $ok(dir) && $ok(ext));
+    int lk = -1;
+    call(PUPLock, &lk, dir);
+    try(pup_seal_run, pups, runs, dir, ext, sync, merge, row, durable, opt);
+    then if (merge != NULL)
+        try(pup_ladder, pups, dir, ext, merge, row, opt, YES);
+    PUPUnlock(&lk);
+    nedo fail(__);
+    done;
 }
 
 ok64 PUPUnlink(path8s dir, u8cs ext, u64s keys) {
@@ -939,7 +943,6 @@ ok64 PUPPutOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext, u8csc rec,
         //  DOG-027: full buffer — seal it into a run, run the ladder, start
         //  the memtable empty again.
         call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, NO, opt);
-        call(PUPLadderOpt, pups, dir, ext, merge, row, opt);
         e = pup_mem(pups);
         pup_mem_buf(mem, e, runs);
     }
@@ -969,7 +972,6 @@ ok64 PUPCommitOpt(pup256b pups, u8csb runs, path8s dir, u8cs ext,
     if (sync == NULL) return PUPFAIL;
     if (pup_mem_empty(pup_mem(pups))) done;
     call(pup_mem_seal, pups, runs, dir, ext, sync, merge, row, durable, opt);
-    call(PUPLadderOpt, pups, dir, ext, merge, row, opt);
     done;
 }
 
