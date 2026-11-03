@@ -1581,6 +1581,41 @@ static ok64 PUPTestMemNoFd(void) {
     done;
 }
 
+// PUPS-26B034NDyT: a lock is keyed by the directory's identity, not its path
+// spelling: an alias (symlink) re-enters the held lock instead of flocking a
+// second fd (a self-deadlock), and more than 8 directories may be held.
+static ok64 PUPTestLockAlias(void) {
+    sane(1);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    char al[300];
+    snprintf(al, sizeof al, "%s.alias", tmp);
+    want(symlink(tmp, al) == 0);
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    a_path(ali, ((u8cs){(u8 *)al, (u8 *)al + strlen(al)}));
+    alarm(10);  //  the bug blocks forever in flock
+    int a = -1, b = -1;
+    call(PUPLock, &a, $path(dir));
+    call(PUPLock, &b, $path(ali));
+    want(a == b);
+    PUPUnlock(&b);
+    PUPUnlock(&a);
+    alarm(0);
+    enum { N = 12 };
+    int lk[N];
+    char sub[N][300];
+    for (int i = 0; i < N; i++) {
+        snprintf(sub[i], sizeof sub[i], "%s/d%d", tmp, i);
+        want(mkdir(sub[i], 0755) == 0);
+        a_path(sd, ((u8cs){(u8 *)sub[i], (u8 *)sub[i] + strlen(sub[i])}));
+        call(PUPLock, &lk[i], $path(sd));
+    }
+    for (int i = 0; i < N; i++) PUPUnlock(&lk[i]);
+    unlink(al);
+    TESTBErmrf(tmp);
+    done;
+}
+
 ok64 PUPTestMem(void) {
     sane(1);
     call(PUPTestNameTaken);
@@ -1595,6 +1630,7 @@ ok64 PUPTestMem(void) {
     call(PUPTestTomb);
     call(PUPTestCrashLadder);
     call(PUPTestLock);
+    call(PUPTestLockAlias);
     call(PUPTestTwoWriters);
     call(PUPTestForeignRun);
     call(PUPTestManyRuns);

@@ -40,46 +40,55 @@ static ok64 pup_path(path8b out, path8s dir, u64 pup_key, u8cs ext) {
 //  process dies, so a crash leaves no stale lock; reads never take it.  It
 //  guards what a rescan cannot: picking a key, then renaming onto it, and a
 //  ladder merge (two writers collapsing one tail).
-//  Reentrant within a process (a depth count per directory), so a caller may
-//  hold it across several stacks (PUPLock) while the entry points take it
-//  again.  Not thread-safe, and a forked child must not inherit a held lock.
-#define PUP_LOCKS 8
-static struct {
-    char path[FILE_PATH_MAX_LEN];
-    int fd, depth;
-} pup_held[PUP_LOCKS];
+//  Reentrant within a process (a depth count per directory, by dev/ino), so
+//  a caller may hold it across several stacks (PUPLock) while the entry
+//  points take it again.  Not thread-safe, and a forked child must not inherit a held lock.
+//  Held locks: a u64 buffer of {dev, ino, fd, depth} quads keyed by the
+//  directory's identity, so aliased paths share one entry; a slot is a quad
+//  index.  Mapped once at FILE_MAX_OPEN quads (one fd each), never moves.
+#define PUP_LQ 4
+static Bu64 pup_held = {};
 
 ok64 PUPLock(int *slot, path8s dir) {
     sane(slot != NULL && $ok(dir));
     *slot = -1;
+    if (pup_held[0] == NULL) call(u64bMap, pup_held, FILE_MAX_OPEN * PUP_LQ);
     a_path(lp);
     call(PATHu8bDup, lp, dir);
-    a_cstr(name, ".lock");
-    call(PATHu8bPush, lp, name);
-    char const *path = (char const *)u8bDataHead(lp);
+    struct stat st;
+    if (stat((char const *)u8bDataHead(lp), &st) != 0) return PUPFAIL;
+    u64 *h = u64bDataHead(pup_held);
+    size_t n = u64bDataLen(pup_held) / PUP_LQ;
     int free_slot = -1;
-    for (int i = 0; i < PUP_LOCKS; i++) {
-        if (pup_held[i].depth == 0) { if (free_slot < 0) free_slot = i; continue; }
-        if (strcmp(pup_held[i].path, path) != 0) continue;
-        pup_held[i].depth++;
-        *slot = i;
+    for (size_t i = 0; i < n; i++) {
+        u64 *q = h + i * PUP_LQ;
+        if (q[3] == 0) { if (free_slot < 0) free_slot = (int)i; continue; }
+        if (q[0] != (u64)st.st_dev || q[1] != (u64)st.st_ino) continue;
+        q[3]++;
+        *slot = (int)i;
         done;
     }
-    if (free_slot < 0 || strlen(path) >= sizeof pup_held[0].path) return PUPFAIL;
-    int f = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (free_slot < 0 && u64bIdleLen(pup_held) < PUP_LQ) return PUPFAIL;
+    a_cstr(name, ".lock");
+    call(PATHu8bPush, lp, name);
+    int f = open((char const *)u8bDataHead(lp), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
     if (f < 0) return PUPFAIL;
     try(FILELock, &f, YES);
     if (__ != OK) { close(f); fail(__); }
-    strcpy(pup_held[free_slot].path, path);
-    pup_held[free_slot].fd = f;
-    pup_held[free_slot].depth = 1;
+    if (free_slot < 0) {
+        free_slot = (int)n;
+        u64bFed(pup_held, PUP_LQ);
+    }
+    u64 *q = u64bDataHead(pup_held) + free_slot * PUP_LQ;
+    q[0] = (u64)st.st_dev, q[1] = (u64)st.st_ino, q[2] = (u64)f, q[3] = 1;
     *slot = free_slot;
     done;
 }
 
 void PUPUnlock(int *slot) {
     if (*slot < 0) return;
-    if (--pup_held[*slot].depth == 0) close(pup_held[*slot].fd);  //  drops the flock
+    u64 *q = u64bDataHead(pup_held) + *slot * PUP_LQ;
+    if (--q[3] == 0) close((int)q[2]);  //  drops the flock
     *slot = -1;
 }
 
