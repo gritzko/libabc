@@ -233,6 +233,9 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
 
     //  Two-phase: collect the pup_keys with FILEIter, sort, map in order.
     //  PUPS-26A276Xh2e: a name derives from its key, so only keys are kept.
+    //  PUPS-26B03JJLSy: BASS scratch sized to `pups`: a dedup'd key sits in
+    //  DATA, a new one takes IDLE, so more keys than that can never be mapped.
+    a_carve(u64, keys, pup256bLen(pups));
     a_path(dpat, dir);
     fileit it = {};
     //  CODE-26A23CSStk: only an ABSENT dir is an empty stack; one that exists
@@ -240,10 +243,6 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
     ok64 o = FILEIterOpen(&it, dpat);
     if (o == FILENONE) done;
     if (o != OK) fail(o);
-
-    Bu64 keys = {};
-    try(u64bMap, keys, PUP_SCAN_MAX);
-    nedo { FILEIterClose(&it); fail(__); }
 
     scan(FILENext, &it) {
         if (it.type != DT_REG) continue;
@@ -253,17 +252,17 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
         //  DOG-027: anything that is not a `<10-RON64><ext>` run (a pre-ron64
         //  name, a tmp, a stray file) is skipped, never unlinked.
         if (sq == 0 || sq > ceil || pup_dead(opt, sq)) continue;
-        //  CODE-26A23CSStk: past PUP_SCAN_MAX runs the rest would go
-        //  unscanned — fail, a stack is never read short.
+        //  CODE-26A23CSStk: a stack is never read short — more runs than
+        //  `pups` can hold fail here exactly as the push below would.
         if (u64bFeed1(keys, sq) != OK) {
-            __ = PUPNOROOM;
+            __ = SNOROOM;
             break;
         }
     }
     //  Close UNCONDITIONALLY: a non-END FILENext error (e.g. PATHNOROOM) would
     //  make `seen(END)` fail() past the close and leak the DIR handle.
     FILEIterClose(&it);
-    if (__ != END) { u64bUnMap(keys); fail(__); }
+    if (__ != END) fail(__);
     __ = OK;
 
     a_dup(u64, ks, u64bData(keys));
@@ -291,7 +290,6 @@ static ok64 pup_scan(pup256b pups, path8sc dir, u8csc ext, b8 dedup, u64 ceil,
         try(pup256bPush, pups, &ent);
         nedo { pup_unmap(&ent); break; }
     }
-    u64bUnMap(keys);
     nedo fail(__);
     //  DOG-027: the runs landed past a live memtable entry — put it back at
     //  the tail, where PUPCount and pup_mem expect it.

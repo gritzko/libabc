@@ -57,11 +57,11 @@ static int dog_open_fd_count(void) {
 //  (1) Force a pups-overflow and assert no fd/mmap leak.
 //
 //  Create N puppy files in a scratch dir, then repeatedly re-open them
-//  into a `pups` buffer too small to hold them all (cap < N): each
-//  PUPOpenAll maps every file in key order and pushes until the
-//  buffer fills — the (cap+1)-th FILEMapRO is the one whose fd+mmap
-//  leaks on the failed push.  Before the fix the fd table grows by
-//  (N-cap) per iteration; after the fix it is flat.
+//  into a `pups` buffer with only `cap` < N slots left (PUPS-26B03JJLSy:
+//  the scan refuses a dir that outgrows an EMPTY pups before mapping, so a
+//  first open fills N slots and the second, non-idempotent one overflows):
+//  the (cap+1)-th FILEMapRO is the one whose fd+mmap leaks on the failed
+//  push.  Before the fix the fd table grows by (N-cap) per iteration.
 static ok64 PUPTestOverflowLeak(void) {
     sane(1);
     call(FILEInit);
@@ -93,7 +93,9 @@ static ok64 PUPTestOverflowLeak(void) {
     for (int it = 0; it < ITERS; it++) {
         a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
         Bpup256 pups = {};
-        call(pup256bAllocate, pups, PUPCAP);  //  too small for NPUP
+        call(pup256bAllocate, pups, NPUP + PUPCAP);
+        try(PUPOpenAll, pups, $path(dir), ext);  //  fills NPUP, PUPCAP left
+        nedo { PUPClose(pups); TESTBErmrf(tmp); fail(__); }
         try(PUPOpenAll, pups, $path(dir), ext);
         //  overflow → SNOROOM expected; the leak (if any) already happened
         b8 overflowed = (__ == SNOROOM);
