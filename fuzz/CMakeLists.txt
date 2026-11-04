@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 project(librdx C CXX)
 
 set(CMAKE_C_STANDARD 23)
+#  FUZZ-26B04IqDqU: C++ targets diff against STL; abc headers need GNU typeof
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_EXTENSIONS ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 
@@ -12,25 +15,25 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FUZZ_CXX_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FUZZ_C_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FUZZ_LDD_FLAGS}")
 
-add_executable(HEAPfuzz HEAP.c ../RON.c)
-
 #  FUZZ-26B04IZDFD: clang on Alpine without gcc selects no GCC install (no
 #  crtbegin.o), so it misses the libstdc++ headers and, on compiler-rt, the unwinder
 include(CheckIncludeFileCXX)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 check_include_file_cxx(unordered_map ABC_HAVE_STL)
-add_executable(HASHfuzz HASH.cpp)
 file(GLOB ABC_STL_CFG /usr/include/c++/*/*/bits/c++config.h)
 if (NOT ABC_HAVE_STL AND ABC_STL_CFG)
     list(GET ABC_STL_CFG -1 ABC_STL_TRI)
     cmake_path(GET ABC_STL_TRI PARENT_PATH ABC_STL_TRI)
     cmake_path(GET ABC_STL_TRI PARENT_PATH ABC_STL_TRI)
     cmake_path(GET ABC_STL_TRI PARENT_PATH ABC_STL_VER)
-    target_include_directories(HASHfuzz SYSTEM PRIVATE ${ABC_STL_VER} ${ABC_STL_TRI})
+    include_directories(SYSTEM ${ABC_STL_VER} ${ABC_STL_TRI})
 endif()
 if ("${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}" MATCHES "compiler-rt")
-    target_link_options(HASHfuzz PRIVATE --unwindlib=libunwind)
+    add_link_options(--unwindlib=libunwind)
 endif()
+
+add_executable(HEAPfuzz HEAP.cpp ../RON.c)
+add_executable(HASHfuzz HASH.cpp)
 
 add_executable(HASHdfuzz HASHd.c)
 
@@ -39,7 +42,7 @@ add_executable(ZINTfuzz ZINT.c "${CMAKE_CURRENT_SOURCE_DIR}/../ZINT.c")
 add_executable(ZINT2fuzz ZINT2.c)
 target_link_libraries(ZINT2fuzz abc)
 
-add_executable(SORTfuzz SORT.c ../SORT.c ../RON.c)
+add_executable(SORTfuzz SORT.cpp ../SORT.c ../RON.c)
 
 add_executable(DIFFfuzz DIFF.c ../RON.c)
 
@@ -59,11 +62,12 @@ target_link_libraries(SLOGfuzz abc)
 
 add_executable(NFAfuzz NFA.c ../RON.c)
 
-add_executable(HITfuzz HIT.c ../RON.c)
+#  FUZZ-26B04IqDqU: HITx/BOXx are C only, so a C half (HIT.c) and STL (.cpp)
+add_executable(HITfuzz HIT.cpp HIT.c ../RON.c)
 
-add_executable(BOXfuzz BOX.c ../RON.c)
+add_executable(BOXfuzz BOX.cpp BOX.c ../RON.c)
 
-add_executable(QSORTfuzz QSORT.c)
+add_executable(QSORTfuzz QSORT.cpp)
 target_link_libraries(QSORTfuzz abc)
 
 #  ABC-004: u1 bitmap set-algebra vs a reference set model.

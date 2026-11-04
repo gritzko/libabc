@@ -49,16 +49,23 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
         return ret == OK ? 0 : 1;                                     \
     }
 
+//  FUZZ-26B04IqDqU: C++ targets (STL references) export the C entry points
+#ifdef __cplusplus
+#define FUZZ_C extern "C"
+#else
+#define FUZZ_C
+#endif
+
 #define FUZZ(T, n)                                                 \
     ok64 n($##T##c input);                                         \
     uint8_t _pro_depth = 0;                                        \
     thread_local u8 *ABC_BASS[4] = {};                            \
-    int LLVMFuzzerInitialize(int *argc, char ***argv) {            \
+    FUZZ_C int LLVMFuzzerInitialize(int *argc, char ***argv) {            \
         (void)argc; (void)argv;                                    \
         if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) return 1;      \
         return 0;                                                  \
     }                                                              \
-    int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) { \
+    FUZZ_C int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) { \
         T const *p = (T const *)Data;                              \
         $##T##c data = {p, p + (Size / sizeof(T))};                \
         ok64 o = n(data);                                          \

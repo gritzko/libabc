@@ -1,202 +1,109 @@
-#include "INT.h"
-#include "PRO.h"
-#include "TEST.h"
+// abc/fuzz/HIT.c — FUZZ-26B04IqDqU: the HIT instances HITfuzz drives.
+//
+// Two lanes over the same {u16 key, u16 val} row: kv (the youngest run's row
+// wins) and fold (ABC_X_MERGE): val is an affine map x -> a*x+b over u8, the
+// fold composes; associative as LSM needs, not commutative, so order shows.
+// Each wrapper takes the runs as a hfrun array, lets HIT compact it in place
+// and reports the new count; `len` is in/out.
 
-// DOG-027: no csSwap prerequisite — the heap swaps entry pointers now.
-#define X(M, name) M##u64##name
+#include "HITfz.h"
+#include "PRO.h"
+
+typedef hk hc;
+fun b8 hkZ(hk const *a, hk const *b) { return a->key < b->key; }
+fun b8 hkKeyEq(hk const *a, hk const *b) { return a->key == b->key; }
+fun b8 hcZ(hc const *a, hc const *b) { return a->key < b->key; }
+fun b8 hcKeyEq(hc const *a, hc const *b) { return a->key == b->key; }
+fun void hcMerge(hc *acc, hc const *nxt) {
+    u8 a = (u8)(acc->val >> 8), b = (u8)acc->val;
+    u8 na = (u8)(nxt->val >> 8), nb = (u8)nxt->val;
+    acc->val = (u16)((u8)(na * a) << 8 | (u8)(na * b + nb));
+}
+
+#define X(M, name) M##hk##name
+#include "Bx.h"
+#include "QSORTx.h"
 #include "HITx.h"
 #undef X
 
-#define LEN 512
-#define MAXRUNS 32
+#define X(M, name) M##hc##name
+#include "Bx.h"
+#include "QSORTx.h"
+#define ABC_X_MERGE
+#include "HITx.h"
+#undef X
 
-// DOG-027: MSET retired — naive independent oracle: gather, sort, dedup.
-static size_t hitfuzzref(u64 *out, u64cs const *runs, size_t nruns, u64 from) {
-    size_t len = 0;
-    for (size_t r = 0; r < nruns; r++)
-        for (u64c *p = runs[r][0]; p < runs[r][1]; p++)
-            if (*p >= from) out[len++] = *p;
-    u64s all = {out, out + len};
-    u64sSort(all);
-    size_t w = 0;
-    for (size_t i = 0; i < len; i++)
-        if (w == 0 || out[w - 1] != out[i]) out[w++] = out[i];
-    return w;
+#define HF_CSS(r, n) hkcs *css[2] = {(hkcs *)(r), (hkcs *)(r) + *(n)}
+
+static ok64 hf_out(ok64 (*f)(hks, hkcs **), hfrun *runs, size_t *n, hk *out,
+                   size_t *len) {
+    HF_CSS(runs, n);
+    hks o = {out, out + *len};
+    ok64 r = f(o, css);
+    *len = (size_t)(o[0] - out);
+    *n = (size_t)(css[1] - css[0]);
+    return r;
 }
 
-FUZZ(u64, HITfuzz) {
-    sane(1);
-    if ($len(input) > LEN) input[1] = input[0] + LEN;
-    size_t n = $len(input);
-    if (n < 2) done;
+ok64 hfMerge(int lane, hfrun *runs, size_t *n, hk *out, size_t *len) {
+    return hf_out(lane ? HIThcMerge : HIThkMerge, runs, n, out, len);
+}
 
-    // --- Split input into sorted runs ---
-    u64 swork[LEN];
-    u64cs runs[MAXRUNS];
-    size_t nruns = 0;
-    size_t wpos = 0;
-    size_t rstart = 0;
-    for (size_t i = 0; i < n; i++) {
-        u64 v = input[0][i];
-        if (v == 0 || i == n - 1) {
-            if (v != 0) swork[wpos++] = v;
-            if (wpos > rstart && nruns < MAXRUNS) {
-                u64s run = {swork + rstart, swork + wpos};
-                u64sSort(run);
-                runs[nruns][0] = swork + rstart;
-                runs[nruns][1] = swork + wpos;
-                nruns++;
-                rstart = wpos;
-            }
-        } else {
-            swork[wpos++] = v;
-        }
-    }
-    if (nruns < 1) done;
+ok64 hfMergeBag(int lane, hfrun *runs, size_t *n, hk *out, size_t *len) {
+    return hf_out(lane ? HIThcMergeBag : HIThkMergeBag, runs, n, out, len);
+}
 
-    // --- Test A: Merge via HIT, cross-check vs the naive oracle ---
-    u64cs uruns[MAXRUNS];
-    for (size_t i = 0; i < nruns; i++) {
-        uruns[i][0] = runs[i][0];
-        uruns[i][1] = runs[i][1];
-    }
-    u64css uheap = {uruns, uruns + nruns};
-    u64 ubuf[LEN];
-    u64s uout = {ubuf, ubuf + sizeof(ubuf) / sizeof(u64)};
-    call(HITu64Merge, uout, uheap);
-    size_t ulen = uout[0] - ubuf;
-    for (size_t i = 0; i + 1 < ulen; i++)
-        must(ubuf[i] < ubuf[i + 1], "merge not sorted");
+ok64 hfSeek(int lane, hfrun *runs, size_t *n, u16 key) {
+    HF_CSS(runs, n);
+    hk k = {key, (u16)~key};
+    ok64 o = lane ? HIThcSeek(css, &k) : HIThkSeek(css, &k);
+    *n = (size_t)(css[1] - css[0]);
+    return o;
+}
 
-    // Cross-check vs sort + dedup of every element
-    u64 mbuf[LEN];
-    size_t mlen = hitfuzzref(mbuf, runs, nruns, 0);
-    must(mlen == ulen, "merge length mismatch");
-    for (size_t i = 0; i < mlen; i++)
-        must(mbuf[i] == ubuf[i], "merge value mismatch");
+ok64 hfSeekRange(int lane, hfrun *runs, size_t *n, u16 lo, u16 hi) {
+    HF_CSS(runs, n);
+    hk l = {lo, 1}, h = {hi, 2};
+    ok64 o = lane ? HIThcSeekRange(css, &l, &h) : HIThkSeekRange(css, &l, &h);
+    *n = (size_t)(css[1] - css[0]);
+    return o;
+}
 
-    // --- Test B: Intersect via HIT ---
-    u64cs iruns[MAXRUNS];
-    for (size_t i = 0; i < nruns; i++) {
-        iruns[i][0] = runs[i][0];
-        iruns[i][1] = runs[i][1];
-    }
-    u64css iheap = {iruns, iruns + nruns};
-    u64 ibuf[LEN];
-    u64s iout = {ibuf, ibuf + sizeof(ibuf) / sizeof(u64)};
-    call(HITu64Intersect, iout, iheap, nruns);
-    size_t ilen = iout[0] - ibuf;
-    // intersection strictly sorted
-    for (size_t i = 0; i + 1 < ilen; i++)
-        must(ibuf[i] < ibuf[i + 1], "intersection not sorted");
-    // every intersection element must be in every run
-    for (size_t j = 0; j < ilen; j++) {
-        for (size_t r = 0; r < nruns; r++) {
-            b8 found = NO;
-            for (u64c *p = runs[r][0]; p < runs[r][1]; p++) {
-                if (*p == ibuf[j]) { found = YES; break; }
-            }
-            must(found, "inter element not in run");
-        }
-    }
-    // every element in ALL runs must be in intersection
-    for (size_t r = 0; r < nruns; r++) {
-        for (u64c *p = runs[r][0]; p < runs[r][1]; p++) {
-            b8 in_all = YES;
-            for (size_t r2 = 0; r2 < nruns; r2++) {
-                b8 found = NO;
-                for (u64c *q = runs[r2][0]; q < runs[r2][1]; q++) {
-                    if (*q == *p) { found = YES; break; }
-                }
-                if (!found) { in_all = NO; break; }
-            }
-            if (!in_all) continue;
-            b8 in_result = NO;
-            for (size_t j = 0; j < ilen; j++) {
-                if (ibuf[j] == *p) { in_result = YES; break; }
-            }
-            must(in_result, "missing from intersection");
-        }
-    }
+ok64 hfIntersect(hfrun *runs, size_t *n, size_t nruns, hk *out, size_t *len) {
+    HF_CSS(runs, n);
+    hks o = {out, out + *len};
+    ok64 r = HIThkIntersect(o, css, nruns);
+    *len = (size_t)(o[0] - out);
+    *n = (size_t)(css[1] - css[0]);
+    return r;
+}
 
-    // --- Test C: Seek + Merge cross-validation vs the naive oracle ---
-    u64 seekkey = input[0][0];
+ok64 hfIntersectMerge(hfrun *runs, size_t n, size_t half, hk *out,
+                      size_t *len) {
+    hkcs *g[2][2] = {{(hkcs *)runs, (hkcs *)runs + half},
+                     {(hkcs *)runs + half, (hkcs *)runs + n}};
+    hkcss *oh[2] = {g, g + 2};
+    hks o = {out, out + *len};
+    ok64 r = HIThksIntersectMerge(o, oh);
+    *len = (size_t)(o[0] - out);
+    return r;
+}
 
-    u64cs sruns[MAXRUNS];
-    for (size_t i = 0; i < nruns; i++) {
-        sruns[i][0] = runs[i][0];
-        sruns[i][1] = runs[i][1];
-    }
-    u64css sheap = {sruns, sruns + nruns};
-    if (!$empty(sheap))
-        HITu64Seek(sheap, &seekkey);
-    u64 sbuf[LEN];
-    u64s sout = {sbuf, sbuf + sizeof(sbuf) / sizeof(u64)};
-    call(HITu64Merge, sout, sheap);
-    size_t slen = sout[0] - sbuf;
-    for (size_t i = 0; i + 1 < slen; i++)
-        must(sbuf[i] < sbuf[i + 1], "seek merge not sorted");
-    for (size_t i = 0; i < slen; i++)
-        must(sbuf[i] >= seekkey, "seek merge element < key");
+ok64 hfCompact(int lane, hfrun *runs, size_t *n, hk *into, size_t *len) {
+    HF_CSS(runs, n);
+    hks o = {into, into + *len};
+    ok64 r = lane ? HIThcCompact(css, o) : HIThkCompact(css, o);
+    *len = (size_t)(o[0] - into);
+    *n = (size_t)(css[1] - css[0]);
+    return r;
+}
 
-    // oracle path: every element >= seekkey, sorted and deduped
-    u64 msbuf[LEN];
-    size_t mslen = hitfuzzref(msbuf, runs, nruns, seekkey);
-    must(mslen == slen, "seek length mismatch");
-    for (size_t i = 0; i < mslen; i++)
-        must(msbuf[i] == sbuf[i], "seek value mismatch");
+size_t hfCompactRuns(hfrun *runs, size_t n) {
+    HF_CSS(runs, &n);
+    return HIThkCompactRuns(css);
+}
 
-    // --- Test D: sIntersectMerge cross-validation ---
-    // Split runs into 2 groups, run sIntersectMerge, compare against
-    // individual Merge + two-pointer intersect.
-    if (nruns >= 2) {
-        size_t half = nruns / 2;
-
-        // sIntersectMerge path
-        u64cs ir1[MAXRUNS], ir2[MAXRUNS];
-        for (size_t i = 0; i < half; i++) {
-            ir1[i][0] = runs[i][0]; ir1[i][1] = runs[i][1];
-        }
-        for (size_t i = half; i < nruns; i++) {
-            ir2[i - half][0] = runs[i][0]; ir2[i - half][1] = runs[i][1];
-        }
-        u64cs *oha[2][2];
-        oha[0][0] = ir1; oha[0][1] = ir1 + half;
-        oha[1][0] = ir2; oha[1][1] = ir2 + (nruns - half);
-        u64csss imh = {oha, oha + 2};
-        u64 imbuf[LEN]; u64s imout = {imbuf, imbuf + sizeof(imbuf) / sizeof(u64)};
-        call(HITu64sIntersectMerge, imout, imh);
-        size_t imlen = imout[0] - imbuf;
-        for (size_t i = 0; i + 1 < imlen; i++)
-            must(imbuf[i] < imbuf[i + 1], "sIM not sorted");
-
-        // Reference: Merge each half, then two-pointer intersect
-        u64cs mr1[MAXRUNS], mr2[MAXRUNS];
-        for (size_t i = 0; i < half; i++) {
-            mr1[i][0] = runs[i][0]; mr1[i][1] = runs[i][1];
-        }
-        for (size_t i = half; i < nruns; i++) {
-            mr2[i - half][0] = runs[i][0]; mr2[i - half][1] = runs[i][1];
-        }
-        u64css mh1 = {mr1, mr1 + half};
-        u64css mh2 = {mr2, mr2 + (nruns - half)};
-        u64 m1[LEN]; u64s m1o = {m1, m1 + sizeof(m1) / sizeof(u64)};
-        u64 m2[LEN]; u64s m2o = {m2, m2 + sizeof(m2) / sizeof(u64)};
-        call(HITu64Merge, m1o, mh1);
-        call(HITu64Merge, m2o, mh2);
-        size_t m1len = m1o[0] - m1, m2len = m2o[0] - m2;
-
-        u64 refbuf[LEN]; size_t reflen = 0;
-        size_t p1 = 0, p2 = 0;
-        while (p1 < m1len && p2 < m2len) {
-            if (m1[p1] < m2[p2]) p1++;
-            else if (m1[p1] > m2[p2]) p2++;
-            else { refbuf[reflen++] = m1[p1]; p1++; p2++; }
-        }
-        must(imlen == reflen, "sIM length mismatch");
-        for (size_t i = 0; i < reflen; i++)
-            must(imbuf[i] == refbuf[i], "sIM value mismatch");
-    }
-
-    done;
+b8 hfIsCompact(hfrun *runs, size_t n) {
+    HF_CSS(runs, &n);
+    return HIThkIsCompact(css);
 }
