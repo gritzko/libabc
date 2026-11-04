@@ -144,11 +144,11 @@ fun ok64 X(BOX, Put)(X(, csb) h, BOX_T const *rec) {
     BOX_T **rb = X(BOX, Mem)(h);
     if (X(BOX, _isMax)(rec)) return BADARG;
     if (rb[2] == rb[3]) return NOROOM;
+    X(, cs) **sb = (X(, cs) **)h;
+    b8 seal = (size_t)(rb[2] + 1 - rb[1]) * sizeof(BOX_T) > ABC_BOX_SEG;
+    if (seal && sb[2] == sb[3]) return FULL;
     *rb[2]++ = *rec;
-    if ((size_t)(rb[2] - rb[1]) * sizeof(BOX_T) <= ABC_BOX_SEG) return OK;
-    ok64 o = X(BOX, Sort)(h, NO);
-    if (o != OK) rb[2]--;  //  Sort fails before it changes anything
-    return o;
+    return seal ? X(BOX, Sort)(h, NO) : OK;
 }
 
 //  Append a batch as ONE run: seal the pending segment, qsort the batch in

@@ -346,6 +346,7 @@ ok64 BOXfullput() {
     u64 x = 999, got = 0;
     want(BOXu64Put(h, &x) == FULL);
     want(recs[2] == seg);
+    want(*seg != x);  //  BOX-26B04JISf_: IDLE not scribbled
     want(BOXu64Get(&got, h, &x) == NONE);
     u64cs xs = {&x, &x + 1};
     want(BOXu64PutBatch(h, xs) == FULL);

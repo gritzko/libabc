@@ -47,12 +47,11 @@ typedef struct {
     typeof(HITbkMerge) *merge;
 } bflane;
 
-//  The rows compared are PAST and DATA: a refused Put may scribble on IDLE.
+//  All rows compared, IDLE too: a failed write changes nothing.
 typedef struct {
     bkcs cells[BF_CELLS];
     bkcs *h[4];
     bk rows[BF_ROWS];
-    size_t len;
 } bfsnap;
 
 static bflane LANES[2] = {
@@ -96,14 +95,13 @@ size_t bfRuns(int lane) {
 static void bf_snap(bflane const *l) {
     memcpy(SNAP.cells, l->cells, sizeof(l->cells));
     memcpy(SNAP.h, l->h, sizeof(l->h));
-    SNAP.len = (size_t)(BOXbkMem((bkcs **)l->h)[2] - l->rows);
-    memcpy(SNAP.rows, l->rows, SNAP.len * sizeof(bk));
+    memcpy(SNAP.rows, l->rows, sizeof(l->rows));
 }
 
 static b8 bf_same(bflane const *l) {
     return !memcmp(SNAP.cells, l->cells, sizeof(l->cells)) &&
            !memcmp(SNAP.h, l->h, sizeof(l->h)) &&
-           !memcmp(SNAP.rows, l->rows, SNAP.len * sizeof(bk));
+           !memcmp(SNAP.rows, l->rows, sizeof(l->rows));
 }
 
 ok64 bfPut(int lane, bk r, b8 *same) {
