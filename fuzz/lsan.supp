@@ -1,0 +1,4 @@
+# FUZZ-26B04IO_g6: libFuzzer's private operator new, as addr2line names it;
+# on musl LSan loses FuzzerDriver.cpp:832's 56 B at exit.  Not FuzzerDriver:
+# that frame is in every input's stack and would hide all leaks.
+leak:cxa_noexception.cpp

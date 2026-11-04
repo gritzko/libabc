@@ -1,5 +1,5 @@
 #!/bin/sh
-# .beagle/sandbox.sh <configure|build|test|asan> [ARG...] | run CMD... — the
+# .beagle/sandbox.sh <configure|build|test|asan|fuzz> [ARG...] | run CMD... — the
 # local runner, cherry-picked from bee.  bwrap binds the tree rw at /work (ro when
 # BEAGLE_RO is set), /usr, /etc and the toolchain ro, $BEAGLE_CCACHE at /ccache
 # and $BEAGLE_ROOT at /root when set, then runs .beagle/build.sh <step> [ARG...]
@@ -17,8 +17,8 @@
 set -eu
 STEP=${1:-build}
 [ $# -gt 0 ] && shift
-case "$STEP" in configure|build|test|asan|run) ;;
-    *) echo "sandbox.sh: unknown step '$STEP' (configure|build|test|asan|run)" >&2; exit 2 ;;
+case "$STEP" in configure|build|test|asan|fuzz|run) ;;
+    *) echo "sandbox.sh: unknown step '$STEP' (configure|build|test|asan|fuzz|run)" >&2; exit 2 ;;
 esac
 [ "$STEP" = run ] && [ $# = 0 ] && { echo "sandbox.sh: run: no command" >&2; exit 2; }
 TREE=${BEAGLE_WORK:-$(cd "$(dirname "$0")/.." && pwd -P)}

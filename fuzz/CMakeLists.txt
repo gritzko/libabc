@@ -14,7 +14,15 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FUZZ_LDD_FLAGS}")
 
 add_executable(HEAPfuzz HEAP.c ../RON.c)
 
-add_executable(HASHfuzz HASH.cpp)
+#  FUZZ-26B04IO_g6: clang++ on Alpine finds no libstdc++ headers;
+#  HASH.cpp goes away in FUZZ-26B04IZDFD
+include(CheckIncludeFileCXX)
+check_include_file_cxx(cassert ABC_HAVE_CASSERT)
+if (ABC_HAVE_CASSERT)
+    add_executable(HASHfuzz HASH.cpp)
+else ()
+    message(STATUS "abc: skipped: HASHfuzz (no C++ headers)")
+endif ()
 
 add_executable(HASHdfuzz HASHd.c)
 
@@ -56,3 +64,16 @@ add_executable(BITfuzz BIT.c ../RON.c)
 #add_executable(SST SST.c)
 #target_link_options(SST PRIVATE "${FUZZ_LDD_FLAGS}")
 #target_compile_options(SST PRIVATE "${FUZZ_C_FLAGS}")
+
+#  FUZZ-26B04IO_g6: TARGETfuzz replays the local, uncommitted corpus/TARGET/
+#  once, no fuzzing; lsan.supp mutes a musl libFuzzer leak
+file(GLOB FUZZ_CORPORA CONFIGURE_DEPENDS LIST_DIRECTORIES true
+    ${CMAKE_CURRENT_SOURCE_DIR}/corpus/*)
+foreach (dir ${FUZZ_CORPORA})
+    get_filename_component(t ${dir} NAME)
+    if (TARGET ${t}fuzz)
+        add_test(NAME ${t}fuzz COMMAND ${t}fuzz -runs=0 -timeout=25 ${dir})
+        set_tests_properties(${t}fuzz PROPERTIES LABELS fuzz ENVIRONMENT
+            "ASAN_OPTIONS=allow_addr2line=1;LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
+    endif ()
+endforeach ()

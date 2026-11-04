@@ -1,5 +1,5 @@
 #!/bin/sh
-# .beagle/build.sh <configure|build|test|asan> [SUITE...] — abc's build, run
+# .beagle/build.sh <configure|build|test|asan|fuzz> [SUITE...] — abc's build, run
 # at the tree root by .beagle/sandbox.sh or bare.  cmake+ninja into build/,
 # clang with compiler-rt (BOOT-26A23Apv3i: Alpine's clang links nothing
 # without it).  lz4/sodium are optional in CMakeLists: suites needing a
@@ -19,6 +19,14 @@ if [ "${1:-}" = asan ]; then
     shift; set -- test "$@"
     CF="$CF -fsanitize=address,undefined" LF=--unwindlib=libunwind
     CM=-DWITH_ASAN=ON B=build-asan
+fi
+# FUZZ-26B04IO_g6: `fuzz [SUITE...]` builds build-fuzz/ (WITH_FUZZ: ASAN), with
+# UBSAN=1 build-fuzz-ubsan/; runs the corpus replays (label fuzz) or SUITE.
+L=
+if [ "${1:-}" = fuzz ]; then
+    shift; set -- test "$@"
+    LF=--unwindlib=libunwind CM=-DWITH_FUZZ=ON B=build-fuzz L="-L fuzz"
+    [ -z "${UBSAN:-}" ] || CM="$CM -DWITH_UBSAN=ON" B=build-fuzz-ubsan
 fi
 configure() {
     cmake -S . -B "$B" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -50,7 +58,7 @@ case "${1:-}" in
               exit $r
           fi
           O=$B/ctest.out
-          ctest --test-dir "$B" -j16 --output-on-failure >"$O" 2>&1 || :
+          ctest --test-dir "$B" -j16 $L --output-on-failure >"$O" 2>&1 || :
           cat "$O"
           # ` 3/61 Test  #3: Stest ....   Passed    0.01 sec`
           #          `...***Failed    0.02 sec`, `...***Timeout  20.00 sec`
@@ -71,5 +79,5 @@ case "${1:-}" in
           skipped
           echo "build.sh test: $((ALL - nf))/$ALL suites passed${FAILED:+, failed: $FAILED}"
           exit $nf ;;
-    *) echo "build.sh: unknown step '${1:-}' (configure|build|test|asan)" >&2; exit 2 ;;
+    *) echo "build.sh: unknown step '${1:-}' (configure|build|test|asan|fuzz)" >&2; exit 2 ;;
 esac

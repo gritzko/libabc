@@ -17,3 +17,6 @@ work/
 .fork
 .index*
 .test
+
+# FUZZ-26B04IO_g6: fuzz corpora are local, never committed
+fuzz/corpus/
