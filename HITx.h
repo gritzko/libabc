@@ -336,9 +336,13 @@ fun size_t X(HIT, _cssTops)(X(, csss) oh) {
 }
 
 fun ok64 X(HIT, sIntersectMerge)(X(, s) into, X(, csss) oheap) {
-    // Filter empty inner HITs
+    // Filter empty runs, then empty inner HITs: _cssTop reads every head
     X(, css) *w = oheap[0];
     for (X(, css) *r = oheap[0]; r < oheap[1]; r++) {
+        HIT_E *q = (*r)[0];
+        for (HIT_E *p = (*r)[0]; p < (*r)[1]; p++)
+            if (!$empty(*p)) X(, csMv)(*q++, *p);
+        (*r)[1] = q;
         if (!$empty(*r)) {
             if (w != r) X(HIT, _cssSwap)(w, r);
             w++;

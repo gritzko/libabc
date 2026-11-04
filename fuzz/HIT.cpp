@@ -193,17 +193,16 @@ FUZZ(u8, HITfuzz) {
         out.resize(len);
         must(full ? o == FULL : o == OK && hf_eq(want, out), "Intersect");
     }
-    //  sIntersectMerge of the two halves, keys only; an empty run is read
-    //  past its end (HITx.h:288 _cssTop, FUZZ-26B04IqDqU), so none here
-    b8 holes = NO;
-    for (auto const &r : runs) holes |= r.lo == r.hi;
-    if (n >= 2 && !full && !holes) {
+    //  sIntersectMerge of the two halves, keys only
+    if (n >= 2 && !full) {
         size_t half = n / 2;
         hfmodel a = hf_model(hfruns(runs.begin(), runs.begin() + half), 0),
                 b = hf_model(hfruns(runs.begin() + half, runs.end()), 0);
         std::vector<u16> want;
-        for (auto const &kv : a)
-            if (b.count(kv.first)) want.push_back(kv.first);
+        //  an empty inner HIT is dropped, not intersected (HIT17)
+        for (auto const &kv : a.empty() ? b : a)
+            if (a.empty() || b.empty() || b.count(kv.first))
+                want.push_back(kv.first);
         hfruns c = runs;
         size_t len = total + 1;
         out.resize(len);

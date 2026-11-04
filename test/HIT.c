@@ -461,6 +461,20 @@ ok64 HIT17() {
     done;
 }
 
+// HIT17b: sIntersectMerge — empty runs inside inner HITs (HIT-26B04JerQx)
+ok64 HIT17b() {
+    sane(1);
+    u64 a[] = {1, 2, 3};
+    u64cs r0[] = {{a, a}, {a, a + 3}}, r1[] = {{a + 1, a + 2}, {a, a}};
+    u64cs *oh[2][2] = {{r0, r0 + 2}, {r1, r1 + 2}};
+    u64csss heap = {oh, oh + 2};
+    u64 buf[4]; u64s out = {buf, buf + 4};
+    call(HITu64sIntersectMerge, out, heap);
+    testeqv((long long)(out[0] - buf), 1LL, "%lld");
+    testeqv((long long)buf[0], 2LL, "%lld");
+    done;
+}
+
 // HIT18: sIntersectMerge — identical inner HITs → same as merge
 ok64 HIT18() {
     sane(1);
@@ -791,6 +805,7 @@ ok64 HITtest() {
     call(HIT15);
     call(HIT16);
     call(HIT17);
+    call(HIT17b);
     call(HIT18);
     call(HIT19);
     call(HIT20);
