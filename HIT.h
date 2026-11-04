@@ -16,6 +16,9 @@
 #define ABC_HIT_MAX_RUNS 64
 #define ABC_HIT_LADDER_DIV 8  //  1/8 size-tiered: run i+1 < run i / DIV
 
+// PUPS-26B045Ffpb: ABC_X_MERGE, the one per-instance knob HITx, BOXx and PUPx
+// read: equal keys fold by X(,Merge), oldest first; the outermost undefs it.
+
 // YES when every newer run is under 1/8 of the one before it.
 fun b8 HITLadderOK(u64csc lens) {
     i64 n = u64csLen(lens);

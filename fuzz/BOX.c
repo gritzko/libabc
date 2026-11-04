@@ -12,7 +12,6 @@
 
 #define ABC_BOX_SEG 8  //  4 rows
 #define X(M, name) M##u16##name
-#include "HITx.h"
 #include "BOXx.h"
 #undef X
 
@@ -23,21 +22,23 @@ FUZZ(u16, BOXfuzz) {
     if ($len(input) > (i64)MAX_INPUT_N) input[1] = input[0] + MAX_INPUT_N;
     if ($empty(input)) done;
 
-    a_pad(u16, recs, MAX_INPUT_N + 1);
-    a_pad(u16cs, runs, ABC_HIT_MAX_RUNS);
+    a_pad(u16, mem, MAX_INPUT_N + 1);
+    a_box(u16, h);
+    u16 **recs = BOXu16Mem(h);
+    recs[0] = recs[1] = recs[2] = mem[0], recs[3] = mem[3];  //  stack memtable
     u8 seen[1 << 16] = {};
 
     $for(u16c, p, input) {
         u16 v = *p;
         if (v == u16max) {
-            must(BOXu16Put(recs, runs, &v) == BADARG, "tombstone taken");
+            must(BOXu16Put(h, &v) == BADARG, "tombstone taken");
             continue;
         }
-        must(BOXu16Put(recs, runs, &v) == OK, "Put");
+        must(BOXu16Put(h, &v) == OK, "Put");
         seen[v] = 1;
         u16 const *at = recs[0];
         a_pad(u64, lens, ABC_HIT_MAX_RUNS);
-        for (u16cs *r = runs[1]; r < runs[2]; r++) {
+        for (u16cs const *r = h[1]; r < h[2]; r++) {
             must((*r)[0] == at, "runs not back to back");
             for (u16 const *q = (*r)[0] + 1; q < (*r)[1]; q++)
                 must(q[-1] < *q, "run not strictly ascending");
@@ -49,11 +50,11 @@ FUZZ(u16, BOXfuzz) {
     }
     for (u32 k = 0; k < u16max; k++) {
         u16 key = (u16)k, got = 0;
-        ok64 o = BOXu16Get(&got, recs, runs, &key);
+        ok64 o = BOXu16Get(&got, h, &key);
         must(seen[k] ? (o == OK && got == key) : o == NONE, "Get");
     }
-    must(BOXu16Sort(recs, runs, YES) == OK, "Sort all");
-    must(runs[2] - runs[1] <= 1, "one run");
+    must(BOXu16Sort(h, YES) == OK, "Sort all");
+    must(h[2] - h[1] <= 1, "one run");
     u16 const *q = recs[0];
     for (u32 k = 0; k < u16max; k++)
         if (seen[k]) must(q < recs[1] && *q++ == k, "oracle");

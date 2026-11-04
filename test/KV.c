@@ -7,14 +7,12 @@
 #define X(M, name) M##kv128##name
 #define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
-#include "HITx.h"
 #include "BOXx.h"
 #undef X
 
 #define X(M, name) M##k96v32##name
 #define ABC_HASH_LINE 16  // 16-slot tables below
 #include "HASHx.h"
-#include "HITx.h"
 #include "BOXx.h"
 #undef X
 
@@ -53,26 +51,25 @@ ok64 KV128hash() {
 //  BOX: the youngest row of a key wins
 ok64 KV128box() {
     sane(1);
-    Bkv128 recs = {};
+    a_box(kv128, h);
+    kv128 **recs = BOXkv128Mem(h);
     call(kv128bMap, recs, 1 << 14);
-    kv128cs slots[ABC_HIT_MAX_RUNS];
-    kv128csb runs = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     u64 last[100] = {};
     for (u64 i = 1; i <= 2000; i++) {
         u64 k = (i * 37) % 100;
         kv128 r = kv128of(k, i);
         last[k] = i;
-        call(BOXkv128Put, recs, runs, &r);
+        call(BOXkv128Put, h, &r);
     }
     for (u64 k = 0; k < 100; k++) {
         kv128 key = kv128of(k, 0), got = {};
-        call(BOXkv128Get, &got, recs, runs, &key);
+        call(BOXkv128Get, &got, h, &key);
         want(got.val._64[0] == last[k]);
     }
-    call(BOXkv128Sort, recs, runs, YES);
-    want(runs[2] - runs[1] == 1);
-    want(runs[1][0][1] - runs[1][0][0] == 100);
-    for (kv128 const *p = runs[1][0][0]; p < runs[1][0][1]; p++)
+    call(BOXkv128Sort, h, YES);
+    want(h[2] - h[1] == 1);
+    want(h[1][0][1] - h[1][0][0] == 100);
+    for (kv128 const *p = h[1][0][0]; p < h[1][0][1]; p++)
         want(p->val._64[0] == last[p->key._64[0]]);
     kv128bUnMap(recs);
     done;
@@ -143,26 +140,25 @@ ok64 K96V32hash() {
 //  BOX: the youngest row of a key wins
 ok64 K96V32box() {
     sane(1);
-    Bk96v32 recs = {};
+    a_box(k96v32, h);
+    k96v32 **recs = BOXk96v32Mem(h);
     call(k96v32bMap, recs, 1 << 14);
-    k96v32cs slots[ABC_HIT_MAX_RUNS];
-    k96v32csb runs = {slots, slots, slots, slots + ABC_HIT_MAX_RUNS};
     u32 last[100] = {};
     for (u32 i = 1; i <= 2000; i++) {
         u64 k = (i * 37) % 100;
         k96v32 r = {.k0 = k, .k1 = (u32)(k % 3), .val = i};
         last[k] = i;
-        call(BOXk96v32Put, recs, runs, &r);
+        call(BOXk96v32Put, h, &r);
     }
     for (u64 k = 0; k < 100; k++) {
         k96v32 key = {.k0 = k, .k1 = (u32)(k % 3)}, got = {};
-        call(BOXk96v32Get, &got, recs, runs, &key);
+        call(BOXk96v32Get, &got, h, &key);
         want(got.val == last[k]);
     }
-    call(BOXk96v32Sort, recs, runs, YES);
-    want(runs[2] - runs[1] == 1);
-    want(runs[1][0][1] - runs[1][0][0] == 100);
-    for (k96v32 const *p = runs[1][0][0]; p < runs[1][0][1]; p++)
+    call(BOXk96v32Sort, h, YES);
+    want(h[2] - h[1] == 1);
+    want(h[1][0][1] - h[1][0][0] == 100);
+    for (k96v32 const *p = h[1][0][0]; p < h[1][0][1]; p++)
         want(p->val == last[p->k0] && p->k1 == p->k0 % 3);
     k96v32bUnMap(recs);
     done;

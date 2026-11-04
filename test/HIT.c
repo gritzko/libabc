@@ -28,7 +28,7 @@ fun void dig64Merge(dig64 *acc, dig64 const *nxt) {
 }
 #define X(M, name) M##dig64##name
 #include "Bx.h"
-#define ABC_HIT_MERGE
+#define ABC_X_MERGE
 #include "HITx.h"
 #undef X
 
@@ -754,7 +754,7 @@ ok64 HIT27() {
     done;
 }
 
-// ABC-26B02JHe_k: with ABC_HIT_MERGE, equal keys fold in run (age) order
+// ABC-26B02JHe_k: with ABC_X_MERGE, equal keys fold in run (age) order
 ok64 HITmerge() {
     sane(1);
     dig64 a[] = {{1, 1}, {2, 1}, {5, 1}};

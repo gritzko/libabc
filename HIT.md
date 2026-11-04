@@ -12,9 +12,11 @@ A HIT is a min-heap of sorted slices (iterators). Instantiate with the
 The element type gives `X(,Z)` and `X(,KeyEq)` (the key view, depot
 wiki/Containers.mkd); the heap types `X(,cspb)`, `X(,csss)` come from Sx.
 HITx defines nothing in the type's own namespace; its internals are
-`_lowercase`.  `ABC_HIT_MERGE` (defined: on) makes Merge fold equal keys
-oldest first by `X(,Merge)(acc, younger)` instead of the youngest winning;
-undefined at the end of HITx.h.
+`_lowercase`.  `ABC_X_MERGE` (defined: on; HIT.h) makes Merge fold equal
+keys oldest first by `X(,Merge)(acc, younger)` instead of the youngest
+winning.  It is one knob per instance, read by HITx, BOXx and PUPx alike
+(PUPS-26B045Ffpb); the outermost of them undefines it (BOXx and PUPx
+include HITx themselves).  The retired `ABC_HIT_MERGE` is a compile error.
 
 Codes: `OK`; `NONE` nothing left (Seek, SeekRange); `NOROOM` the output
 slice filled; `FULL` more than `ABC_HIT_MAX_RUNS` runs.  The destination
@@ -89,7 +91,7 @@ is damaged or foreign; the cure is to drop the runs and re-derive.
 Drains the heap producing a sorted, deduplicated sequence. Each step
 pops the minimum, advances all entries that had that key, skips
 remaining duplicates.  The youngest run's row is emitted, or with
-`ABC_HIT_MERGE` the fold of all equal rows in age order.
+`ABC_X_MERGE` the fold of all equal rows in age order.
 
 ```c
 u64cs runs[3] = {{a, a+4}, {b, b+3}, {c, c+5}};

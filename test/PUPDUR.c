@@ -1,7 +1,7 @@
 //  CODE-26A23C8gS9, CODE-26A23CSStk: crash durability of a run.
 //  (1) a durable create fsyncs the run before its rename and the directory
 //      after it; the plain create keeps the fast path (no fsync at all);
-//  (2) PUPOpenAll never returns OK with a run missing: a 0-byte run (what a
+//  (2) Open never returns OK with a run missing: a 0-byte run (what a
 //      crashed non-durable create leaves) fails; PUPS-26A276Xh2e: a run holds
 //      no fd, so an fd budget smaller than the stack reads it whole.
 #include "PUPS.h"
@@ -21,6 +21,10 @@
 #include "TEST.h"
 
 #include "TESTBE.h"
+
+#define X(M, name) M##kv64##name
+#include "PUPx.h"
+#undef X
 
 //  fsync shim: libabc is linked statically, so FILESync's fsync() binds to
 //  this definition; it counts file and directory syncs, then syncs for real.
@@ -64,33 +68,24 @@ static ok64 PUPDurCreate(void) {
     want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
     a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
     a_cstr(ext, ".dur.idx");
-    a_cstr(body, "sixteen-byte-row");
-    a_dup(u8c, b, body);
-    Bpup256 pups = {};
-    call(pup256bAllocate, pups, 8);
-
-    dur_reset();
-    call(PUPCreateAt, pups, $path(dir), ext, b, 1000);
-    call(PUPCreate, pups, $path(dir), ext, b);
-    want(dur_file_syncs == 0 && dur_dir_syncs == 0);  //  the fast path
-
-    dur_reset();
-    call(PUPCreateAtAs, pups, $path(dir), ext, b, 1001, YES);
-    want(dur_file_syncs == 1 && dur_dir_syncs == 1);
-    dur_reset();
-    call(PUPCreateAs, pups, $path(dir), ext, b, YES);
-    want(dur_file_syncs == 1 && dur_dir_syncs == 1);
-    dur_reset();
-    call(PUPCreateAs, pups, $path(dir), ext, b, NO);
-    want(dur_file_syncs == 0 && dur_dir_syncs == 0);
-    want(PUPCount(pups) == 5);
-
-    call(PUPClose, pups);
+    kv64 row = {1, 10};
+    kv64cs b = {&row, &row + 1};
+    a_pup(kv64, h);
+    u64 const key[5] = {1000, 0, 1001, 0, 0};
+    b8 const dur[5] = {NO, NO, YES, YES, NO};
+    for (int i = 0; i < 5; i++) {
+        dur_reset();
+        call(PUPkv64Create, h, h_keys, $path(dir), ext, b, key[i], dur[i],
+             NULL);
+        want(dur_file_syncs == dur[i] && dur_dir_syncs == dur[i]);
+    }
+    want(Bpastlen(h) == 5);
+    PUPkv64Close(h, h_keys);
     TESTBErmrf(tmp);
     done;
 }
 
-// --- (2) PUPOpenAll fails loudly -------------------------------------
+// --- (2) Open fails loudly -------------------------------------
 
 //  A crashed non-durable create: the rename survived, the bytes did not.
 static ok64 PUPDurEmptyRun(void) {
@@ -104,11 +99,10 @@ static ok64 PUPDurEmptyRun(void) {
     call(dur_put, tmp, ext, 1001, 0);
     call(dur_put, tmp, ext, 1002, 32);
 
-    Bpup256 pups = {};
-    call(pup256bAllocate, pups, 8);
-    ok64 o = PUPOpenAll(pups, $path(dir), ext);
+    a_pup(kv64, h);
+    ok64 o = PUPkv64Open(h, h_keys, $path(dir), ext, u64max);
     want(o == PUPEMPTY);
-    call(PUPClose, pups);
+    PUPkv64Close(h, h_keys);
     //  the run is left on disk for the owner to judge, never unlinked
     {
         a_pad(u8, name, PUP_SEQNO_W + 32);
@@ -138,11 +132,10 @@ static ok64 PUPDurNoFile(void) {
         struct rlimit rl = {.rlim_cur = LIM, .rlim_max = LIM};
         if (setrlimit(RLIMIT_NOFILE, &rl) != 0) _exit(3);
         a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
-        Bpup256 pups = {};
-        if (pup256bAllocate(pups, N + 4) != OK) _exit(3);
-        ok64 o = PUPOpenAll(pups, $path(dir), ext);
-        u32 n = PUPCount(pups);
-        PUPClose(pups);
+        a_pup(kv64, h);
+        ok64 o = PUPkv64Open(h, h_keys, $path(dir), ext, u64max);
+        u32 n = (u32)Bpastlen(h);
+        PUPkv64Close(h, h_keys);
         if (o != OK || n != (u32)N) {
             fprintf(stderr, "PUPDurNoFile: %u of %d runs\n", n, N);
             _exit(1);

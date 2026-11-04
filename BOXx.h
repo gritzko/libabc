@@ -1,7 +1,7 @@
 //  abc/BOXx.h — BOX-26A26EbjLj: an in-memory sorted container of fixed-size
-//  records, an LSM in two caller-mapped buffers (BOX.md "Layout"): `recs`
-//  X(,b), the sorted runs in PAST and the unsorted segment in DATA; `runs`
-//  X(,csb), one ascending slice per run, oldest first, fed to HITx as is.
+//  records, an LSM in one house (PUPS-26B045Ffpb, BOX.md "Layout"): the
+//  memtable X(,b) holds the sorted runs in PAST, the unsorted segment in DATA;
+//  the house DATA cells slice those runs, oldest first, fed to HITx as is.
 //  Past ABC_BOX_SEG bytes, X(BOX,Sort) seals the segment: (1) stable-sort and
 //  fold it, (2) pick the tail by the 1/8 ladder (HITLadderOverRuns), (3) one
 //  in-place pass folds equal keys (X(,Merge), else the youngest wins), (4)
@@ -13,11 +13,19 @@
 #include "OK.h"
 #include "S.h"
 
-#define BOX_T X(, )
-
-#if defined(BOXx_C) || defined(BOXx_MERGE)
-#error "BOXx_C, BOXx_MERGE are retired: ABC_BOX_SEG, ABC_BOX_MERGE + X(,Merge)"
+#if defined(BOXx_C) || defined(BOXx_MERGE) || defined(ABC_BOX_MERGE)
+#error "BOXx_C, BOXx_MERGE, ABC_BOX_MERGE are retired: ABC_X_MERGE (HIT.h)"
 #endif
+
+//  PUPS-26B045Ffpb: BOX instantiates its HITx; the outermost header of the
+//  instance drops the shared ABC_X_MERGE knob (HIT.h).
+#ifndef ABC_X_NEST
+#define ABC_X_NEST
+#define BOX_X_OUTER
+#endif
+#include "HITx.h"
+
+#define BOX_T X(, )
 
 #ifndef ABC_BOX_SEG
 #define ABC_BOX_SEG 512  //  c: the unsorted segment's length in BYTES
@@ -35,7 +43,7 @@ fun BOX_T *X(BOX, _dedup)(BOX_T *lo, BOX_T *hi) {
     BOX_T *w = lo;
     for (BOX_T *r = lo + 1; r < hi; r++) {
         if (X(, KeyEq)(w, r)) {
-#ifdef ABC_BOX_MERGE
+#ifdef ABC_X_MERGE
             X(, Merge)(w, r);
 #else
             *w = *r;
@@ -70,7 +78,7 @@ fun void X(BOX, _pass)(X(, css) sel) {
             if ($empty(*r) || !X(, KeyEq)((*r)[0], &key)) continue;
             BOX_T *at = (BOX_T *)(*r)[0]++;
             if (last) {
-#ifdef ABC_BOX_MERGE
+#ifdef ABC_X_MERGE
                 X(, Merge)(last, at);
                 *at = *last;
 #endif
@@ -81,15 +89,17 @@ fun void X(BOX, _pass)(X(, css) sel) {
     }
 }
 
+//  The memtable: the house's last two cells read as a X(,b), owner-mapped.
+fun X(, ) **X(BOX, Mem)(X(, csb) h) { return (X(, ) **)h[3]; }
+
 //  Seal the segment into a run, then collapse the tailing runs the 1/8 ladder
-//  selects — or, with `all`, every run into one.  FULL: no run slot left or
-//  more than ABC_HIT_MAX_RUNS runs; checked first, nothing changes then.
-fun ok64 X(BOX, Sort)(X(, b) recs, X(, csb) runs, b8 all) {
-    BOX_T **rb = (BOX_T **)recs;
-    X($, c) **sb = (X($, c) **)runs;
+//  selects — or, with `all`, every run into one.  FULL: no free house cell;
+//  checked first, nothing changes then.
+fun ok64 X(BOX, Sort)(X(, csb) h, b8 all) {
+    BOX_T **rb = X(BOX, Mem)(h);
+    X(, cs) **sb = (X(, cs) **)h;
     b8 seg = rb[2] > rb[1];
     if (seg && sb[2] == sb[3]) return FULL;
-    if ((size_t)(sb[2] - sb[1]) + seg > ABC_HIT_MAX_RUNS) return FULL;
     if (seg) {
         BOX_T *end = X(BOX, _fold)(rb[1], rb[2]);
         (*sb[2])[0] = rb[1];
@@ -101,12 +111,12 @@ fun ok64 X(BOX, Sort)(X(, b) recs, X(, csb) runs, b8 all) {
     size_t m = n;
     if (!all) {
         a_pad(u64, lens, ABC_HIT_MAX_RUNS);
-        for (X($, c) *r = sb[1]; r < sb[2]; r++)
-            u64bFeed1(lens, (u64)((*r)[1] - (*r)[0]));
+        for (X(, cs) *r = sb[1]; r < sb[2]; r++)
+            u64bFeed1(lens, (u64)$len(*r));
         m = HITLadderOverRuns(u64bDataC(lens));
     }
     if (m < 2) return OK;
-    X($, c) *sel = sb[2] - m;
+    X(, cs) *sel = sb[2] - m;
     BOX_T *lo = (BOX_T *)sel[0][0];
     BOX_T *hi = (BOX_T *)sel[m - 1][1];
     //  runs already in order (ascending keys): adjacent, no equal keys, done
@@ -128,39 +138,36 @@ fun ok64 X(BOX, Sort)(X(, b) recs, X(, csb) runs, b8 all) {
 }
 
 //  Append one record; past c bytes the segment becomes a run (X(BOX,Sort)).
-//  BADARG: a Max-key row; NOROOM: recs has no IDLE; FULL: the seal finds no
-//  run slot.  On an error nothing is stored.
-fun ok64 X(BOX, Put)(X(, b) recs, X(, csb) runs, BOX_T const *rec) {
-    BOX_T **rb = (BOX_T **)recs;
+//  BADARG: a Max-key row; NOROOM: the memtable has no IDLE; FULL: the seal
+//  finds no house cell.  On an error nothing is stored.
+fun ok64 X(BOX, Put)(X(, csb) h, BOX_T const *rec) {
+    BOX_T **rb = X(BOX, Mem)(h);
     if (X(BOX, _isMax)(rec)) return BADARG;
     if (rb[2] == rb[3]) return NOROOM;
     *rb[2]++ = *rec;
     if ((size_t)(rb[2] - rb[1]) * sizeof(BOX_T) <= ABC_BOX_SEG) return OK;
-    ok64 o = X(BOX, Sort)(recs, runs, NO);
+    ok64 o = X(BOX, Sort)(h, NO);
     if (o != OK) rb[2]--;  //  Sort fails before it changes anything
     return o;
 }
 
 //  Append a batch as ONE run: seal the pending segment, qsort the batch in
 //  place (NOT stable: equal keys inside a batch fold in no order, the merge op
-//  must not care), fold it, then run the ladder once.  Codes as Put; on an
-//  error no row of the batch is stored.
-fun ok64 X(BOX, PutBatch)(X(, b) recs, X(, csb) runs, BOX_T const *rows,
-                          size_t n) {
-    BOX_T **rb = (BOX_T **)recs;
-    X($, c) **sb = (X($, c) **)runs;
+//  must not care), fold it, then run the ladder once.  Codes as Put.
+fun ok64 X(BOX, PutBatch)(X(, csb) h, X(, csc) rows) {
+    BOX_T **rb = X(BOX, Mem)(h);
+    X(, cs) **sb = (X(, cs) **)h;
+    size_t n = (size_t)$len(rows);
     if (n == 0) return OK;
-    for (size_t i = 0; i < n; i++)
-        if (X(BOX, _isMax)(rows + i)) return BADARG;
+    $for(BOX_T const, r, rows) if (X(BOX, _isMax)(r)) return BADARG;
     if (rb[2] > rb[1]) {
-        ok64 o = X(BOX, Sort)(recs, runs, NO);
+        ok64 o = X(BOX, Sort)(h, NO);
         if (o != OK) return o;
     }
     if ((size_t)(rb[3] - rb[2]) < n) return NOROOM;
-    if (sb[2] == sb[3] || (size_t)(sb[2] - sb[1]) >= ABC_HIT_MAX_RUNS)
-        return FULL;
+    if (sb[2] == sb[3]) return FULL;
     BOX_T *lo = rb[2];
-    memcpy(lo, rows, n * sizeof(BOX_T));
+    memcpy(lo, rows[0], n * sizeof(BOX_T));
     X(, s) batch = {lo, lo + n};
     X(, sSort)(batch);
     BOX_T *end = X(BOX, _dedup)(lo, lo + n);
@@ -168,47 +175,47 @@ fun ok64 X(BOX, PutBatch)(X(, b) recs, X(, csb) runs, BOX_T const *rows,
     (*sb[2])[1] = end;
     sb[2]++;
     rb[1] = rb[2] = end;
-    return X(BOX, Sort)(recs, runs, NO);
+    return X(BOX, Sort)(h, NO);
 }
 
-//  Point lookup: runs plus the segment, newest wins (or the X(,Merge) fold
-//  in age order).  NONE when no record carries the key.
-fun ok64 X(BOX, Get)(BOX_T *out, X(, b) recs, X(, csb) runs,
-                     BOX_T const *key) {
-    X($, c) **sb = (X($, c) **)runs;
-    BOX_T const **rb = (BOX_T const **)recs;
-#ifdef ABC_BOX_MERGE
-    b8 hit = NO;
-    for (X($, c) *r = sb[1]; r < sb[2]; r++) {
+#ifdef ABC_X_MERGE
+//  Fold one more (younger) version of the key into `out`.
+fun void X(BOX, _add)(BOX_T *out, BOX_T const *p, b8 *hit) {
+    if (*hit) X(, Merge)(out, p);
+    else *out = *p;
+    *hit = YES;
+}
+
+//  The X(,Merge) fold of the DATA runs and the segment onto `out`, oldest
+//  first; PUP Get passes the PAST fold in.  YES when any row was folded.
+fun b8 X(BOX, _getx)(BOX_T *out, X(, csb) h, BOX_T const *key, b8 hit) {
+    BOX_T **rb = X(BOX, Mem)(h);
+    for (X(, cs) const *r = h[1]; r < h[2]; r++) {
         X(, sc) rr = {(BOX_T *)(*r)[0], (BOX_T *)(*r)[1]};
-        BOX_T *p = X(, sBinSearch)(key, rr);
-        if (!p) continue;
-        if (hit) {
-            X(, Merge)(out, p);
-        } else {
-            *out = *p;
-            hit = YES;
-        }
+        BOX_T const *p = X(, sBinSearch)(key, rr);
+        if (p) X(BOX, _add)(out, p, &hit);
     }
-    for (BOX_T const *p = rb[1]; p < rb[2]; p++) {
-        if (!X(, KeyEq)(p, key)) continue;
-        if (hit) {
-            X(, Merge)(out, p);
-        } else {
-            *out = *p;
-            hit = YES;
-        }
-    }
-    return hit ? OK : NONE;
+    for (BOX_T const *p = rb[1]; p < rb[2]; p++)
+        if (X(, KeyEq)(p, key)) X(BOX, _add)(out, p, &hit);
+    return hit;
+}
+#endif
+
+//  Point lookup: the house DATA runs plus the segment, newest wins (or the
+//  X(,Merge) fold in age order); PAST is not BOX's.  NONE: no such key.
+fun ok64 X(BOX, Get)(BOX_T *out, X(, csb) h, BOX_T const *key) {
+#ifdef ABC_X_MERGE
+    return X(BOX, _getx)(out, h, key, NO) ? OK : NONE;
 #else
+    BOX_T **rb = X(BOX, Mem)(h);
     for (BOX_T const *p = rb[2]; p > rb[1]; p--)
         if (X(, KeyEq)(p - 1, key)) {
             *out = *(p - 1);
             return OK;
         }
-    for (X($, c) *r = sb[2]; r > sb[1]; r--) {
-        X(, sc) rr = {(BOX_T *)(*(r - 1))[0], (BOX_T *)(*(r - 1))[1]};
-        BOX_T *p = X(, sBinSearch)(key, rr);
+    for (X(, cs) const *r = h[2]; r > h[1]; r--) {
+        X(, sc) rr = {(BOX_T *)r[-1][0], (BOX_T *)r[-1][1]};
+        BOX_T const *p = X(, sBinSearch)(key, rr);
         if (p) {
             *out = *p;
             return OK;
@@ -219,25 +226,26 @@ fun ok64 X(BOX, Get)(BOX_T *out, X(, b) recs, X(, csb) runs,
 }
 
 //  Range view: seal the segment into a run, then fill `into` (the caller's
-//  slice array, at least the run count long) with every run trimmed to
+//  slice array, at least the run count long) with every DATA run trimmed to
 //  [lo, hi), oldest first, empty ones dropped — a HITx input as it is.
-fun ok64 X(BOX, Range)(X(, css) into, X(, b) recs, X(, csb) runs,
-                       BOX_T const *lo, BOX_T const *hi) {
-    ok64 o = X(BOX, Sort)(recs, runs, NO);
+fun ok64 X(BOX, Range)(X(, css) into, X(, csb) h, BOX_T const *lo,
+                       BOX_T const *hi) {
+    ok64 o = X(BOX, Sort)(h, NO);
     if (o != OK) return o;
-    X($, c) **sb = (X($, c) **)runs;
     X(, cs) *w = into[0];
-    for (X($, c) *r = sb[1]; r < sb[2]; r++) {
+    for (X(, cs) const *r = h[1]; r < h[2]; r++, w++) {
         if (w == into[1]) return NOROOM;
-        (*w)[0] = (*r)[0];
-        (*w)[1] = (*r)[1];
-        w++;
+        X(, csMv)(*w, *r);
     }
     into[1] = w;
     o = X(HIT, SeekRange)(into, lo, hi);
     return o == NONE ? OK : o;
 }
 
-#undef ABC_BOX_MERGE
+#ifdef BOX_X_OUTER
+#undef BOX_X_OUTER
+#undef ABC_X_NEST
+#undef ABC_X_MERGE
+#endif
 #undef ABC_BOX_SEG
 #undef BOX_T

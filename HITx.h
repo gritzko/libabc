@@ -12,6 +12,10 @@
 #include "OK.h"
 #include "S.h"
 
+#ifdef ABC_HIT_MERGE
+#error "ABC_HIT_MERGE is retired: ABC_X_MERGE (HIT.h)"
+#endif
+
 #define HIT_T X(, )
 #define HIT_E X(, cs)    // entry = const slice
 #define HIT_H X(, csps)  // heap = slice of pointers to entries
@@ -151,9 +155,9 @@ fun ok64 X(HIT, MergeBag)(X(, s) into, X(, css) runs) {
 }
 
 // --- Merge: drain heap into sorted deduplicated output; equal keys: the
-// youngest run's row wins, or with ABC_HIT_MERGE they fold oldest first ---
+// youngest run's row wins, or with ABC_X_MERGE they fold oldest first ---
 
-#ifdef ABC_HIT_MERGE
+#ifdef ABC_X_MERGE
 //  fold the ntops equal heads in age order (entry pointer order)
 fun void X(HIT, _fold)(HIT_T *acc, X(, csps) heap, size_t ntops) {
     X(, csp) prev = NULL;
@@ -181,7 +185,7 @@ fun ok64 X(HIT, Merge)(X(, s) into, X(, css) runs) {
         if ($empty(into)) return NOROOM;
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
-#ifdef ABC_HIT_MERGE
+#ifdef ABC_X_MERGE
         X(HIT, _fold)(&val, heap, ntops);
 #endif
         *into[0]++ = val;
@@ -413,4 +417,6 @@ fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
 #undef HIT_H
 #undef HIT_E
 #undef HIT_T
-#undef ABC_HIT_MERGE
+#ifndef ABC_X_NEST
+#undef ABC_X_MERGE
+#endif

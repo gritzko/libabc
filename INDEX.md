@@ -188,13 +188,13 @@ Index-based prev/next links living inside buffer records (no pointers).
  -  `BINPeaks`/`BINPath` — list the peak bins covering a length, and the sibling path from a bin up to the covering peak.
  -  `bin64Z` — numeric ordering comparator on bin numbers.
 
-###  BOX.h, BOXx.h — sorted runs in one record buffer
+###  BOX.h, BOXx.h — sorted runs in one house
 
-An in-memory sorted container (BOX-26A26EbjLj): a record buffer (PAST = sorted runs back to back, DATA = the unsorted segment) plus a buffer of run slices fed to HITx as they are. Needs `X(,Z)`, `X(,KeyEq)` and `X(,Max)` (the tombstone, sorts last, tested by key); optional `ABC_BOX_MERGE` (+ `X(,Merge)`), `ABC_BOX_SEG` (segment bytes, 512). The PUPS memtable runs on it. Guide: [BOX.md].
+An in-memory sorted container (BOX-26A26EbjLj): one house, a 64-cell `X(,csb)` (`a_box`, PUPS-26B045Ffpb) whose DATA cells are the runs, fed to HITx as they are, and whose last two cells are the memtable `X(,b)` (`BOXMem`; PAST = sorted runs back to back, DATA = the unsorted segment), mapped by the owner. Needs `X(,Z)`, `X(,KeyEq)` and `X(,Max)` (the tombstone, sorts last, tested by key); optional `ABC_X_MERGE` (+ `X(,Merge)`, one knob for HITx/BOXx/PUPx), `ABC_BOX_SEG` (segment bytes, 512). The PUPS memtable runs on it. Guide: [BOX.md].
 
  -  `BOXPut`/`BOXPutBatch` — append (a Max key is `BADARG`, no room `NOROOM`, no run slot `FULL`; a failed put stores nothing); past c the segment becomes a run (`BOXSort`).
  -  `BOXSort` — seal the segment, collapse the tailing runs by the 1/8 ladder (or all of them): parallel in-place combine, qsort, trim the max tail.
- -  `BOXGet(out, recs, runs, key)`/`BOXRange` — point lookup (newest wins, or the merge fold); the runs trimmed to `[lo, hi)`.
+ -  `BOXGet(out, h, key)`/`BOXRange` — point lookup (newest wins, or the merge fold); the runs trimmed to `[lo, hi)`.
 
 ###  BIT.h — `u1` bitmap (bit addressing over u64 words)
 
@@ -254,7 +254,7 @@ Compile a pattern to a Thompson NFA and simulate it over text (full or prefix ma
 `LSM` merges sorted record streams via a heap of cursors; `Yx` is the generic slicer/merger glue; `HITx` is a heap-of-iterators for set ops; `HIT.h` is its comparator-free ladder policy. Guides: [LSM.md], [HIT.md].
 
  -  `LSM`/`LSMMore`/`LSMNext`/`LSMMerge`/`LSMSort` — feed a sorted run, step the merge, drain it.
- -  `HITMerge(into, runs)`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union (an `ABC_HIT_MERGE` fold), intersection; `NOROOM` the output filled, `NONE` nothing left.
+ -  `HITMerge(into, runs)`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union (an `ABC_X_MERGE` fold), intersection; `NOROOM` the output filled, `NONE` nothing left.
  -  `ABC_HIT_MAX_RUNS`/`ABC_HIT_LADDER_DIV` (HIT.h) — the one run cap (past it: `FULL`), the 1/8 ratio.
  -  `HITLadderOK`/`HITLadderOverRuns` (HIT.h) — 1/8 predicate and cascade count over run LENGTHS, no element type; `HIT*IsCompact`/`HIT*CompactRuns` just measure a stack and call these.
  -  `Yx` (`_X(push)`/`_X(next)`/`_X(merge)`/`_X(sort)`) — the lower-level push/merge primitives the `SORT`/`LSM` users.
@@ -288,13 +288,13 @@ Sorted-string tables with a skip index (`SST`/`SKIP`), and a skip-record log for
 
 ###  PUPS.h, PUPx.h — LSM-ish stack of fixed-size record runs
 
-A directory of immutable sorted runs `<10-RON64 key><ext>`, mmap'd read-only with no fd held (PUPS-26A276Xh2e), an anonymous BOX memtable, a 1/8 compaction ladder, an optional per-page ToC. State is a `pup256b` (`{key, val, data}` per run, the memtable last); the memtable's runs are the caller's typed `X(,csb)`, passed in. Guide: [PUPS.md].
+A directory of immutable sorted runs `<10-RON64 key><ext>`, mmap'd read-only with no fd held (PUPS-26A276Xh2e), a BOX memtable, a 1/8 compaction ladder, an optional per-page ToC. State is one house (`a_pup`, PUPS-26B045Ffpb): PAST the mapped runs, DATA and the memtable BOX's, plus the file keys index-parallel to PAST. Guide: [PUPS.md].
 
- -  `PUPOpenAll`/`PUPOpenAside`/`PUPClose` — map a directory's runs into the stack, release it.
- -  `PUPCreate`/`PUPCreateAs`/`PUPCreateAt`/`PUPCreateAtAs`/`PUPThinTail`/`PUPDropAt` — book or drop whole runs.
- -  `PUPCount`/`PUPCountAll`/`PUPSeqno`/`PUPData`/`PUPDataRow`/`PUPToc`/`PUPAllData` — read the runs.
- -  `PUP<T>Put`/`PutMem`/`Commit`/`CommitAs`/`Ladder`/`AllRuns`/`Read` (PUPx.h) — the typed memtable, seal and merged view.
- -  `PUPLock`/`PUPUnlock` — the per-directory write lock.
+ -  `PUP<T>Open`/`Close`/`Create`/`Drop` (PUPx.h) — map a directory's runs into the house, release them, book or drop whole runs.
+ -  `PUP<T>Put`/`Commit`/`Ladder` — the memtable (NOROOM: commit), its seal, the compaction.
+ -  `PUP<T>Get`/`Range`/`Read`/`Runs`/`Split` — a point lookup, a key range, the merged view, the runs, one run's rows and ToC.
+ -  `PUPScan`/`PUPMap`/`PUPNextKey`/`PUPTmpMap`/`PUPTmpSeal`/`PUPTocFeed`/`PUPTocSplit` — the untyped core, one slice at a time.
+ -  `PUPLock`/`PUPUnlock`/`PUPUnlink` — the per-directory write lock, retiring runs.
 
 ###  FILE.h, FSW.h, PATH.h, MIME.h — filesystem
 
