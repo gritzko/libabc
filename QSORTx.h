@@ -22,6 +22,7 @@
 // DOG-027: public as X(QSORT,InSort) — STABLE, and the memtable's DATA sort.
 
 fun void X(QSORT, InSort)(T *lo, T *hi) {
+    if (lo >= hi) return;  // QSORT-26B04JaYuf: NULL + 1 is UB
     for (T *i = lo + 1; i < hi; i++) {
         T key = *i;
         T *j = i;

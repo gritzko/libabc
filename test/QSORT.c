@@ -245,6 +245,17 @@ ok64 QSORT17() {
     done;
 }
 
+// QSORT-26B04JaYuf: an empty NULL range must not compute NULL + 1
+ok64 QSORT18() {
+    sane(1);
+    QSORTkv64InSort(NULL, NULL);
+    kv64s data = {NULL, NULL};
+    kv64sSort(data);
+    kv64sDedup(data);
+    want(data[0] == NULL && data[1] == NULL);
+    done;
+}
+
 ok64 QSORTtest() {
     sane(1);
     call(QSORT0);
@@ -265,6 +276,7 @@ ok64 QSORTtest() {
     call(QSORT15);
     call(QSORT16);
     call(QSORT17);
+    call(QSORT18);
     done;
 }
 

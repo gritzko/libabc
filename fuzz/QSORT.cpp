@@ -97,8 +97,7 @@ static ok64 qs_kv(u8cs input) {
     if (!ins.empty()) memcpy(ins.data(), input[0], ins.size() * sizeof(qk));
     ref = ins;
     std::stable_sort(ref.begin(), ref.end(), qs_bykey);
-    //  InSort(NULL, NULL) does NULL + 1 (QSORTx.h:25, FUZZ-26B04IqDqU)
-    if (!ins.empty()) QSORTqkInSort(ins.data(), ins.data() + ins.size());
+    QSORTqkInSort(ins.data(), ins.data() + ins.size());
     for (size_t i = 0; i < ins.size(); i++)
         must(ins[i].key == ref[i].key && ins[i].pay == ref[i].pay,
              "InSort stable");
