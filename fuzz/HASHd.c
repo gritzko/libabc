@@ -13,17 +13,31 @@
 #include "HASHx.h"
 #undef X
 
-fun void Play($u32 dict, u8 *ins, size_t Size) {
+// HASH-26B034Benh: a presence model predicts every code (FULL: 16 live, one
+// line); a FULL Put makes the layout order-dependent, so *full skips the diff
+fun ok64 Play($u32 dict, u8 const *ins, size_t Size, b8 *full) {
+    sane(1);
+    b8 has[128] = {};
+    u32 live = 0;
+    *full = NO;
     for (size_t i = 0; i < Size; ++i) {
         if (ins[i] == 0 || ins[i] == 128) break;
+        u32 rec = ins[i] & 127;
         if (ins[i] < 128) {
-            u32 rec = ins[i];
-            HASHu32Put(dict, &rec);
+            ok64 w = has[rec] || live < 16 ? OK : FULL;
+            test(w == HASHu32Put(dict, &rec), TESTFAIL);
+            if (w == FULL) *full = YES;
+            else if (!has[rec]) has[rec] = YES, ++live;
         } else {
-            u32 rec = ins[i] - 128;
-            HASHu32Del(dict, &rec);
+            test((has[rec] ? OK : NONE) == HASHu32Del(dict, &rec), TESTFAIL);
+            if (has[rec]) has[rec] = NO, --live;
         }
     }
+    for (u32 k = 1; k < 128; ++k) {
+        u32 rec = k;
+        test((OK == HASHu32Get(&rec, dict)) == has[k], TESTFAIL);
+    }
+    done;
 }
 
 FUZZ(u8, HASHdfuzz) {
@@ -33,9 +47,8 @@ FUZZ(u8, HASHdfuzz) {
     srandom(**input);
     Bu32 dictbuf = {};
     u32bAlloc(dictbuf, 16);
+    call(u32bFed, dictbuf, 16);
     u32$ dict = u32bData(dictbuf);
-    void **b = (void **)dictbuf;
-    b[2] = b[3];
     Bu32 copybuf = {};
     u32bAlloc(copybuf, 16);
 
@@ -44,7 +57,9 @@ FUZZ(u8, HASHdfuzz) {
     memcpy(ins, *input, Size);
     memcpy(orig, *input, Size);
 
-    Play(dict, ins, Size);
+    b8 full = NO, full2 = NO;
+    u32bZero(dictbuf);
+    call(Play, dict, ins, Size, &full);
 
     $u32feedall(u32bIdle(copybuf), u32bDataC(dictbuf));
 
@@ -60,8 +75,8 @@ FUZZ(u8, HASHdfuzz) {
         if (ins[p] == (128 ^ ins[p + 1])) continue;
         u8Swap(ins + p, ins + p + 1);
 
-        Play(dict, ins, Size);
-
+        call(Play, dict, ins, Size, &full2);
+        if (full || full2) continue;
         must($eq(u32bData(dictbuf), u32bData(copybuf)), "dict mismatch");
     }
     free(orig);

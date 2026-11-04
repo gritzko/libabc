@@ -4,4 +4,4 @@ FileComment: 8
 FunctionComment: 4
 Comment: 2
 CommitCodeLoC: 100
-TestPath: /test/i
+TestPath: /(test|fuzz)/i

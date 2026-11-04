@@ -14,15 +14,23 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FUZZ_LDD_FLAGS}")
 
 add_executable(HEAPfuzz HEAP.c ../RON.c)
 
-#  FUZZ-26B04IO_g6: clang++ on Alpine finds no libstdc++ headers;
-#  HASH.cpp goes away in FUZZ-26B04IZDFD
+#  FUZZ-26B04IZDFD: clang on Alpine without gcc selects no GCC install (no
+#  crtbegin.o), so it misses the libstdc++ headers and, on compiler-rt, the unwinder
 include(CheckIncludeFileCXX)
-check_include_file_cxx(cassert ABC_HAVE_CASSERT)
-if (ABC_HAVE_CASSERT)
-    add_executable(HASHfuzz HASH.cpp)
-else ()
-    message(STATUS "abc: skipped: HASHfuzz (no C++ headers)")
-endif ()
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+check_include_file_cxx(unordered_map ABC_HAVE_STL)
+add_executable(HASHfuzz HASH.cpp)
+file(GLOB ABC_STL_CFG /usr/include/c++/*/*/bits/c++config.h)
+if (NOT ABC_HAVE_STL AND ABC_STL_CFG)
+    list(GET ABC_STL_CFG -1 ABC_STL_TRI)
+    cmake_path(GET ABC_STL_TRI PARENT_PATH ABC_STL_TRI)
+    cmake_path(GET ABC_STL_TRI PARENT_PATH ABC_STL_TRI)
+    cmake_path(GET ABC_STL_TRI PARENT_PATH ABC_STL_VER)
+    target_include_directories(HASHfuzz SYSTEM PRIVATE ${ABC_STL_VER} ${ABC_STL_TRI})
+endif()
+if ("${CMAKE_CXX_FLAGS} ${CMAKE_EXE_LINKER_FLAGS}" MATCHES "compiler-rt")
+    target_link_options(HASHfuzz PRIVATE --unwindlib=libunwind)
+endif()
 
 add_executable(HASHdfuzz HASHd.c)
 
