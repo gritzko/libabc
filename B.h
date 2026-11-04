@@ -168,6 +168,12 @@ fun void u8aReset(u8a arena) {
 #define zerob(buf) memset(buf[0], 0, Bsize(buf))
 
 #define Bwithin(b, s) (s[0] >= b[0] && s[1] <= b[3])
+// Can a byte buffer be seen as a buffer of T (FUZZ-26B04Iucge).
+#define Bfits(T, b)                                                  \
+    ((uintptr_t)(b)[0] % alignof(T) == 0 &&                          \
+     ((char const *)(b)[1] - (char const *)(b)[0]) % sizeof(T) == 0 && \
+     ((char const *)(b)[2] - (char const *)(b)[0]) % sizeof(T) == 0 && \
+     ((char const *)(b)[3] - (char const *)(b)[0]) % sizeof(T) == 0)
 
 fun void _Brebase(Bvoid buf, void *newhead, size_t newlen) {
     u8 **b = (u8 **)buf;

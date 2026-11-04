@@ -26,16 +26,18 @@
 //  segment into a run and run the 1/8 ladder.  Equal keys: the youngest wins.
 fun ok64 X(PUP, Sync)(u8bp mem, u8csb runs) {
     sane(u8bOK(mem) && runs != NULL);
+    test(Bfits(X(, ), mem), PUPBADARG);
     call(X(BOX, Sort), (X(, ) **)mem, (X($, c) **)runs, NO);
     done;
 }
 
 //  Feed typed views of the run byte slices `srcs` into `runs`, a X(,cs)
-//  buffer; FULL past its room.
+//  buffer; FULL past its room, PUPBADARG on a misaligned slice.
 fun ok64 X(PUP, Runs)(X(, csb) runs, u8css srcs) {
     X(, cs) **b = (X(, cs) **)runs;
     $for(u8cs, s, srcs) {
         if (b[2] == b[3]) return FULL;
+        if (!$fits(X(, ), *s)) return PUPBADARG;
         (*b[2])[0] = (X(, ) const *)(*s)[0];
         (*b[2])[1] = (X(, ) const *)(*s)[1];
         b[2]++;
@@ -47,10 +49,11 @@ fun ok64 X(PUP, Runs)(X(, csb) runs, u8css srcs) {
 //  the youngest run.  `bottom`: the slices are the whole stack, dead rows go.
 fun ok64 X(PUP, Merge)(u8s into, u8css srcs, b8 bottom) {
     sane($ok(into));
+    test((uintptr_t)into[0] % alignof(X(, )) == 0, PUPBADARG);
     a_pad(X(, cs), runs, ABC_HIT_MAX_RUNS);
     call(X(PUP, Runs), runs, srcs);
     X(, ) *base = (X(, ) *)into[0];
-    X(, s) dst = {base, (X(, ) *)into[1]};
+    X(, s) dst = {base, base + $len(into) / sizeof(X(, ))};  // whole rows
     call(X(HIT, Merge), dst, runs_data);
     if (bottom) {
         X(, ) *w = base;

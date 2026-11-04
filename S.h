@@ -94,8 +94,13 @@
 // ABC-016: parenthesize; o is still evaluated once per element
 #define $cut(s, o, l) {$off(s, o), $off(s, (o) + (l))}
 
-#define $for(T, n, s) for (T *n = s[0]; (n + 1) <= s[1]; ++n)
-#define $rof(T, n, s) for (T *n = s[1] - 1; n >= s[0]; --n) /*fixme*/
+// FUZZ-26B04Iucge: typed slices are aligned by contract, see $fits.
+#define $for(T, n, s) for (T *n = s[0]; n < s[1]; ++n)
+#define $rof(T, n, s) for (T *n = s[1]; n > s[0] && (--n, 1);)
+// Can bytes s be seen as a slice of T: an aligned base, whole records.
+#define $fits(T, s)                                    \
+    ((uintptr_t)(s)[0] % alignof(T) == 0 &&            \
+     ((char const *)(s)[1] - (char const *)(s)[0]) % sizeof(T) == 0)
 #define $eat(s) for (; s[0] < s[1]; s[0]++)
 
 #define eats(T, i, s) for (T *i = s[0]; i < s[1]; i++)
