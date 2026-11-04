@@ -24,6 +24,8 @@
 
 #define $empty(s) (s == NULL || $head(s) >= $term(s))
 #define $ok(s) (s != NULL && *s != NULL && s[1] >= s[0])
+//  $ok or the all-NULL empty slice
+#define $okz(s) (s != NULL && (*s != NULL ? s[1] >= s[0] : s[1] == NULL))
 #define $within(h, n) (n[0] >= h[0] && n[1] <= h[1])
 
 #define a$(T, n, a) T *n[2] = {(a), (a) + (sizeof(a) / sizeof(T))};

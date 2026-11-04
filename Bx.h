@@ -425,6 +425,7 @@ fun ok64 X(, bUnMap)(X(, b) buf) {
 }
 
 fun ok64 X(, bShift)(X(, b) buf, size_t pastlen) {
+    if (buf != NULL && buf[0] == NULL) return OK;  //  empty NULL buffer
     if (unlikely(!Bok(buf))) return FAILSANITY;
     size_t datalen = $len(Bdata(buf));
     if (!datalen) {

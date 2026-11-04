@@ -44,7 +44,6 @@ fun b8 SOkvz($cu8c *a, $cu8c *b) {
 
 static ok64 so_u64(std::vector<u64> in) {
     sane(1);
-    if (in.empty()) done;  //  a NULL empty slice is BADARG (FUZZ-26B04IqDqU)
     std::vector<u64> ref = in, out(in.size());
     std::sort(ref.begin(), ref.end());
     u64 *f[2] = {in.data(), in.data() + in.size()};

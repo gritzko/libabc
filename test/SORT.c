@@ -56,8 +56,19 @@ SORTCASE(4096, 0)
 SORTCASE(4097, 0)
 SORTCASE(4097, 2)
 
+//  ABC-26B04JHpeh: the all-NULL slice is a valid empty input
+ok64 SORTnulltest() {
+    sane(1);
+    u64 *into[2] = {NULL, NULL};
+    u64 *from[2] = {NULL, NULL};
+    testeq(OK, SORTu64(into, from));
+    testeq(NULL, into[0]);
+    done;
+}
+
 ok64 SORTtest() {
     sane(1);
+    call(SORTnulltest);
     call(SORT_1_0);
     call(SORT_2_1);
     call(SORT_64_0);

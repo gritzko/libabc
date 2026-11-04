@@ -548,17 +548,17 @@ fun ok64 X(, sFeed1)(X(, s) into, X(, ) from) {
 }
 */
 fun ok64 X($, feed)(X($, ) into, X($c, c) from) {
-    if (unlikely(!$ok(from) || !$ok(into))) return SBADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
     if (unlikely($size(from) > $size(into))) return SNOROOM;
-    memcpy((void *)*into, (void *)*from, $size(from));
+    if ($size(from)) memcpy((void *)*into, (void *)*from, $size(from));
     *into += $len(from);
     return OK;
 }
 
 fun ok64 X(, sFeed)(X(, s) into, X(, csc) from) {
-    if (unlikely(!$ok(from) || !$ok(into))) return BADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
     if (unlikely($size(from) > $size(into))) return NOROOM;
-    memcpy((void *)*into, (void *)*from, $size(from));
+    if ($size(from)) memcpy((void *)*into, (void *)*from, $size(from));
     *into += $len(from);
     return OK;
 }
@@ -568,28 +568,28 @@ fun ok64 X(, gFeed)(X(, g) into, X(, csc) from) {
 }
 
 fun ok64 X(, sFeedSome)(X(, s) into, X(, cs) from) {
-    if (unlikely(!$ok(from) || !$ok(into))) return SBADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
     size_t len = $len(from);
     if ((i64)len > $len(into)) len = $len(into);
-    memcpy((void *)*into, (void *)*from, len * sizeof(T));
+    if (len) memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *into += len;
     return OK;
 }
 
 fun ok64 X(, sFeedN)(X(, s) into, X(, cs) from, size_t len) {
-    if (unlikely(!$ok(from) || !$ok(into))) return BADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
     if (unlikely($len(into) < (i64)len)) return NOROOM;
     if (unlikely($len(from) < (i64)len)) return NODATA;
-    memcpy((void *)*into, (void *)*from, len * sizeof(T));
+    if (len) memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *into += len;
     *from += len;
     return OK;
 }
 
 fun ok64 X($, feedall)(X($, ) into, X($c, c) from) {
-    if (unlikely(!$ok(from) || !$ok(into))) return SBADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
     if (unlikely($size(from) > $size(into))) return SNOROOM;
-    memcpy((void *)*into, (void *)*from, $size(from));
+    if ($size(from)) memcpy((void *)*into, (void *)*from, $size(from));
     *into += $len(from);
     return OK;
 }
