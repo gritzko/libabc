@@ -1,7 +1,6 @@
-// abc/fuzz/SORT.cpp — FUZZ-26B04IqDqU: SORTu64 and the Yx merge vs std::sort.
+// abc/fuzz/SORT.cpp — FUZZ-26B04IqDqU: the Yx merge vs std::sort.
 //
-// The u64 lane: SORTu64 (SORT.c, Y-merge passes) equals std::sort.  The kv
-// lane: u64 rows read as {key: the top 16 bits, payload: the rest}, cut into
+// u64 rows read as {key: the top 16 bits, payload: the rest}, cut into
 // chunks, each stable-sorted by key; the Yx merge with a key-only z must give
 // key order and keep every row (ties are fed through, none lost or doubled).
 
@@ -9,9 +8,6 @@
 #include <vector>
 
 #include "INT.h"
-extern "C" {  //  SORT.c is C
-#include "SORT.h"
-}
 #include "PRO.h"
 #include "B.h"
 #include "TEST.h"
@@ -41,20 +37,6 @@ fun b8 SOkvz($cu8c *a, $cu8c *b) {
 #include "Yx.h"
 #undef _X
 #undef _$u8cempty
-
-static ok64 so_u64(std::vector<u64> in) {
-    sane(1);
-    std::vector<u64> ref = in, out(in.size());
-    std::sort(ref.begin(), ref.end());
-    u64 *f[2] = {in.data(), in.data() + in.size()};
-    u64 *t[2] = {out.data(), out.data() + out.size()};
-    u64 *t0 = t[0];
-    ok64 o = SORTu64(t, f);
-    if (o != OK) fprintf(stderr, "SORTu64 %llx n=%zu\n", (unsigned long long)o, in.size());
-    must(o == OK && t[0] == t0 + ref.size() && std::equal(ref.begin(), ref.end(), t0),
-         "SORTu64");
-    done;
-}
 
 static ok64 so_kv(std::vector<u64> in, size_t clen) {
     sane(1);
@@ -94,7 +76,6 @@ FUZZ(u8, SORTfuzz) {
     size_t n = (size_t)$len(rest) / 8;
     std::vector<u64> v(n < SO_MAX_INPUT ? n : SO_MAX_INPUT);
     if (!v.empty()) memcpy(v.data(), rest[0], v.size() * sizeof(u64));
-    call(so_u64, v);
     call(so_kv, v, clen);
     done;
 }

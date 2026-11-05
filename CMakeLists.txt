@@ -126,7 +126,6 @@ SHA.h
 SKIP.h
 SKIPx.h
 SLOG.h
-SORT.h
 TEST.h
 TLV.h
 TTY.h
@@ -159,7 +158,6 @@ POL.c
 PUPS.c
 RON.c
 SLOG.c
-SORT.c
 URI.rl.c
 URI.c
 NET.c

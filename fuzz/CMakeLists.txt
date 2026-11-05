@@ -43,7 +43,7 @@ add_executable(ZINTfuzz ZINT.c "${CMAKE_CURRENT_SOURCE_DIR}/../ZINT.c")
 add_executable(ZINT2fuzz ZINT2.c)
 target_link_libraries(ZINT2fuzz abc)
 
-add_executable(SORTfuzz SORT.cpp ../SORT.c ../RON.c)
+add_executable(SORTfuzz SORT.cpp ../RON.c)
 
 add_executable(DIFFfuzz DIFF.c ../RON.c)
 
