@@ -56,7 +56,9 @@ file keys, a `u64b` index-parallel to the house's PAST:
     (its exact munmap length, ToC and trailer included, so its end is not
     T-aligned); `PUP<T>Split` cuts it into rows and ToC.
  -  DATA: BOX's sorted memory runs; the last two cells are the memtable
-    (`BOX.md`). At most 62 runs live; the ladder compacts well before that.
+    (`BOX.md`). At most 62 runs live. Create and Commit refuse a new run
+    at 60 housed (`ABC_PUP_MAX_RUNS`, `PUPNOROOM`); there Ladder and Commit
+    merge the youngest runs, in proportion or not, until under it.
  -  Keys go only to the calls that change the run set: Open, Close,
     Commit, Ladder, Create, Map, Forget, Drop. A struct owner keeps the cells and the
     keys in the struct and inits the header with `PUP_HOUSE(cells)`.

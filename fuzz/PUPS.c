@@ -4,7 +4,7 @@
 //  create; the kv64 lane (youngest wins, tombstones) and the cnt64 lane
 //  (ABC_X_MERGE sums) run it all, then compare once, again after a reopen;
 //  per op only codes and Gets.  A 1-page memtable, runs past 2 pages get a
-//  ToC, creates reach the 62-run cap.
+//  ToC, creates reach the ABC_PUP_MAX_RUNS cap.
 //  Each input gets $PUPS_FUZZ_DIR/PUPS.<pid>.<n>/{kv,cnt}/, removed at its end.
 
 #include <stdlib.h>
@@ -156,7 +156,7 @@ FUZZ(u8, PUPSfuzz) {
                 call(PFkv64Create, KV, k, step, n, v);
                 call(PFcnt64Create, CN, k, step, n, v + 1);
             } break;
-            case 15: {  //  up to 63 one-row runs: the 62-run cap
+            case 15: {  //  up to 63 one-row runs: past the cap
                 u32 k = pf_key(in), n = pf_byte(in) % 64;
                 for (u32 i = 0; i < n; i++) {
                     call(PFkv64Create, KV, (k + i) & 0xffff, 1, 1, i);

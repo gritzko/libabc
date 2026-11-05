@@ -1323,13 +1323,13 @@ static int pup_proc_fds(void) {
     return n;
 }
 
-//  A full house of 62 runs is open at once, every one readable, no fd held;
-//  a 63rd create is PUPNOROOM.
+//  A full house of ABC_PUP_MAX_RUNS runs is open at once, every one readable,
+//  no fd held; one more create is PUPNOROOM.
 static ok64 PUPTestManyRuns(void) {
     sane(1);
     call(FILEInit);
     T_DIR(".many.idx");
-    enum { N = ABC_HIT_MAX_RUNS - 2 };
+    enum { N = ABC_PUP_MAX_RUNS };
     int fd0 = pup_proc_fds();
     want(fd0 > 0);
     a_pup(kv64, h);
@@ -1348,6 +1348,41 @@ static ok64 PUPTestManyRuns(void) {
         want($len(d) == 1 && d[0]->key == i && d[0]->val == (u64)i * 10);
     }
     T_CLOSE(fresh);
+    TESTBErmrf(tmp);
+    done;
+}
+
+//  PUPS-26B05AeY1d: empty creates fill the house, the youngest runs empty so
+//  the 1/8 rule sees it compact; at the cap Commit is PUPNOROOM, Ladder forced.
+static ok64 PUPTestCap(void) {
+    sane(1);
+    call(FILEInit);
+    T_DIR(".cap.idx");
+    a_pup(kv64, h);
+    call(kv64bMap, BOXkv64Mem(h), T_PAGE);
+    call(t_run, h, h_keys, $path(dir), ext, 0, 7, 1, 0);
+    kv64cs none = {};
+    ok64 o = OK;
+    while (o == OK)
+        o = PUPkv64Create(h, h_keys, $path(dir), ext, none, 0, NO, NULL);
+    want(o == PUPNOROOM);
+    call(t_put, h, h_keys, $path(dir), ext, 9, 90);
+    want(PUPkv64Commit(h, h_keys, $path(dir), ext, NO, NULL) == PUPNOROOM);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
+    want(Bpastlen(h) < ABC_PUP_MAX_RUNS);
+    call(PUPkv64Commit, h, h_keys, $path(dir), ext, NO, NULL);
+    while (Bpastlen(h) < ABC_PUP_MAX_RUNS)
+        call(t_run, h, h_keys, $path(dir), ext, 0, 11, 0, 0);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
+    want(Bpastlen(h) < ABC_PUP_MAX_RUNS);
+    call(t_run, h, h_keys, $path(dir), ext, 0, 11, 1, 0);
+    for (u64 k = 7; k <= 11; k += 2) {
+        kv64 key = {k, 0}, got = {};
+        call(PUPkv64Get, &got, h, &key);
+        want(got.val == k * 10);
+    }
+    T_CLOSE(h);
+    kv64bUnMap(BOXkv64Mem(h));
     TESTBErmrf(tmp);
     done;
 }
@@ -1445,6 +1480,7 @@ ok64 PUPStest() {
     call(PUPTestForeignRun);
     call(PUPTestMultiWriter);
     call(PUPTestManyRuns);
+    call(PUPTestCap);
     call(PUPTestMemNoFd);
     call(PUPTestToc);
     call(PUPTestGet);

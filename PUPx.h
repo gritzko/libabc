@@ -220,7 +220,7 @@ fun ok64 X(PUP, _fresh)(u8csp run, u64 *key, u64csc keys, path8s dir,
 fun ok64 X(PUP, _create)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
                          X(, csc) rows, u64 *key, b8 durable, u64 lo) {
     sane(h != NULL && u64bOK(keys));
-    test(Bidlelen(h) > 0 && u64bIdleLen(keys) > 0, PUPNOROOM);
+    test(h[2] - h[0] < ABC_PUP_MAX_RUNS && u64bIdleLen(keys) > 0, PUPNOROOM);
     u8cs run = {};
     b8 taken = NO;
     if (*key == 0) {
@@ -235,7 +235,8 @@ fun ok64 X(PUP, _create)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
     done;
 }
 
-//  Merge the youngest runs the 1/8 ladder picks into one run, until compact.
+//  Merge the youngest runs the 1/8 ladder picks into one run, until compact;
+//  at ABC_PUP_MAX_RUNS housed, enough of them to get under it (PUPS-26B05AeY1d).
 //  PUPS-005: the merged run takes the youngest key + 1, never a source's name;
 //  the sources go after its link, oldest first, or to `dead`.  Only
 //  runs in `keys` merge; a key another writer took moves the pick on.
@@ -252,6 +253,9 @@ fun ok64 X(PUP, Ladder)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
             u64bFeed1(lens, (u64)$len(*srcs[2]));
         }
         size_t m = HITLadderOverRuns(u64bDataC(lens));
+        size_t over = (size_t)(h[2] - h[0]) + 2;
+        if (over > ABC_PUP_MAX_RUNS + m) m = over - ABC_PUP_MAX_RUNS;
+        if (m > n) m = n;
         if (m < 2) done;
         test(!dead || u64bIdleLen(dead) >= m, PUPNOROOM);
         u64 key = u64bDataHead(keys)[n - 1] + 1;
@@ -363,6 +367,7 @@ fun ok64 X(PUP, Commit)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
     sane(h != NULL && u64bOK(keys));
     X(, ) **mem = X(BOX, Mem)(h);
     if (Bdatalen(h) == 0 && mem[2] == mem[1]) done;
+    test(h[2] - h[0] < ABC_PUP_MAX_RUNS, PUPNOROOM);
     call(X(BOX, Sort), h, YES);
     test(u64bIdleLen(keys) > 0, PUPNOROOM);
     X(, csc) rows = {h[1][0][0], h[1][0][1]};

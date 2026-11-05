@@ -167,21 +167,14 @@ fun ok64 X(PF, Ladder)(PF_ARGS) {
     done;
 }
 
-//  All 62 cells taken, the ladder's tail rule done: only a Drop frees one
-//  (PUPS-26B04CThJv Outcome), so the op is refused and the model kept.
-fun b8 X(PF, _wedged)(X(, csb) h, ok64 o) {
-    return (o == FULL || o == PUPNOROOM || o == NOROOM) && Bidlelen(h) == 0;
-}
-
-//  A full house refuses a seal: ladder, then retry once; ladder after.
+//  PUPS-26B05AeY1d: at the cap Commit is PUPNOROOM; the caller ladders, retries.
 fun ok64 X(PF, Commit)(PF_ARGS, b8 durable) {
     sane(1);
     ok64 o = X(PUP, Commit)(PF_PASS, durable, NULL);
-    if ((o == FULL || o == PUPNOROOM) && X(PF, _over)(h)) {
+    if (o == PUPNOROOM) {
         call(X(PF, Ladder), PF_PASS);
         o = X(PUP, Commit)(PF_PASS, durable, NULL);
     }
-    if (X(PF, _wedged)(h, o)) done;
     must(o == OK, "Commit");
     X(PF, _settle)(YES);
     must(X(BOX, Mem)(h)[2] == X(BOX, Mem)(h)[0], "Commit: memtable left");
@@ -198,11 +191,10 @@ fun ok64 X(PF, Put)(PF_ARGS, u32 k, u64 v) {
         call(X(PF, Commit), PF_PASS, NO);
         o = X(PUP, Put)(h, &row);
     }
-    if (o == FULL && X(PF, _over)(h)) {
+    if (o == FULL) {
         call(X(PF, Ladder), PF_PASS);
         o = X(PUP, Put)(h, &row);
     }
-    if (X(PF, _wedged)(h, o)) done;
     must(o == OK, "Put");
     X(PF, _pend)(k, v);
     done;
@@ -217,11 +209,10 @@ fun ok64 X(PF, Create)(PF_ARGS, u32 k, u32 step, u32 n, u64 v) {
         rows[m] = (X(, )){k + m * step, v + m};
     X(, csc) rs = {rows, rows + m};
     ok64 o = X(PUP, Create)(PF_PASS, rs, 0, NO, NULL);
-    if (o == PUPNOROOM && X(PF, _over)(h)) {
+    if (o == PUPNOROOM) {
         call(X(PF, Ladder), PF_PASS);
         o = X(PUP, Create)(PF_PASS, rs, 0, NO, NULL);
     }
-    if (X(PF, _wedged)(h, o)) done;
     must(o == OK, "Create");
     for (u32 i = 0; i < m; i++) X(PF, _file)(rows[i].key, rows[i].val);
     done;

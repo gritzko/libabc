@@ -14,6 +14,9 @@
 // DOG-027: ONE run cap and ONE ladder ratio for every entry point and both
 // JS leaves.  Past the cap the stack is damaged: FULL, the caller re-derives.
 #define ABC_HIT_MAX_RUNS 64
+// PUPS-26B05AeY1d: a pup house refuses new runs at this many housed, so the
+// memtable's 2 cells and 2 spare ones leave room to seal and to compact.
+#define ABC_PUP_MAX_RUNS (ABC_HIT_MAX_RUNS - 4)
 #define ABC_HIT_LADDER_DIV 8  //  1/8 size-tiered: run i+1 < run i / DIV
 
 // PUPS-26B045Ffpb: ABC_X_MERGE, the one per-instance knob HITx, BOXx and PUPx
