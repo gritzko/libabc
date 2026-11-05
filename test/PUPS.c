@@ -1352,8 +1352,8 @@ static ok64 PUPTestManyRuns(void) {
     done;
 }
 
-//  PUPS-26B05AeY1d: empty creates fill the house, the youngest runs empty so
-//  the 1/8 rule sees it compact; at the cap Commit is PUPNOROOM, Ladder forced.
+//  PUPS-26B05AeY1d: empty creates fill the house (Create never ladders);
+//  at the cap Commit is PUPNOROOM, Ladder forced.
 static ok64 PUPTestCap(void) {
     sane(1);
     call(FILEInit);
@@ -1383,6 +1383,33 @@ static ok64 PUPTestCap(void) {
     }
     T_CLOSE(h);
     kv64bUnMap(BOXkv64Mem(h));
+    TESTBErmrf(tmp);
+    done;
+}
+
+//  PUPS-26B05Ei2nT: empty creates, each laddered, fold into their neighbour;
+//  an all-empty stack keeps one empty run (PUPS-26A24FhuO9's marker).
+static ok64 PUPTestLadderEmpty(void) {
+    sane(1);
+    call(FILEInit);
+    T_DIR(".lem.idx");
+    a_pup(kv64, h);
+    kv64cs none = {};
+    for (int i = 0; i < 8; i++) {
+        call(PUPkv64Create, h, h_keys, $path(dir), ext, none, 0, NO, NULL);
+        call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
+        want(Bpastlen(h) == 1);
+    }
+    call(t_run, h, h_keys, $path(dir), ext, 0, 7, 1, 0);
+    for (int i = 0; i < 8; i++) {
+        call(PUPkv64Create, h, h_keys, $path(dir), ext, none, 0, NO, NULL);
+        call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
+        want(Bpastlen(h) == 1);
+    }
+    kv64 key = {7, 0}, got = {};
+    call(PUPkv64Get, &got, h, &key);
+    want(got.val == 70);
+    T_CLOSE(h);
     TESTBErmrf(tmp);
     done;
 }
@@ -1481,6 +1508,7 @@ ok64 PUPStest() {
     call(PUPTestMultiWriter);
     call(PUPTestManyRuns);
     call(PUPTestCap);
+    call(PUPTestLadderEmpty);
     call(PUPTestMemNoFd);
     call(PUPTestToc);
     call(PUPTestGet);

@@ -144,7 +144,8 @@ including `PUPx.h`. Then:
  -  `Get` says `NONE` and `Read` skips a dead row; a `Range` drain drops it.
  -  A ladder merge that takes every run (`bottom`) drops dead rows and, by
     keep-last, the rows they shadowed. A partial merge keeps them: an older
-    run may still hold the key. A merge that leaves nothing writes no run.
+    run may still hold the key. A merge that leaves nothing writes no run,
+    unless its sources were all empty: then one empty run stays (PUPS-26B05Ei2nT).
  -  A commit never drops them: its tombstones still shadow older files.
 
 `PUPx_ERR`, an `ok64` expression, is read after each merge and before each

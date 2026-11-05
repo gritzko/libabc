@@ -60,14 +60,26 @@ static b8 hf_eq(hfmodel const &m, std::vector<hk> const &out, u32 lo = 0,
 }
 
 //  The 1/8 ladder (HIT.h) restated: how many youngest runs to collapse.
+//  PUPS-26B05Ei2nT: an empty run is out of proportion with any older one.
+static b8 hf_compact(std::vector<u64> const &l) {
+    for (size_t i = 0; i + 1 < l.size(); i++)
+        if (l[i + 1] == 0 || l[i + 1] * 8 > l[i]) return NO;
+    return YES;
+}
+
+//  The fewest youngest runs whose merge leaves the ladder compact, by trial.
 static size_t hf_ladder(hfruns const &runs) {
-    size_t n = runs.size();
-    if (n < 2) return 0;
-    size_t m = 1;
-    u64 total = runs[n - 1].hi - runs[n - 1].lo;
-    while (m < n && total * 8 > (u64)(runs[n - 1 - m].hi - runs[n - 1 - m].lo))
-        total += runs[n - 1 - m].hi - runs[n - 1 - m].lo, m++;
-    return m < 2 ? 0 : m;
+    std::vector<u64> l;
+    for (auto const &r : runs) l.push_back((u64)(r.hi - r.lo));
+    if (hf_compact(l)) return 0;
+    for (size_t m = 2; m < l.size(); m++) {
+        std::vector<u64> t(l.begin(), l.end() - m);
+        u64 sum = 0;
+        for (size_t i = l.size() - m; i < l.size(); i++) sum += l[i];
+        t.push_back(sum);
+        if (hf_compact(t)) return m;
+    }
+    return l.size();
 }
 
 //  Merge or MergeBag `chunk` rows at a time, resuming on NOROOM.
@@ -216,10 +228,9 @@ FUZZ(u8, HITfuzz) {
         size_t m = hf_ladder(runs), tail = 0;
         for (size_t i = n - m; i < n; i++) tail += runs[i].hi - runs[i].lo;
         must(hfCompactRuns(runs.data(), n) == m, "CompactRuns");
-        b8 ladder = YES;
-        for (size_t i = 0; i + 1 < n; i++)
-            ladder &= (u64)(runs[i + 1].hi - runs[i + 1].lo) * 8 <=
-                      (u64)(runs[i].hi - runs[i].lo);
+        std::vector<u64> lens;
+        for (auto const &r : runs) lens.push_back((u64)(r.hi - r.lo));
+        b8 ladder = hf_compact(lens);
         must(hfIsCompact(runs.data(), n) == ladder, "IsCompact");
         for (int lane = 0; lane < 2; lane++) {
             hfruns c = runs;

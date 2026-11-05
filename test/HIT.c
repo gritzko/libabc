@@ -842,6 +842,25 @@ ok64 HIT28() {
     done;
 }
 
+// PUPS-26B05Ei2nT: an empty run is never in proportion with an older one,
+// and a violation under a young enough tail is still found.
+ok64 HIT29() {
+    sane(1);
+    u64 const a[] = {1, 0}, b[] = {1, 0, 0, 0}, c[] = {10, 10, 10, 1},
+              d[] = {0}, e[] = {100, 10, 1}, f[] = {1000, 5, 8},
+              g[] = {100, 0, 1};
+    u64cs la = {a, a + 2}, lb = {b, b + 4}, lc = {c, c + 4}, ld = {d, d + 1},
+          le = {e, e + 3}, lf = {f, f + 3}, lg = {g, g + 3};
+    want(!HITLadderOK(la) && HITLadderOverRuns(la) == 2);
+    want(!HITLadderOK(lb) && HITLadderOverRuns(lb) == 4);
+    want(!HITLadderOK(lc) && HITLadderOverRuns(lc) == 4);
+    want(HITLadderOK(ld) && HITLadderOverRuns(ld) == 0);
+    want(HITLadderOK(le) && HITLadderOverRuns(le) == 0);
+    want(HITLadderOverRuns(lf) == 2);
+    want(HITLadderOverRuns(lg) == 2);
+    done;
+}
+
 ok64 HITtest() {
     sane(1);
     call(HIT0);
@@ -874,6 +893,7 @@ ok64 HITtest() {
     call(HIT26);
     call(HIT27);
     call(HIT28);
+    call(HIT29);
     call(HITmerge);
     done;
 }

@@ -283,7 +283,8 @@ fun ok64 X(PUP, Ladder)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
             fail(__);
         }
         u8cs run = {};
-        if (into[2] == base) {
+        //  PUPS-26B05Ei2nT: all-empty sources leave one empty run, the marker
+        if (into[2] == base && total > 0) {
             call(PUPTmpDrop, tmp, dir, ext, key);
         } else {
             o = X(PUP, _seal)(run, tmp, dir, ext, key, YES);

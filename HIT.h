@@ -22,25 +22,34 @@
 // PUPS-26B045Ffpb: ABC_X_MERGE, the one per-instance knob HITx, BOXx and PUPx
 // read: equal keys fold by X(,Merge), oldest first; the outermost undefs it.
 
+// PUPS-26B05Ei2nT: run i+1 is out of proportion with run i when it is not
+// under 1/8 of it, or empty: an empty run only costs a cell, merging is free.
+fun b8 HITLadderOut(u64 older, u64 newer) {
+    return newer == 0 || newer * ABC_HIT_LADDER_DIV > older;
+}
+
 // YES when every newer run is under 1/8 of the one before it.
 fun b8 HITLadderOK(u64csc lens) {
     i64 n = u64csLen(lens);
     for (i64 i = 0; i + 1 < n; i++)
-        if ($at(lens, i + 1) * ABC_HIT_LADDER_DIV > $at(lens, i)) return NO;
+        if (HITLadderOut($at(lens, i), $at(lens, i + 1))) return NO;
     return YES;
 }
 
 // How many youngest runs the ladder must collapse; 0 when compact already.
+// PUPS-26B05Ei2nT: the fewest whose merge leaves the whole ladder compact.
 fun size_t HITLadderOverRuns(u64csc lens) {
-    i64 n = u64csLen(lens);
-    if (n < 2) return 0;
-    i64 m = 1;
+    i64 n = u64csLen(lens), v = n;  //  v: the oldest out-of-proportion pair
+    for (i64 i = 0; i + 1 < n && v == n; i++)
+        if (HITLadderOut($at(lens, i), $at(lens, i + 1))) v = i;
+    if (v == n) return 0;
     u64 total = $at(lens, n - 1);
-    while (m < n && total * ABC_HIT_LADDER_DIV > $at(lens, n - 1 - m)) {
-        total += $at(lens, n - 1 - m);
-        m++;
+    for (i64 k = n - 2; k > 0; k--) {
+        total += $at(lens, k);
+        if (k <= v + 1 && !HITLadderOut($at(lens, k - 1), total))
+            return (size_t)(n - k);
     }
-    return m < 2 ? 0 : (size_t)m;
+    return (size_t)n;
 }
 
 #endif

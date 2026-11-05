@@ -44,8 +44,8 @@ an element-typed HIT it would never merge with.
 
 | Function (HIT.h)      | Description                                  |
 |-----------------------|----------------------------------------------|
-| `HITLadderOK(lens)`   | 1/8 predicate over oldest-first run lengths  |
-| `HITLadderOverRuns(lens)` | how many youngest runs to collapse (0 = none) |
+| `HITLadderOK(lens)`   | 1/8 predicate over oldest-first run lengths; an empty run never fits |
+| `HITLadderOverRuns(lens)` | the fewest youngest runs whose merge makes it compact (0 = none) |
 
 `runs[]` is OLDEST-FIRST and that is positional, not checkable: a
 newest-first array silently inverts newest-wins on a keyed lane.  The
