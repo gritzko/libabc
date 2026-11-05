@@ -349,6 +349,7 @@ ok64 POLLoop(u64 timens) {
 
     }
     free(vec);
+    POL_STOP = NO;  // CODE-26B05AvcPS: a stop ends this run only
     return OK;
 }
 

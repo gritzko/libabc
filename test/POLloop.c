@@ -241,11 +241,42 @@ ok64 POLloop_far_timer() {
     done;
 }
 
+static int s_fired = 0;
+static short s_stop(int fd, poller* p) {
+    (void)fd;
+    p->callback = NULL;
+    POLStop();
+    return 0;
+}
+static short s_count(int fd, poller* p) {
+    (void)fd;
+    p->callback = NULL;
+    s_fired++;
+    return 0;
+}
+
+// CODE-26B05AvcPS: a stop ends the current POLLoop, not the later ones.
+ok64 POLloop_stop_once() {
+    sane(1);
+    call(POLInit, 16);
+    s_fired = 0;
+    poller a = {.callback = s_stop, .tofd = -1};
+    call(POLTrackEvents, -1, a);
+    call(POLLoop, 50 * POLNanosPerMSec);
+    poller b = {.callback = s_count, .tofd = -2};
+    call(POLTrackEvents, -2, b);
+    call(POLLoop, 50 * POLNanosPerMSec);
+    want(s_fired == 1);
+    call(POLFree);
+    done;
+}
+
 ok64 POLlooptest() {
     sane(1);
     call(POLloop_reentrant);
     call(POLloop_timer_reentrant);
     call(POLloop_far_timer);
+    call(POLloop_stop_once);
     done;
 }
 
