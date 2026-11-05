@@ -289,7 +289,10 @@ ok64 POLLoop(u64 timens) {
         }
         if ($empty(data)) break;
 
+        //  CODE-26B05AmQSE: never sleep past the caller's `till`
         u64 next_timeout = (*data)->deadline;
+        if (next_timeout > till) next_timeout = till;
+        if (next_timeout < now) next_timeout = now;
 
         // Build poll vector from file descriptors (positive tofd)
         size_t len = $len(data);

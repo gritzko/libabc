@@ -213,10 +213,39 @@ ok64 POLloop_timer_reentrant() {
     done;
 }
 
+static short f_never(int fd, poller* p) {
+    (void)fd;
+    (void)p;
+    return 0;
+}
+
+// CODE-26B05AmQSE: a far timer must not stretch a short run past `till`.
+ok64 POLloop_far_timer() {
+    sane(1);
+    call(POLInit, 16);
+    poller a = {.callback = f_never, .tofd = -1800000};  // 30 min
+    call(POLTrackEvents, -1800000, a);
+    u64 t0 = POLNow();
+    call(POLLoop, 50 * POLNanosPerMSec);
+    want(POLNow() - t0 < 1000 * POLNanosPerMSec);
+    // with an idle fd, poll() must not block for the 60 s clamp either
+    pipe2fd pp = {-1, -1};
+    call(pipe_make, &pp);
+    poller f = {.callback = f_never, .tofd = pp.rd, .events = POLLIN};
+    call(POLTrackEvents, pp.rd, f);
+    t0 = POLNow();
+    call(POLLoop, 50 * POLNanosPerMSec);
+    want(POLNow() - t0 < 1000 * POLNanosPerMSec);
+    pipe_close(&pp);
+    call(POLFree);
+    done;
+}
+
 ok64 POLlooptest() {
     sane(1);
     call(POLloop_reentrant);
     call(POLloop_timer_reentrant);
+    call(POLloop_far_timer);
     done;
 }
 
