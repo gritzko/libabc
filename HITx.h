@@ -176,13 +176,58 @@ fun void X(HIT, _fold)(HIT_T *acc, X(, csps) heap, size_t ntops) {
 }
 #endif
 
+//  PERF-26B057RaB9: the last two runs, `a` the older, merged with no branch
+//  on distinct keys; one run left is copied.  NOROOM when `into` fills.
+fun ok64 X(HIT, _two)(X(, s) into, X(, csp) a, X(, csp) b) {
+    HIT_T const *p = a[0], *pe = a[1], *q = b[0], *qe = b[1];
+    if (a == b) q = qe;
+    HIT_T *o = into[0];
+    size_t room = (size_t)(into[1] - o);
+    while (p < pe && q < qe && room) {
+        b8 lt = X(, Z)(p, q), gt = X(, Z)(q, p);
+        *o = *(lt ? p : q);
+#ifdef ABC_X_MERGE
+        if (!(lt | gt)) {
+            *o = *p;
+            X(, Merge)(o, q);
+        }
+#endif
+        o++, room--;
+        p += !gt;
+        q += !lt;
+    }
+    b[0] = q;
+    a[0] = p;
+    X(, csp) r = q < qe ? b : a;
+    HIT_T const *h = r[0];
+    size_t n = (size_t)(r[1] - h) < room ? (size_t)(r[1] - h) : room;
+    memcpy(o, h, n * sizeof(HIT_T));
+    into[0] = o + n;
+    r[0] = h + n;
+    return r[0] == r[1] ? OK : NOROOM;
+}
+
 fun ok64 X(HIT, Merge)(X(, s) into, X(, css) runs) {
     a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
     X(, csp) **heap = slots_data;
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
-    while (!$empty(heap)) {
+    while ($len(heap) > 2) {
         if ($empty(into)) return NOROOM;
+        //  PERF-26B057RaB9: the top's rows below both children's heads have
+        //  no equals, a streak out with one compare per row
+        X(, csp) t = heap[0][0], c = heap[0][1];
+        if (X(HIT, Z)(&heap[0][2], &c)) c = heap[0][2];
+        HIT_T const *h = t[0];
+        HIT_T *o = into[0];
+        while (h < t[1] && o < into[1] && X(, Z)(h, c[0])) *o++ = *h++;
+        if (h > t[0]) {
+            t[0] = h;
+            into[0] = o;
+            if (h == t[1]) X(HIT, Eject)(heap, 0);
+            X(HIT, Down)(heap, 0);
+            continue;
+        }
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
 #ifdef ABC_X_MERGE
@@ -194,7 +239,10 @@ fun ok64 X(HIT, Merge)(X(, s) into, X(, css) runs) {
         while (!$empty(heap) && X(, KeyEq)((*heap[0])[0], &val))
             X(HIT, Step)(heap);
     }
-    return OK;
+    if ($empty(heap)) return OK;
+    if ($len(heap) == 1) return X(HIT, _two)(into, heap[0][0], heap[0][0]);
+    b8 up = heap[0][0] < heap[0][1];
+    return X(HIT, _two)(into, heap[0][!up], heap[0][up]);
 }
 
 // --- Intersect: emit values present in ALL nruns iterators ---

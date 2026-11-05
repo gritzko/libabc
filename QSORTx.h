@@ -159,17 +159,13 @@ fun void X(, bSort)(X(, b) buf) {
 //
 // Returns a pointer to a matching element, or NULL if not found.
 // "Match" is the standard Z derivation: !Z(a,b) && !Z(b,a).
+// PERF-26B0570paL: the branchless sFindGE (Sx.h), then one equality
+// test: log2(n)+2 Z calls, no mispredicts.
 
 fun T *X(, sBinSearch)(T const *needle, X(, sc) data) {
-    size_t lo = 0, hi = (size_t)(data[1] - data[0]);
-    while (lo < hi) {
-        size_t mid = lo + ((hi - lo) >> 1);
-        T *p = data[0] + mid;
-        if (X(, Z)(p, needle)) lo = mid + 1;
-        else if (X(, Z)(needle, p)) hi = mid;
-        else return p;
-    }
-    return NULL;
+    T const *const run[2] = {data[0], data[1]};
+    T const *p = X(, sFindGE)(run, needle);
+    return p < data[1] && !X(, Z)(needle, p) ? (T *)p : NULL;
 }
 
 // --- Dedup: shrink sorted slice, removing adjacent duplicates ---

@@ -90,8 +90,12 @@ is damaged or foreign; the cure is to drop the runs and re-derive.
 
 Drains the heap producing a sorted, deduplicated sequence. Each step
 pops the minimum, advances all entries that had that key, skips
-remaining duplicates.  The youngest run's row is emitted, or with
-`ABC_X_MERGE` the fold of all equal rows in age order.
+remaining duplicates.  Each run must hold one row per key (BOX and PUPS
+runs do; repeats inside a run are not folded): the top's rows below both
+children's heads stream out with one compare each, the last two runs
+merge branch-free, the last one copied (PERF-26B057RaB9).  The
+youngest run's row is emitted, or with `ABC_X_MERGE` the fold of all
+equal rows in age order.
 
 ```c
 u64cs runs[3] = {{a, a+4}, {b, b+3}, {c, c+5}};

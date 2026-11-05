@@ -25,8 +25,8 @@ the memtable, an `X(,b)` that never moves; `X(BOX, Mem)(h)` reads it.
  -  DATA: BOX's sorted runs, oldest first, each ascending by `X(,Z)`
     with one row per key, slices into the memtable's PAST.
  -  IDLE: free cells.
- -  The memtable: PAST the sorted runs back to back, DATA the unsorted
-    segment the puts append to, IDLE the room.  `bMap` the max range once.
+ -  The memtable: PAST the sorted runs back to back, DATA the sorted
+    segment the puts insert into, IDLE the room.  `bMap` the max range once.
 
 `a_box(T, h)` declares the cells and the header; `PUP_HOUSE(cells)` is
 the header initializer for an owner that keeps the cells in a struct.
@@ -45,8 +45,9 @@ are instantiated for T first; BOXx.h includes its own HITx.h.
 
 Codes are the shared ones (01.h).  A failed write stores nothing.
 
-  - `Put(h, &rec)`: append to the segment; past `ABC_BOX_SEG` bytes the
-    segment becomes a run (`Sort`).  `BADARG` a Max-key row, `NOROOM`
+  - `Put(h, &rec)`: insert into the sorted segment, an equal key folded
+    in place; past `ABC_BOX_SEG` bytes the segment becomes a run
+    (`Sort`).  `BADARG` a Max-key row, `NOROOM`
     the memtable has no IDLE (the owner commits, grows or moves it),
     `FULL` the seal finds no free cell.
   - `PutBatch(h, rows)`: seal the segment, then the `X(,csc)` batch is
@@ -63,14 +64,14 @@ Codes are the shared ones (01.h).  A failed write stores nothing.
 
 Equal keys: the younger row wins, unless `ABC_X_MERGE` is defined; then
 `X(,Merge)(acc, younger)` folds them in age order (in Sort, Get and the
-segment fold alike), and the same knob makes the HIT merge of the runs
+segment insert alike), and the same knob makes the HIT merge of the runs
 fold too.
 
 ##  Knobs
 
 Per instantiation, undefined at the end of BOXx.h:
 
-  - `ABC_BOX_SEG` the unsorted segment's length in bytes, default 512;
+  - `ABC_BOX_SEG` the sorted segment's length in bytes, default 512;
     a static_assert keeps it at one record or more.
   - `ABC_X_MERGE` (defined: on) fold equal keys by `X(,Merge)`; one knob
     for the instance's HITx, BOXx and PUPx (HIT.h), undefined by the
@@ -80,11 +81,12 @@ The retired `BOXx_C`, `BOXx_MERGE`, `ABC_BOX_MERGE` are a compile error.
 
 ##  Load and complexity
 
-A Put is O(1) amortized plus a segment sort every `ABC_BOX_SEG` bytes;
-the 1/8 ladder keeps O(log n) runs (base 8), each collapse a parallel
-in-place pass, a qsort of the selected range and a trim of the Max tail.
+A Put is an insertion step into the `ABC_BOX_SEG` segment;
+the 1/8 ladder keeps O(log n) runs (base 8), each collapse a HIT merge
+into IDLE and a copy back, or with no room for it a parallel in-place
+pass, a qsort of the selected range and a trim of the Max tail.
 Runs already in order (ascending puts) are joined without a pass.  A
-Get is a binary search per run plus a scan of the segment.  The house
+Get is a binary search per run and one of the segment.  The house
 caps the runs at 62 (64 binary searches per Get is already a lot).
 
 ##  Deletion and iteration

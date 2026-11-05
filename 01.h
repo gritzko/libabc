@@ -397,6 +397,16 @@ fun u8 u128bytelen(u128 u) {
 #define likely(x) (x)
 #endif
 
+//  PERF-26B0570paL: a coin-flip branch, a cmov hint (clang only).
+#ifdef __has_builtin
+#if __has_builtin(__builtin_unpredictable)
+#define unpredictable(x) (__builtin_unpredictable(x))
+#endif
+#endif
+#ifndef unpredictable
+#define unpredictable(x) (x)
+#endif
+
 fun ok64 utf8sFeed10(u8 **dec, u64 x) {
     u8 into[32];
     u8 *e = into + 32;

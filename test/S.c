@@ -368,6 +368,30 @@ ok64 copytest() {
     done;
 }
 
+//  PERF-26B0577XRz: sFindGE/sFindRange (hi galloping) vs a
+//  linear oracle, every length to 40, duplicates, every bound
+ok64 rangetest() {
+    sane(1);
+    i32 a[40];
+    for (i32 n = 0; n <= 40; n++) {
+        for (i32 i = 0; i < n; i++) a[i] = i / 3;
+        i32cs hay = {a, a + n};
+        for (i32 lo = -1; lo <= 15; lo++) {
+            i32 const *ge = a;
+            while (ge < a + n && *ge < lo) ge++;
+            want(i32sFindGE(hay, &lo) == ge);
+            for (i32 hi = lo; hi <= 15; hi++) {
+                i32 const *he = ge;
+                while (he < a + n && *he < hi) he++;
+                i32s sub;
+                i32sFindRange(sub, hay, &lo, &hi);
+                want(sub[0] == ge && sub[1] == he);
+            }
+        }
+    }
+    done;
+}
+
 ok64 $test() {
     sane(1);
     call($test1);
@@ -380,6 +404,7 @@ ok64 $test() {
     call(feedftest);
     call(offtest);
     call(copytest);
+    call(rangetest);
     done;
 }
 

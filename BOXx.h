@@ -1,11 +1,12 @@
 //  abc/BOXx.h — BOX-26A26EbjLj: an in-memory sorted container of fixed-size
 //  records, an LSM in one house (PUPS-26B045Ffpb, BOX.md "Layout"): the
-//  memtable X(,b) holds the sorted runs in PAST, the unsorted segment in DATA;
+//  memtable X(,b) holds the sorted runs in PAST, the sorted segment in DATA;
 //  the house DATA cells slice those runs, oldest first, fed to HITx as is.
-//  Past ABC_BOX_SEG bytes, X(BOX,Sort) seals the segment: (1) stable-sort and
-//  fold it, (2) pick the tail by the 1/8 ladder (HITLadderOverRuns), (3) one
-//  in-place pass folds equal keys (X(,Merge), else the youngest wins), (4)
-//  QSORTx the range, (5) trim the X(,Max) tombstones.  Codes, knobs: BOX.md.
+//  Puts insert into the segment, equal keys folded; past ABC_BOX_SEG bytes
+//  X(BOX,Sort) seals it: (1) the segment becomes a run, (2) pick the tail by
+//  the 1/8 ladder (HITLadderOverRuns), (3) HIT merge it into IDLE and back; no
+//  room: an in-place pass folds equal keys, QSORTx sorts the range, the
+//  X(,Max) tombstones trimmed.  Knobs: BOX.md.
 
 #include "B.h"
 #include "BOX.h"
@@ -28,7 +29,7 @@
 #define BOX_T X(, )
 
 #ifndef ABC_BOX_SEG
-#define ABC_BOX_SEG 512  //  c: the unsorted segment's length in BYTES
+#define ABC_BOX_SEG 512  //  c: the sorted segment's length in BYTES
 #endif
 static_assert(ABC_BOX_SEG >= sizeof(BOX_T), "ABC_BOX_SEG: at least one record");
 
@@ -53,14 +54,6 @@ fun BOX_T *X(BOX, _dedup)(BOX_T *lo, BOX_T *hi) {
         }
     }
     return w + 1;
-}
-
-//  (1) stable-sort the segment, fold equal keys in arrival order; returns the
-//  folded end.
-fun BOX_T *X(BOX, _fold)(BOX_T *lo, BOX_T *hi) {
-    if (hi - lo < 2) return hi;
-    X(QSORT, InSort)(lo, hi);
-    return X(BOX, _dedup)(lo, hi);
 }
 
 //  (3) the parallel in-place pass over the selected runs, each run's head its
@@ -101,11 +94,10 @@ fun ok64 X(BOX, Sort)(X(, csb) h, b8 all) {
     b8 seg = rb[2] > rb[1];
     if (seg && sb[2] == sb[3]) return FULL;
     if (seg) {
-        BOX_T *end = X(BOX, _fold)(rb[1], rb[2]);
         (*sb[2])[0] = rb[1];
-        (*sb[2])[1] = end;
+        (*sb[2])[1] = rb[2];
         sb[2]++;
-        rb[1] = rb[2] = end;
+        rb[1] = rb[2];
     }
     size_t n = (size_t)(sb[2] - sb[1]);
     size_t m = n;
@@ -123,8 +115,15 @@ fun ok64 X(BOX, Sort)(X(, csb) h, b8 all) {
     b8 ordered = YES;
     for (size_t i = 1; i < m && ordered; i++)
         ordered = X(, Z)(sel[i - 1][1] - 1, sel[i][0]);
-    if (!ordered) {
-        X(, css) sub = {sel, sb[2]};
+    X(, css) sub = {sel, sb[2]};
+    if (!ordered && (size_t)(rb[3] - rb[2]) >= (size_t)(hi - lo)) {
+        //  PERF-26B057RaB9: room in IDLE, so a HIT merge there and back
+        X(, s) out = {rb[2], rb[3]};
+        X(HIT, Merge)(out, sub);
+        size_t len = (size_t)(out[0] - rb[2]);
+        memcpy(lo, rb[2], len * sizeof(BOX_T));
+        hi = lo + len;
+    } else if (!ordered) {
         X(BOX, _pass)(sub);
         X(, s) range = {lo, hi};
         X(, sSort)(range);
@@ -137,7 +136,8 @@ fun ok64 X(BOX, Sort)(X(, csb) h, b8 all) {
     return OK;
 }
 
-//  Append one record; past c bytes the segment becomes a run (X(BOX,Sort)).
+//  Insert one record into the sorted segment, an equal key folded in place
+//  (PERF-26B057V5O9); past c bytes the segment becomes a run (X(BOX,Sort)).
 //  BADARG: a Max-key row; NOROOM: the memtable has no IDLE; FULL: the seal
 //  finds no house cell.  On an error nothing is stored.
 fun ok64 X(BOX, Put)(X(, csb) h, BOX_T const *rec) {
@@ -147,7 +147,21 @@ fun ok64 X(BOX, Put)(X(, csb) h, BOX_T const *rec) {
     X(, cs) **sb = (X(, cs) **)h;
     b8 seal = (size_t)(rb[2] + 1 - rb[1]) * sizeof(BOX_T) > ABC_BOX_SEG;
     if (seal && sb[2] == sb[3]) return FULL;
-    *rb[2]++ = *rec;
+    //  an insertion-sort step (a backward memmove is slow on musl); an equal
+    //  key, rare, folds and shifts the tail back
+    BOX_T *p = rb[2];
+    for (; p > rb[1] && X(, Z)(rec, p - 1); p--) *p = p[-1];
+    if (p > rb[1] && X(, KeyEq)(p - 1, rec)) {
+#ifdef ABC_X_MERGE
+        X(, Merge)(p - 1, rec);
+#else
+        p[-1] = *rec;
+#endif
+        memmove(p, p + 1, (size_t)(rb[2] - p) * sizeof(BOX_T));
+        return OK;
+    }
+    *p = *rec;
+    rb[2]++;
     return seal ? X(BOX, Sort)(h, NO) : OK;
 }
 
@@ -178,6 +192,12 @@ fun ok64 X(BOX, PutBatch)(X(, csb) h, X(, csc) rows) {
     return X(BOX, Sort)(h, NO);
 }
 
+//  PERF-26B057ejg4: a sorted run's [first, last] cannot hold the key; two
+//  compares instead of a binary search (clustered keys, near-disjoint runs).
+fun b8 X(BOX, _out)(X(, cs) const r, BOX_T const *key) {
+    return X(, Z)(key, r[0]) || X(, Z)(r[1] - 1, key);
+}
+
 #ifdef ABC_X_MERGE
 //  Fold one more (younger) version of the key into `out`.
 fun void X(BOX, _add)(BOX_T *out, BOX_T const *p, b8 *hit) {
@@ -191,12 +211,14 @@ fun void X(BOX, _add)(BOX_T *out, BOX_T const *p, b8 *hit) {
 fun b8 X(BOX, _getx)(BOX_T *out, X(, csb) h, BOX_T const *key, b8 hit) {
     BOX_T **rb = X(BOX, Mem)(h);
     for (X(, cs) const *r = h[1]; r < h[2]; r++) {
+        if (X(BOX, _out)(*r, key)) continue;
         X(, sc) rr = {(BOX_T *)(*r)[0], (BOX_T *)(*r)[1]};
         BOX_T const *p = X(, sBinSearch)(key, rr);
         if (p) X(BOX, _add)(out, p, &hit);
     }
-    for (BOX_T const *p = rb[1]; p < rb[2]; p++)
-        if (X(, KeyEq)(p, key)) X(BOX, _add)(out, p, &hit);
+    X(, sc) seg = {rb[1], rb[2]};
+    BOX_T const *p = X(, sBinSearch)(key, seg);
+    if (p) X(BOX, _add)(out, p, &hit);
     return hit;
 }
 #endif
@@ -208,38 +230,42 @@ fun ok64 X(BOX, Get)(BOX_T *out, X(, csb) h, BOX_T const *key) {
     return X(BOX, _getx)(out, h, key, NO) ? OK : NONE;
 #else
     BOX_T **rb = X(BOX, Mem)(h);
-    for (BOX_T const *p = rb[2]; p > rb[1]; p--)
-        if (X(, KeyEq)(p - 1, key)) {
-            *out = *(p - 1);
-            return OK;
-        }
-    for (X(, cs) const *r = h[2]; r > h[1]; r--) {
+    X(, sc) seg = {rb[1], rb[2]};
+    BOX_T const *p = X(, sBinSearch)(key, seg);
+    for (X(, cs) const *r = h[2]; !p && r > h[1]; r--) {
+        if (X(BOX, _out)(r[-1], key)) continue;
         X(, sc) rr = {(BOX_T *)r[-1][0], (BOX_T *)r[-1][1]};
-        BOX_T const *p = X(, sBinSearch)(key, rr);
-        if (p) {
-            *out = *p;
-            return OK;
-        }
+        p = X(, sBinSearch)(key, rr);
     }
-    return NONE;
+    if (!p) return NONE;
+    *out = *p;
+    return OK;
 #endif
 }
 
 //  Range view: seal the segment into a run, then fill `into` (the caller's
 //  slice array, at least the run count long) with every DATA run trimmed to
-//  [lo, hi), oldest first, empty ones dropped — a HITx input as it is.
+//  [lo, hi), oldest first, empty ones dropped (disjoint ones unsearched,
+//  PERF-26B057ejg4) — a HITx input as it is.
 fun ok64 X(BOX, Range)(X(, css) into, X(, csb) h, BOX_T const *lo,
                        BOX_T const *hi) {
-    ok64 o = X(BOX, Sort)(h, NO);
+    BOX_T **rb = X(BOX, Mem)(h);
+    //  PERF-26B0577XRz: no segment, no seal (the ladder held at the last one)
+    ok64 o = rb[2] > rb[1] ? X(BOX, Sort)(h, NO) : OK;
     if (o != OK) return o;
+    if (h[2] - h[1] > into[1] - into[0]) return NOROOM;
     X(, cs) *w = into[0];
-    for (X(, cs) const *r = h[1]; r < h[2]; r++, w++) {
-        if (w == into[1]) return NOROOM;
-        X(, csMv)(*w, *r);
+    for (X(, cs) const *r = h[1]; r < h[2]; r++) {
+        if (!X(, Z)((*r)[0], hi) || X(, Z)((*r)[1] - 1, lo)) continue;
+        X(, s) sub;
+        X(, sFindRange)(sub, *r, lo, hi);
+        if (sub[0] == sub[1]) continue;
+        (*w)[0] = sub[0];
+        (*w)[1] = sub[1];
+        w++;
     }
     into[1] = w;
-    o = X(HIT, SeekRange)(into, lo, hi);
-    return o == NONE ? OK : o;
+    return OK;
 }
 
 #ifdef BOX_X_OUTER

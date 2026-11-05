@@ -785,6 +785,63 @@ ok64 HITmerge() {
     done;
 }
 
+// PERF-26B057wfOU: Merge's block path: long key-disjoint stretches, cross-run
+// ties (the youngest wins; ABC_X_MERGE folds by age), a 3-row `into` resumed
+// on NOROOM; one row per key per run (HIT.md Merge), a brute-force oracle.
+ok64 HIT28() {
+    sane(1);
+    u64 keys[3][48], nk[3] = {0, 0, 0};
+    for (u64 k = 0; k < 40; k++) keys[0][nk[0]++] = k;
+    u64 const bk[] = {20, 21, 50, 51, 52}, ck[] = {0, 21, 45, 52, 60, 61};
+    for (size_t i = 0; i < 5; i++) keys[1][nk[1]++] = bk[i];
+    for (size_t i = 0; i < 6; i++) keys[2][nk[2]++] = ck[i];
+    kv64 kv[3][48], kexp[64], kgot[64];
+    dig64 dg[3][48], dexp[64], dgot[64];
+    kv64cs kruns[3];
+    dig64cs druns[3];
+    size_t nw = 0;
+    for (u64 k = 0; k < 64; k++) {
+        b8 hit = NO;
+        for (u64 r = 0; r < 3; r++)
+            for (size_t i = 0; i < nk[r]; i++) {
+                if (keys[r][i] != k) continue;
+                kexp[nw] = (kv64){k, 100 * (r + 1) + i};
+                dexp[nw].key = k;
+                dexp[nw].val = hit ? dexp[nw].val * 10 + r + 1 : r + 1;
+                hit = YES;
+            }
+        nw += hit;
+    }
+    for (u64 r = 0; r < 3; r++) {
+        for (size_t i = 0; i < nk[r]; i++) {
+            kv[r][i] = (kv64){keys[r][i], 100 * (r + 1) + i};
+            dg[r][i] = (dig64){keys[r][i], r + 1};
+        }
+        kruns[r][0] = kv[r], kruns[r][1] = kv[r] + nk[r];
+        druns[r][0] = dg[r], druns[r][1] = dg[r] + nk[r];
+    }
+    kv64css kheap = {kruns, kruns + 3};
+    dig64css dheap = {druns, druns + 3};
+    ok64 o, d;
+    size_t ng = 0, nd = 0;
+    do {
+        kv64s out = {kgot + ng, kgot + ng + 3};
+        o = HITkv64Merge(out, kheap);
+        ng = (size_t)(out[0] - kgot);
+    } while (o == NOROOM);
+    do {
+        dig64s out = {dgot + nd, dgot + nd + 3};
+        d = HITdig64Merge(out, dheap);
+        nd = (size_t)(out[0] - dgot);
+    } while (d == NOROOM);
+    want(o == OK && ng == nw && d == OK && nd == nw);
+    for (size_t i = 0; i < nw; i++) {
+        want(kgot[i].key == kexp[i].key && kgot[i].val == kexp[i].val);
+        want(dgot[i].key == dexp[i].key && dgot[i].val == dexp[i].val);
+    }
+    done;
+}
+
 ok64 HITtest() {
     sane(1);
     call(HIT0);
@@ -816,6 +873,7 @@ ok64 HITtest() {
     call(HIT25);
     call(HIT26);
     call(HIT27);
+    call(HIT28);
     call(HITmerge);
     done;
 }
