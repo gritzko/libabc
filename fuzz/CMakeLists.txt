@@ -34,6 +34,7 @@ endif()
 
 add_executable(HEAPfuzz HEAP.cpp ../RON.c)
 add_executable(HASHfuzz HASH.cpp)
+add_executable(SWISSfuzz SWISS.cpp)
 
 add_executable(HASHdfuzz HASHd.c)
 

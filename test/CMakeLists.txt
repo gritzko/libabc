@@ -83,6 +83,16 @@ target_compile_options(HASHMtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(HASHMtest abc)
 add_test(NAME HASHMtest COMMAND HASHMtest)
 
+#  SWISS-26B05A2Jxv: SWISSswartest forces the SWAR group scans
+foreach(T SWISS SWISSswar)
+    add_executable(${T}test SWISS.c)
+    target_link_options(${T}test PRIVATE ${TEST_LDD_FLAGS})
+    target_compile_options(${T}test PRIVATE ${TEST_CXX_FLAGS})
+    target_link_libraries(${T}test abc)
+    add_test(NAME ${T}test COMMAND ${T}test)
+endforeach()
+target_compile_definitions(SWISSswartest PRIVATE ABC_SWISS_SWAR)
+
 add_executable(TLVtest TLV.c)
 target_link_options(TLVtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(TLVtest PRIVATE ${TEST_CXX_FLAGS})

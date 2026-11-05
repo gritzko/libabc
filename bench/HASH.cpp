@@ -3,6 +3,7 @@
 //  {key, val} records: put into an empty table, get hit and miss in random
 //  order, erase every key, iterate.  n = 2^12 sits in L2, 2^22 is past L3.
 //  bench/HASH.c is the HASHx knob grid; this is the STL comparison.
+//  SWISS-26B05A2Jxv: SWISSx.h (16 B records and up) runs next to HASH.
 #include <benchmark/benchmark.h>
 
 #include <unordered_map>
@@ -35,6 +36,7 @@ struct pay {
     }
 HB_REC(8, u32, u32)
 HB_REC(16, u64, u64)
+HB_REC(32, u64, pay<3>)
 HB_REC(64, u64, pay<7>)
 
 #define X(M, name) M##hb8##name
@@ -44,10 +46,17 @@ HB_REC(64, u64, pay<7>)
 #define X(M, name) M##hb16##name
 #include "Bx.h"
 #include "HASHx.h"
+#include "SWISSx.h"
+#undef X
+#define X(M, name) M##hb32##name
+#include "Bx.h"
+#include "HASHx.h"
+#include "SWISSx.h"
 #undef X
 #define X(M, name) M##hb64##name
 #include "Bx.h"
 #include "HASHx.h"
+#include "SWISSx.h"
 #undef X
 
 //  Bijections fixing 0: keys of i < n hit, of n <= i < 2n miss; never 0.
@@ -99,7 +108,30 @@ static u64 perm(u64 j, u64 n) { return (j * 0x9E3779B97F4A7C15ULL) & (n - 1); }
     };
 HB_ABC(hb8)
 HB_ABC(hb16)
+HB_ABC(hb32)
 HB_ABC(hb64)
+
+#define HB_SWISS(R)                                                        \
+    struct swiss_##R {                                                     \
+        R *b[4] = {};                                                      \
+        explicit swiss_##R(size_t n) {                                     \
+            R##bMap(b, 4 * n + 64);                                        \
+            SWISS##R##Init(b, 16);                                         \
+        }                                                                  \
+        ~swiss_##R() { R##bUnMap(b); }                                     \
+        void put(R const &r) { SWISS##R##PutGrow(b, &r); }                 \
+        bool get(R &r) { return OK == SWISS##R##Get(&r, b); }              \
+        void del(R const &r) { SWISS##R##Del(b, &r); }                     \
+        u64 iter() {                                                       \
+            u64 s = 0;                                                     \
+            for (size_t i = 0; OK == SWISS##R##Next(&i, b); ++i)           \
+                s += b[1][i].key;                                          \
+            return s;                                                      \
+        }                                                                  \
+    };
+HB_SWISS(hb16)
+HB_SWISS(hb32)
+HB_SWISS(hb64)
 
 template <class M, class R>
 struct ref {
@@ -173,11 +205,17 @@ static void reg(char const *impl) {
 template <class R>
 using abc = std::conditional_t<
     sizeof(R) == 8, abc_hb8,
-    std::conditional_t<sizeof(R) == 16, abc_hb16, abc_hb64>>;
+    std::conditional_t<sizeof(R) == 16, abc_hb16,
+                       std::conditional_t<sizeof(R) == 32, abc_hb32, abc_hb64>>>;
+template <class R>
+using swiss = std::conditional_t<
+    sizeof(R) == 16, swiss_hb16,
+    std::conditional_t<sizeof(R) == 32, swiss_hb32, swiss_hb64>>;
 
 template <class R>
 static void reg_all() {
     reg<abc, R>("abc");
+    if constexpr (sizeof(R) >= 16) reg<swiss, R>("swiss");
     reg<stdmap, R>("std");
 #ifdef ABC_HAVE_ABSL
     reg<abslmap, R>("absl");
@@ -187,6 +225,7 @@ static void reg_all() {
 int main(int argc, char **argv) {
     reg_all<hb8>();
     reg_all<hb16>();
+    reg_all<hb32>();
     reg_all<hb64>();
     benchmark::Initialize(&argc, argv);
     benchmark::RunSpecifiedBenchmarks();

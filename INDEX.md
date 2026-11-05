@@ -163,6 +163,13 @@ A bucketed linear-probe table laid out directly in a buffer slice; the length MU
  -  Each instantiating type supplies `TypeHash` + `TypeKeyEq`; `HASHx` keys and probes through those, never the name.
  -  `ABC_HASH_LINE`/`ABC_HASH_CONVERGE` — compile-time knobs for probe-line width and Robin-Hood-style convergence on insert.
 
+###  SWISS.h, SWISSx.h — Swiss table
+
+A Swiss table (16-byte control groups, SSE2/NEON/SWAR) in one mapped buffer, chosen explicitly next to HASH; records of 16 B and up. Guide: [SWISS.md].
+
+ -  `SWISSInit` sets up the control array in PAST and the slots in DATA; `SWISSGet`/`At`/`Put`/`Probe`/`Unprobe`/`Del`/`DelAt`/`Next` take the buffer; codes as HASH.
+ -  `SWISSGrow`/`SWISSPutGrow`/`SWISSProbeGrow` rehash in place (doubling, or at the same length to purge tombs); `SWISSMove` Puts one table into another.
+
 ###  HEAPx.h — binary heap
 
 In-place binary heap over a slice or buffer; the comparator is either the type's default `Z` or an explicit `z` argument. Guide: [HEAP.md].
@@ -404,6 +411,7 @@ Tracks open/close of nested markup or container contexts in a buffer, with splic
 [ZINT.md]: ./ZINT.md
 [TLV.md]: ./TLV.md
 [HASH.md]: ./HASH.md
+[SWISS.md]: ./SWISS.md
 [BOX.md]: ./BOX.md
 [HEAP.md]: ./HEAP.md
 [BIN.md]: ./BIN.md
