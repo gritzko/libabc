@@ -1,4 +1,8 @@
+//  abc/bench/QSORT.cpp: QSORTx introsort vs qsort(3) and std::sort over u64;
+//  BENCH-26B05APPSh adds std::sort and the presorted input (arg 1).
 #include <benchmark/benchmark.h>
+
+#include <algorithm>
 
 extern "C" {
 #include "INT.h"
@@ -21,6 +25,11 @@ static void fill_random_dups(u64 *arr, size_t n, u64 seed) {
     }
 }
 
+static void fill(u64 *arr, size_t n, int sorted) {
+    if (!sorted) return fill_random(arr, n, 42);
+    for (size_t i = 0; i < n; i++) arr[i] = i * 3;
+}
+
 // --- stdlib qsort (function pointer comparator) ---
 
 static int u64cmp_local(const void *a, const void *b) {
@@ -33,7 +42,7 @@ static void BM_StdlibQSort(benchmark::State &state) {
     u64 *arr = new u64[n];
     for (auto _ : state) {
         state.PauseTiming();
-        fill_random(arr, n, 42);
+        fill(arr, n, (int)state.range(1));
         state.ResumeTiming();
         qsort(arr, n, sizeof(u64), u64cmp_local);
         benchmark::DoNotOptimize(arr[0]);
@@ -49,10 +58,24 @@ static void BM_QSort(benchmark::State &state) {
     u64 *arr = new u64[n];
     for (auto _ : state) {
         state.PauseTiming();
-        fill_random(arr, n, 42);
+        fill(arr, n, (int)state.range(1));
         state.ResumeTiming();
         u64s data = {arr, arr + n};
         u64sSort(data);
+        benchmark::DoNotOptimize(arr[0]);
+    }
+    delete[] arr;
+    state.SetItemsProcessed((int64_t)state.iterations() * (int64_t)n);
+}
+
+static void BM_StdSort(benchmark::State &state) {
+    size_t n = (size_t)state.range(0);
+    u64 *arr = new u64[n];
+    for (auto _ : state) {
+        state.PauseTiming();
+        fill(arr, n, (int)state.range(1));
+        state.ResumeTiming();
+        std::sort(arr, arr + n);
         benchmark::DoNotOptimize(arr[0]);
     }
     delete[] arr;
@@ -95,8 +118,10 @@ static void BM_QSortDedup(benchmark::State &state) {
     state.SetItemsProcessed((int64_t)state.iterations() * (int64_t)n);
 }
 
-BENCHMARK(BM_StdlibQSort)->Range(1 << 10, 1 << 20);
-BENCHMARK(BM_QSort)->Range(1 << 10, 1 << 20);
+#define QS_ARGS ArgsProduct({{1 << 12, 1 << 22}, {0, 1}})
+BENCHMARK(BM_StdlibQSort)->QS_ARGS;
+BENCHMARK(BM_QSort)->QS_ARGS;
+BENCHMARK(BM_StdSort)->QS_ARGS;
 BENCHMARK(BM_StdlibSortDedup)->Range(1 << 10, 1 << 20);
 BENCHMARK(BM_QSortDedup)->Range(1 << 10, 1 << 20);
 
