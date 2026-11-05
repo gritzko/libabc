@@ -48,7 +48,7 @@ static ok64 PUPNilRun(void) {
     kv64 two[2] = {{1, 10}, {2, 20}};
     kv64cs rs = {two, two + 2};
     call(PUPkv64Create, h, h_keys, $path(dir), ext, rs, 0, YES, NULL);
-    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
     kv64 got[4];
     kv64s out = {got, got + 4};
     call(PUPkv64Read, out, h);

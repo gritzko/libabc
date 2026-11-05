@@ -162,7 +162,7 @@ fun size_t X(PF, _over)(X(, csb) h) {
 
 fun ok64 X(PF, Ladder)(PF_ARGS) {
     sane(1);
-    call(X(PUP, Ladder), PF_PASS, NULL);
+    call(X(PUP, Ladder), PF_PASS, NULL, NULL);
     must(X(PF, _over)(h) == 0, "Ladder: tail left");
     done;
 }
@@ -173,7 +173,7 @@ fun b8 X(PF, _wedged)(X(, csb) h, ok64 o) {
     return (o == FULL || o == PUPNOROOM || o == NOROOM) && Bidlelen(h) == 0;
 }
 
-//  A full house refuses a seal: ladder, then retry once.
+//  A full house refuses a seal: ladder, then retry once; ladder after.
 fun ok64 X(PF, Commit)(PF_ARGS, b8 durable) {
     sane(1);
     ok64 o = X(PUP, Commit)(PF_PASS, durable, NULL);
@@ -185,6 +185,7 @@ fun ok64 X(PF, Commit)(PF_ARGS, b8 durable) {
     must(o == OK, "Commit");
     X(PF, _settle)(YES);
     must(X(BOX, Mem)(h)[2] == X(BOX, Mem)(h)[0], "Commit: memtable left");
+    call(X(PF, Ladder), PF_PASS);  //  PUPS-26B04KwMzK: Commit ladders no more
     done;
 }
 

@@ -1,5 +1,5 @@
 //  PUPS-26B045Ffpb: the pup house over kv64 — fd leaks, the memtable, commit,
-//  the ladder and its crash points, the write lock, foreign runs, the ToC,
+//  the ladder and its crash points, the lock, many writers, the ToC,
 //  Get and Range against the merged Read view.
 #include "PUPS.h"
 
@@ -53,6 +53,15 @@ con cnt64 cnt64Max = {u64max, u64max};
 #define T_CLOSE(h) PUPkv64Close(h, h##_keys)
 #define T_PAGE (FILESysPage() / sizeof(kv64))
 
+//  PUPS-26B04KwMzK: Commit no longer ladders; the tests want both.
+static ok64 t_commit(kv64csb h, u64b keys, path8s dir, u8cs ext, b8 durable,
+                     u64 *floor) {
+    sane(1);
+    call(PUPkv64Commit, h, keys, dir, ext, durable, floor);
+    call(PUPkv64Ladder, h, keys, dir, ext, NULL, floor);
+    done;
+}
+
 //  One (key, val) row; a full memtable is committed, then the put retried
 //  (D-1: the owner seals).
 static ok64 t_put(kv64csb h, u64b keys, path8s dir, u8cs ext, u64 key,
@@ -61,7 +70,7 @@ static ok64 t_put(kv64csb h, u64b keys, path8s dir, u8cs ext, u64 key,
     kv64 row = {key, val};
     ok64 o = PUPkv64Put(h, &row);
     if (o == NOROOM) {
-        call(PUPkv64Commit, h, keys, dir, ext, NO, NULL);
+        call(t_commit, h, keys, dir, ext, NO, NULL);
         o = PUPkv64Put(h, &row);
     }
     if (o != OK) fail(o);
@@ -303,7 +312,7 @@ static ok64 PUPTestMemCommit(void) {
     call(t_put, h, h_keys, $path(dir), ext, 2, 20);
     call(t_put, h, h_keys, $path(dir), ext, 1, 10);
     call(t_put, h, h_keys, $path(dir), ext, 1, 11);
-    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, NULL);
+    call(t_commit, h, h_keys, $path(dir), ext, YES, NULL);
     want(Bpastlen(h) == 1 && Bdatalen(h) == 0);
     want(u64bDataHead(h_keys)[0] != 0);
     char mp[300];
@@ -373,7 +382,7 @@ static ok64 PUPTestLadder(void) {
     for (u64 i = 0; i < n; i++)
         call(t_put, h, h_keys, $path(dir), ext, 100000 - i, i);
     call(t_put, h, h_keys, $path(dir), ext, 99999, 7777);
-    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, NULL);
+    call(t_commit, h, h_keys, $path(dir), ext, YES, NULL);
     testeqv((long long)Bpastlen(h), 2LL, "%lld");
     kv64cs a = {}, b = {};
     t_rows(a, h, 0);
@@ -415,7 +424,7 @@ static ok64 PUPTestLadderKey(void) {
     a_pup(kv64, h);
     for (u64 r = 0; r < 3; r++)
         call(t_run, h, h_keys, $path(dir), ext, 1000 + r, 10 + r, 1, 0);
-    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
     want(Bpastlen(h) == 1 && u64bDataHead(h_keys)[0] == 1003);
     a_pup(kv64, fresh);
     call(T_OPEN, fresh);
@@ -438,7 +447,7 @@ static ok64 PUPTestTomb(void) {
     kv64cs sl;
     call(t_run, h, h_keys, $path(dir), ext, 1000, 1, 20, 0);
     call(t_run, h, h_keys, $path(dir), ext, 1001, 2, 1, PUP_TOMB);
-    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
     testeqv((long long)Bpastlen(h), 2LL, "%lld");
     o[0] = out, o[1] = out + 64;
     call(PUPkv64Read, o, h);
@@ -446,7 +455,7 @@ static ok64 PUPTestTomb(void) {
     for (kv64 *r = out; r < o[0]; r++) want(r->key != 2);
 
     call(t_run, h, h_keys, $path(dir), ext, 1002, 30, 1, 0);
-    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
     testeqv((long long)Bpastlen(h), 2LL, "%lld");
     t_rows(sl, h, 1);
     testeqv((long long)$len(sl), 2LL, "%lld");  //  the tomb is kept
@@ -455,7 +464,7 @@ static ok64 PUPTestTomb(void) {
     testeqv((long long)(o[0] - out), 20LL, "%lld");
 
     call(t_run, h, h_keys, $path(dir), ext, 1010, 31, 3, 0);
-    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
     testeqv((long long)Bpastlen(h), 1LL, "%lld");
     t_rows(sl, h, 0);
     testeqv((long long)$len(sl), 23LL, "%lld");
@@ -466,7 +475,7 @@ static ok64 PUPTestTomb(void) {
     a_pup(kv64, p2);
     call(t_run, p2, p2_keys, $path(dir), ext2, 2000, 5, 1, 50);
     call(t_run, p2, p2_keys, $path(dir), ext2, 2001, 5, 1, PUP_TOMB);
-    call(PUPkv64Ladder, p2, p2_keys, $path(dir), ext2, NULL);
+    call(PUPkv64Ladder, p2, p2_keys, $path(dir), ext2, NULL, NULL);
     o[0] = out, o[1] = out + 64;
     call(PUPkv64Read, o, p2);
     testeqv((long long)(o[0] - out), 0LL, "%lld");
@@ -476,7 +485,7 @@ static ok64 PUPTestTomb(void) {
     done;
 }
 
-//  PUPS-005: crash points for a ladder merge.  The binary interposes `rename`
+//  PUPS-005: crash points for a ladder merge.  The binary interposes `link`
 //  and `unlink`: once armed, the `pup_crash_at`-th one on a run kills it.
 static int pup_crash_at = 0, pup_crash_ops = 0;
 static char const *pup_crash_ext = "";
@@ -502,8 +511,8 @@ int unlink(char const *path) {
     return rc;
 }
 
-int rename(char const *from, char const *to) {
-    int rc = renameat(AT_FDCWD, from, AT_FDCWD, to);
+int link(char const *from, char const *to) {
+    int rc = linkat(AT_FDCWD, from, AT_FDCWD, to, 0);
     if (rc == 0) pup_crash_tick(to);
     return rc;
 }
@@ -572,7 +581,7 @@ static ok64 PUPTestCrashLadder(void) {
                 pup_crash_ext = extc;
                 pup_crash_at = at;
                 if (T_OPEN(h) != OK) _exit(2);
-                if (PUPkv64Ladder(h, h_keys, $path(dir), ext, NULL) != OK)
+                if (PUPkv64Ladder(h, h_keys, $path(dir), ext, NULL, NULL) != OK)
                     _exit(3);
                 _exit(0);
             }
@@ -601,7 +610,7 @@ static ok64 PUPTestLadderUnlinkFail(void) {
     for (u64 r = 0; r < 3; r++)
         call(t_run, h, h_keys, $path(dir), ext, 1000 + r, 10 + r, 1, 0);
     pup_unlink_deny = ".deny.idx";
-    ok64 o = PUPkv64Ladder(h, h_keys, $path(dir), ext, NULL);
+    ok64 o = PUPkv64Ladder(h, h_keys, $path(dir), ext, NULL, NULL);
     pup_unlink_deny = NULL;
     want(o != OK);
     want(Bpastlen(h) == 1 && u64bDataHead(h_keys)[0] == 1003);
@@ -614,8 +623,8 @@ static ok64 PUPTestLadderUnlinkFail(void) {
     done;
 }
 
-//  Write lock: forked writers with clashing clock keys and constant ladders
-//  lose no run and no row.  60 runs: the house holds 62.
+//  PUPS-26B04KwMzK: forked writers, no lock, clashing clock keys, constant
+//  ladders, lose no run and no row.  60 runs: the house holds 62.
 #define LOCK_KIDS 4
 #define LOCK_N 15
 #define LOCK_COMMITS 12
@@ -641,7 +650,7 @@ static ok64 PUPTestLock(void) {
                 bad = 1;
             if (i >= LOCK_COMMITS) continue;
             if (PUPkv64Put(cm, &row) != OK) bad = 1;
-            if (PUPkv64Commit(cm, cm_keys, $path(dir), ext2, YES, NULL) != OK)
+            if (t_commit(cm, cm_keys, $path(dir), ext2, YES, NULL) != OK)
                 bad = 1;
         }
         _exit(bad);
@@ -752,8 +761,8 @@ static ok64 PUPTestTwoWriters(void) {
         closedir(dh);
         testeqv((long long)files, 0LL, "%lld");
     }
-    want(PUPkv64Commit(A, A_keys, $path(dir), ext, YES, NULL) == OK);
-    want(PUPkv64Commit(B, B_keys, $path(dir), ext, YES, NULL) == OK);
+    want(t_commit(A, A_keys, $path(dir), ext, YES, NULL) == OK);
+    want(t_commit(B, B_keys, $path(dir), ext, YES, NULL) == OK);
     T_CLOSE(A);
     T_CLOSE(B);
     kv64bUnMap(BOXkv64Mem(A));
@@ -774,7 +783,35 @@ static ok64 PUPTestTwoWriters(void) {
     done;
 }
 
-// DOG-046: a run another handle seals is mapped in by this one's commit.
+//  PUPS-26B04KwMzK: the caller's sync, what Commit once did itself: house
+//  the dir's runs `h` lacks, forget the housed ones gone from the dir.
+static ok64 t_adopt(kv64csb h, u64b keys, path8s dir, u8cs ext) {
+    sane(1);
+    a_pad(u64, found, 64);
+    u64 const *none[2] = {};
+    call(PUPScan, found, dir, ext, u64max, none);
+    for (size_t i = u64bDataLen(keys); i > 0; i--) {
+        b8 on = NO;
+        $for(u64c, f, found_datac) on |= *f == u64bDataHead(keys)[i - 1];
+        if (!on) call(PUPkv64Forget, h, keys, i - 1);
+    }
+    $for(u64c, f, found_datac) {
+        ok64 o = PUPkv64Map(h, keys, dir, ext, *f);
+        if (o != OK && o != PUPTAKEN) fail(o);
+    }
+    done;
+}
+
+//  YES when `dir` holds run `key`.
+static b8 t_on(path8s dir, u8cs ext, u64 key) {
+    a_pad(u64, found, 64);
+    u64 const *none[2] = {};
+    if (PUPScan(found, dir, ext, u64max, none) != OK) return NO;
+    $for(u64c, f, found_datac) if (*f == key) return YES;
+    return NO;
+}
+
+// DOG-046: a run another handle seals is mapped in by this one's adoption.
 static ok64 PUPTestForeignRun(void) {
     sane(1);
     call(FILEInit);
@@ -786,11 +823,12 @@ static ok64 PUPTestForeignRun(void) {
     for (u64 i = 1; i <= 3; i++) call(t_put, A, A_keys, $path(dir), ext, i, i);
     for (u64 i = 1000; i < 1064; i++)
         call(t_put, B, B_keys, $path(dir), ext, i, i);
-    want(PUPkv64Commit(B, B_keys, $path(dir), ext, YES, NULL) == OK);
+    want(t_commit(B, B_keys, $path(dir), ext, YES, NULL) == OK);
     testeqv((long long)Bpastlen(B), 1LL, "%lld");
     u64 bkey = u64bDataHead(B_keys)[0];
     testeqv((long long)Bpastlen(A), 0LL, "%lld");
-    want(PUPkv64Commit(A, A_keys, $path(dir), ext, YES, NULL) == OK);
+    call(t_adopt, A, A_keys, $path(dir), ext);
+    want(t_commit(A, A_keys, $path(dir), ext, YES, NULL) == OK);
     testeqv((long long)Bpastlen(A), 2LL, "%lld");
     want(u64bDataHead(A_keys)[0] == bkey && u64bDataHead(A_keys)[1] > bkey);
     kv64 got[128];
@@ -800,6 +838,83 @@ static ok64 PUPTestForeignRun(void) {
     testeqv((long long)(out[0] - got), 67LL, "%lld");
     for (u64 i = 1; i <= 3; i++) want(got[i - 1].key == i);
     for (u64 i = 1000; i < 1064; i++) want(got[i - 997].key == i);
+    T_CLOSE(A);
+    T_CLOSE(B);
+    kv64bUnMap(BOXkv64Mem(A));
+    kv64bUnMap(BOXkv64Mem(B));
+    TESTBErmrf(tmp);
+    done;
+}
+
+//  PUPS-26B04KwMzK: two houses on one dir, the caller doing the sync: no
+//  clobbered or lost run, PUPTAKEN on a taken key, Forget keeps the file,
+//  Drop removes it, each house reads the union after adopting.
+static ok64 PUPTestMultiWriter(void) {
+    sane(1);
+    call(FILEInit);
+    T_DIR(".mw.idx");
+    a_pup(kv64, A);
+    a_pup(kv64, B);
+    call(kv64bMap, BOXkv64Mem(A), T_PAGE);
+    call(kv64bMap, BOXkv64Mem(B), T_PAGE);
+    for (u64 i = 1; i <= 3; i++) call(t_put, A, A_keys, $path(dir), ext, i, i);
+    for (u64 i = 100; i <= 102; i++)
+        call(t_put, B, B_keys, $path(dir), ext, i, i);
+    call(PUPkv64Commit, A, A_keys, $path(dir), ext, YES, NULL);
+    call(PUPkv64Commit, B, B_keys, $path(dir), ext, YES, NULL);
+    u64 ak = u64bDataHead(A_keys)[0], bk = u64bDataHead(B_keys)[0];
+    want(ak != bk && t_on($path(dir), ext, ak) && t_on($path(dir), ext, bk));
+    //  a taken key: B's explicit one, a seal onto it, a second tmp of it
+    want(t_run(A, A_keys, $path(dir), ext, bk, 7, 1, 0) == PUPTAKEN);
+    u8bp t1 = NULL, t2 = NULL;
+    call(PUPTmpMap, &t1, $path(dir), ext, bk, 64);
+    want(PUPTmpMap(&t2, $path(dir), ext, bk, 64) == PUPTAKEN);
+    u8cs junk = {(u8c *)"junkjunkjunkjunk", (u8c *)"junkjunkjunkjunk" + 16};
+    call(u8bFeed, t1, junk);
+    u8cs r1 = {};
+    want(PUPTmpSeal(r1, t1, $path(dir), ext, bk, NO) == PUPTAKEN);
+    want(PUPTmpMap(&t2, $path(dir), ext, bk, 64) == OK);  //  tmp gone
+    call(PUPTmpDrop, t2, $path(dir), ext, bk);
+    kv64 got[16];
+    kv64s o = {got, got + 16};
+    call(PUPkv64Read, o, B);
+    want(o[0] - got == 3 && got[0].key == 100);  //  B's run intact
+    //  adopt under the caller's lock: both read the union
+    int lk = -1;
+    call(PUPLock, &lk, $path(dir));
+    call(t_adopt, A, A_keys, $path(dir), ext);
+    call(t_adopt, B, B_keys, $path(dir), ext);
+    PUPUnlock(&lk);
+    o[0] = got;
+    call(PUPkv64Read, o, A);
+    testeqv((long long)(o[0] - got), 6LL, "%lld");
+    o[0] = got;
+    call(PUPkv64Read, o, B);
+    testeqv((long long)(o[0] - got), 6LL, "%lld");
+    //  Forget unhouses, the file stays; Map houses it back, once
+    call(PUPkv64Forget, B, B_keys, 0);
+    want(Bpastlen(B) == 1 && t_on($path(dir), ext, ak));
+    call(PUPkv64Map, B, B_keys, $path(dir), ext, ak);
+    want(PUPkv64Map(B, B_keys, $path(dir), ext, ak) == PUPTAKEN);
+    //  A merges both runs, hands the sources back, unlinks them itself
+    call(PUPLock, &lk, $path(dir));
+    a_pad(u64, dead, 8);
+    call(PUPkv64Ladder, A, A_keys, $path(dir), ext, dead, NULL);
+    want(Bpastlen(A) == 1 && u64bDataLen(dead) == 2);
+    want(t_on($path(dir), ext, ak) && t_on($path(dir), ext, bk));
+    call(PUPUnlink, $path(dir), ext, u64bData(dead));
+    call(t_adopt, B, B_keys, $path(dir), ext);
+    PUPUnlock(&lk);
+    want(Bpastlen(B) == 1 && u64bDataHead(B_keys)[0] == u64bDataHead(A_keys)[0]);
+    o[0] = got;
+    call(PUPkv64Read, o, B);
+    testeqv((long long)(o[0] - got), 6LL, "%lld");
+    //  Drop unhouses and unlinks; A's mapping still reads it
+    call(PUPkv64Drop, B, B_keys, $path(dir), ext, 0);
+    want(Bpastlen(B) == 0 && !t_on($path(dir), ext, u64bDataHead(A_keys)[0]));
+    o[0] = got;
+    call(PUPkv64Read, o, A);
+    testeqv((long long)(o[0] - got), 6LL, "%lld");
     T_CLOSE(A);
     T_CLOSE(B);
     kv64bUnMap(BOXkv64Mem(A));
@@ -820,7 +935,7 @@ static ok64 t_toc_seal(path8s dir, u8cs ext, u64 pages, u64 base, u64 n,
     for (u64 i = 0; i < n; i++)
         call(t_put, h, h_keys, dir, ext, base - i * (val0 ? 2 : 1),
              val0 ? (n - i) : i);
-    call(PUPkv64Commit, h, h_keys, dir, ext, YES, NULL);
+    call(t_commit, h, h_keys, dir, ext, YES, NULL);
     *key = u64bDataHead(h_keys)[u64bDataLen(h_keys) - 1];
     T_CLOSE(h);
     kv64bUnMap(BOXkv64Mem(h));
@@ -930,7 +1045,7 @@ static ok64 PUPTestTocMixed(void) {
     call(kv64bMap, BOXkv64Mem(h), n);
     for (u64 i = 0; i < n; i++)
         call(t_put, h, h_keys, $path(dir), ext, n - i, n - i);
-    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, NULL);
+    call(t_commit, h, h_keys, $path(dir), ext, YES, NULL);
     old = u64bDataHead(h_keys)[0];
     Bkv64 flat = {};
     call(kv64bAllocate, flat, (u32)per + 4);
@@ -1030,7 +1145,7 @@ static ok64 PUPTestTocLadder(void) {
     call(kv64bMap, BOXkv64Mem(h), T_PAGE);
     for (u64 i = 0; i < n; i++)
         call(t_put, h, h_keys, $path(dir), ext, 100000 - i, i);
-    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, NULL);
+    call(t_commit, h, h_keys, $path(dir), ext, YES, NULL);
     T_CLOSE(h);
     kv64bUnMap(BOXkv64Mem(h));
     a_pup(kv64, fresh);
@@ -1075,7 +1190,7 @@ static ok64 t_layers(kv64csb h, u64b keys, path8s dir, u8cs ext, u64 n) {
     sane(1);
     for (u64 i = 0; i < n; i++)
         call(t_put, h, keys, dir, ext, (n - i) * 2, n - i);
-    call(PUPkv64Commit, h, keys, dir, ext, NO, NULL);
+    call(t_commit, h, keys, dir, ext, NO, NULL);
     kv64 rows[64];
     for (u64 i = 0; i < 64; i++) rows[i] = (kv64){i * 6 + 3, 999};
     kv64cs plain = {rows, rows + 64};
@@ -1261,7 +1376,7 @@ static ok64 PUPTestMemNoFd(void) {
     kv64s out = {got, got + 256};
     call(PUPkv64Read, out, h);
     testeqv((long long)(out[0] - got), 200LL, "%lld");
-    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, NULL);
+    call(t_commit, h, h_keys, $path(dir), ext, YES, NULL);
     want(Bdatalen(h) == 0 && Bpastlen(h) == 1);
     testeqv(pup_proc_fds(), fd0, "%d");
     kv64s out2 = {got2, got2 + 256};
@@ -1328,6 +1443,7 @@ ok64 PUPStest() {
     call(PUPTestLockAlias);
     call(PUPTestTwoWriters);
     call(PUPTestForeignRun);
+    call(PUPTestMultiWriter);
     call(PUPTestManyRuns);
     call(PUPTestMemNoFd);
     call(PUPTestToc);

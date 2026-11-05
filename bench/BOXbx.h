@@ -87,7 +87,10 @@ void X(pp, Free)(pphouse *b) {
 fun ok64 X(pp, _commit)(pphouse *b) {
     a_path(dir, ((u8cs){(u8 *)b->dir, (u8 *)b->dir + strlen(b->dir)}));
     a_cstr(ext, ".pup");
-    return X(PUP, Commit)(BBx(_h)(b), b->keys, $path(dir), ext, NO, NULL);
+    ok64 o = X(PUP, Commit)(BBx(_h)(b), b->keys, $path(dir), ext, NO, NULL);
+    return o == OK ? X(PUP, Ladder)(BBx(_h)(b), b->keys, $path(dir), ext, NULL,
+                                    NULL)
+                   : o;
 }
 
 ok64 X(pp, Put)(pphouse *b, BB_T const *rows, size_t n) {

@@ -24,7 +24,7 @@
 //  PUPS-26B03JQWPP: one code per failure; PUP* calls return these, or the
 //  shared BOX codes from the memtable (Put, Commit, Runs, Range, Read).
 con ok64 PUPBADARG = 0x197992ca34a6d0;    //  a bad index
-con ok64 PUPTAKEN = 0x65e65d294397;       //  a live run holds the caller's key
+con ok64 PUPTAKEN = 0x65e65d294397;       //  a run or its tmp holds the key
 con ok64 PUPSTAT = 0x1979971d29d;         //  PUPLock: stat(dir) failed
 con ok64 PUPNOOPEN = 0x197995d8619397;    //  PUPLock: open(.lock) failed
 con ok64 PUPLCKFULL = 0x65e6553143de555;  //  PUPLock: held-lock table full
@@ -36,15 +36,6 @@ con ok64 PUPNOROOM = 0x197995d86d8616;
 //  PUPS-26A309qbG9: PUPGONE: a run listed by the scan was gone by the time it
 //  was mapped (another writer unlinked it); retry the open.
 con ok64 PUPGONE = 0x197994185ce;
-
-// PUPS-26A309qbG9: how a caller that publishes runs by its own protocol keys
-// and retires them (PUPS.md "Caller-published runs").  `floor`: every run a
-// call creates takes a key at or above it, and it is left past the last key
-// used.  `dead`: NULL unlinks merged-away runs at once, else their keys go here
-typedef struct pupopt {
-    u64 floor;
-    u64bp dead;
-} pupopt;
 
 // Feed `dir`'s `<10-RON64><ext>` run keys at or below `ceil`, but not in
 // `dead`, into `keys`, sorted; a misnamed file is skipped (DOG-027), an absent
@@ -65,9 +56,11 @@ ok64 PUPKeyTaken(b8 *out, u64csc keys, path8s dir, u8cs ext, u64 key);
 
 // PUPS-26A25EfKtr: `<key><ext>.tmp` sized `bound` and mapped rw, so the typed
 // merge writes in place (no scratch, no write()); its DATA is the run.
+// PUPTAKEN when the tmp exists: another writer's, or a crash's.
 ok64 PUPTmpMap(u8bp *tmp, path8s dir, u8cs ext, u64 key, size_t bound);
-// Trim, fsync if `durable`, rename onto `<key><ext>` (atomic), fsync the dir,
-// map it read-only into `run`.  An empty tmp seals the 7-byte nil run.
+// Trim, fsync if `durable`, link onto `<key><ext>` and unlink the tmp, fsync
+// the dir, map it read-only into `run`.  PUPS-26B04KwMzK: a taken name is
+// PUPTAKEN, never clobbered.  An empty tmp seals the 7-byte nil run.
 ok64 PUPTmpSeal(u8csp run, u8bp tmp, path8s dir, u8cs ext, u64 key,
                 b8 durable);
 // Unmap and unlink a tmp that left nothing, or failed.
@@ -79,8 +72,8 @@ ok64 PUPTmpDrop(u8bp tmp, path8s dir, u8cs ext, u64 key);
 ok64 PUPUnlink(path8s dir, u8cs ext, u64s keys);
 
 // Write lock on `dir` (flock on `<dir>/.lock`): ONE per directory, since a
-// forward and a reverse stack change together.  Writing entry points take it
-// themselves; hold it around several calls to make them one update.  Reentrant
+// forward and a reverse stack change together.  PUPS-26B04KwMzK: no PUP call
+// takes it; a caller holds it around calls to make them one update.  Reentrant
 // per process, dropped on death, never read-side; `*slot` is PUPUnlock's token.
 ok64 PUPLock(int *slot, path8s dir);
 void PUPUnlock(int *slot);

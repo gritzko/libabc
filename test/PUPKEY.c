@@ -1,7 +1,7 @@
 //  PUPS-26A309qbG9: a caller that publishes runs itself, by a key ceiling.
 //  (1) a key floor: every run a write creates (create, seal, ladder output)
-//      takes a key at or above `pupopt.floor`, one counter across stacks;
-//  (2) a ladder that hands its merged-away runs back (`pupopt.dead`) instead
+//      takes a key at or above the caller's `floor`, one counter across stacks;
+//  (2) a ladder that hands its merged-away runs back (`dead`) instead
 //      of unlinking them, and PUPUnlink to retire them later;
 //  (3) Open's ceiling: runs keyed above it are not mapped, and a run that
 //      vanishes between the listing and its mapping fails with PUPGONE.
@@ -78,28 +78,28 @@ static ok64 PUPKeyFloor(void) {
     a_pup(kv64, pa);
     a_pup(kv64, pb);
     u64 f0 = (u64)RONNow() + (1ULL << 30);  //  well past what RONNow picks
-    pupopt o = {.floor = f0};
+    u64 fl = f0;
     kv64 row = {1, 10};
     kv64cs rec = {&row, &row + 1};
 
-    call(PUPkv64Create, pa, pa_keys, $path(dir), ea, rec, 0, NO, &o);
+    call(PUPkv64Create, pa, pa_keys, $path(dir), ea, rec, 0, NO, &fl);
     u64 k1 = u64bDataHead(pa_keys)[0];
-    want(k1 >= f0 && o.floor > k1);
-    u64 f1 = o.floor;
-    call(PUPkv64Create, pb, pb_keys, $path(dir), eb, rec, 0, NO, &o);
+    want(k1 >= f0 && fl > k1);
+    u64 f1 = fl;
+    call(PUPkv64Create, pb, pb_keys, $path(dir), eb, rec, 0, NO, &fl);
     u64 k2 = u64bDataHead(pb_keys)[0];
-    want(k2 >= f1 && o.floor > k2);
+    want(k2 >= f1 && fl > k2);
 
     //  a seal of the memtable: its run lands past the counter too
     call(kv64bMap, BOXkv64Mem(pb), 64);
-    u64 f2 = o.floor;
+    u64 f2 = fl;
     kv64 r2 = {2, 20};
     call(PUPkv64Put, pb, &r2);
-    call(PUPkv64Commit, pb, pb_keys, $path(dir), eb, YES, &o);
+    call(PUPkv64Commit, pb, pb_keys, $path(dir), eb, YES, &fl);
     size_t n = u64bDataLen(pb_keys);
     want(n >= 1);
     want(u64bDataHead(pb_keys)[n - 1] >= f2);
-    want(o.floor > u64bDataHead(pb_keys)[n - 1]);
+    want(fl > u64bDataHead(pb_keys)[n - 1]);
     PUPkv64Close(pa, pa_keys);
     PUPkv64Close(pb, pb_keys);
     kv64bUnMap(BOXkv64Mem(pb));
@@ -109,19 +109,19 @@ static ok64 PUPKeyFloor(void) {
     a_pup(kv64, pc);
     for (u64 r = 0; r < 3; r++)
         call(key_run, pc, pc_keys, $path(dir), ec, 1000 + r, 10 + r);
-    u64 f3 = o.floor;
-    call(PUPkv64Ladder, pc, pc_keys, $path(dir), ec, &o);
+    u64 f3 = fl;
+    call(PUPkv64Ladder, pc, pc_keys, $path(dir), ec, NULL, &fl);
     testeqv((long long)u64bDataLen(pc_keys), 1LL, "%lld");
     want(u64bDataHead(pc_keys)[0] >= f3);  //  not 1003 any more
-    want(o.floor > u64bDataHead(pc_keys)[0]);
+    want(fl > u64bDataHead(pc_keys)[0]);
     PUPkv64Close(pc, pc_keys);
 
-    //  no opt: the youngest key + 1 (PUPS-005)
+    //  no floor: the youngest key + 1 (PUPS-005)
     a_pup(kv64, pd);
     a_cstr(ed, ".d.idx");
     for (u64 r = 0; r < 3; r++)
         call(key_run, pd, pd_keys, $path(dir), ed, 1000 + r, 10 + r);
-    call(PUPkv64Ladder, pd, pd_keys, $path(dir), ed, NULL);
+    call(PUPkv64Ladder, pd, pd_keys, $path(dir), ed, NULL, NULL);
     testeqv((long long)u64bDataHead(pd_keys)[0], 1003LL, "%lld");
     PUPkv64Close(pd, pd_keys);
     TESTBErmrf(tmp);
@@ -129,7 +129,7 @@ static ok64 PUPKeyFloor(void) {
 }
 
 //  (2) a ladder with `dead`: the merged-away runs stay on disk, their keys
-//  come back, the handle and later scans through the opt skip them, and
+//  come back, the handle drops them, a scan skipping them leaves them out,
 //  PUPUnlink retires them.
 static ok64 PUPKeyDead(void) {
     sane(1);
@@ -142,8 +142,7 @@ static ok64 PUPKeyDead(void) {
     for (u64 r = 0; r < 3; r++)
         call(key_run, h, h_keys, $path(dir), ext, 1000 + r, 10 + r);
     a_pad(u64, dead, 16);
-    pupopt o = {.dead = dead};
-    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, &o);
+    call(PUPkv64Ladder, h, h_keys, $path(dir), ext, dead, NULL);
     testeqv((long long)u64bDataLen(h_keys), 1LL, "%lld");
     testeqv((long long)u64bDataHead(h_keys)[0], 1003LL, "%lld");
     testeqv((long long)u64bDataLen(dead), 3LL, "%lld");
@@ -164,11 +163,14 @@ static ok64 PUPKeyDead(void) {
     testeqv((long long)(o1[0] - out), 3LL, "%lld");
     PUPkv64Close(fresh, fresh_keys);
 
-    //  a seal through the same opt re-scans the dir: the sources stay out
+    //  a scan that skips `dead` lists the merged run only; a seal adds one
+    a_pad(u64, seen, 16);
+    call(PUPScan, seen, $path(dir), ext, u64max, u64bDataC(dead));
+    testeqv((long long)u64bDataLen(seen), 1LL, "%lld");
     call(kv64bMap, BOXkv64Mem(h), 64);
     kv64 row = {20, 200};
     call(PUPkv64Put, h, &row);
-    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, &o);
+    call(PUPkv64Commit, h, h_keys, $path(dir), ext, YES, NULL);
     $for(u64c, k, u64bDataC(h_keys)) want(*k < 1000 || *k > 1002);
     kv64s o2 = {out, out + 16};
     call(PUPkv64Read, o2, h);

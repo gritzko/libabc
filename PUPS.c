@@ -1,6 +1,7 @@
 #include "PUPS.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -178,7 +179,7 @@ ok64 PUPNextKey(u64 *out, u64csc keys, path8s dir, u8cs ext, u64 floor) {
     done;
 }
 
-//  `<dir>/<key><ext>.tmp`, the name a run is built under before its rename.
+//  `<dir>/<key><ext>.tmp`, the name a run is built under before its link.
 static ok64 pup_tmp_path(path8b out, path8s dir, u64 key, u8cs ext) {
     sane(u8bOK(out));
     call(pup_path, out, dir, key, ext);
@@ -192,7 +193,17 @@ ok64 PUPTmpMap(u8bp *tmp, path8s dir, u8cs ext, u64 key, size_t bound) {
     sane(tmp != NULL && $ok(dir) && $ok(ext));
     a_path(path);
     call(pup_tmp_path, path, dir, key, ext);
-    call(FILEMapCreate, tmp, $path(path), bound);
+    //  PUPS-26B04KwMzK: O_EXCL, so two writers never share a tmp
+    int fd = open((char const *)u8bDataHead(path),
+                  O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, 0644);
+    if (fd < 0) return errno == EEXIST ? PUPTAKEN : FILEErr(FILENOOPEN);
+    try(FILEResize, &fd, bound);
+    nedo close(fd);
+    then try(FILEMapFD, tmp, &fd, PROT_READ | PROT_WRITE);
+    nedo {
+        FILEUnLink($path(path));
+        fail(__);
+    }
     done;
 }
 
@@ -208,7 +219,7 @@ ok64 PUPTmpDrop(u8bp tmp, path8s dir, u8cs ext, u64 key) {
 // PUPS-26A24FhuO9: an empty run on disk, an empty ToC block's trailer.
 static u8c const PUP_NIL_RUN[PUP_TOC_TAIL_W] = {0, 0, 0, 0, 0, 'T', 'C'};
 
-//  PUPS-004: the dir fsync that makes a rename durable.
+//  PUPS-004: the dir fsync that makes a link durable.
 static ok64 pup_dir_sync(path8s dir) {
     sane($ok(dir));
     int dfd = -1;
@@ -240,11 +251,11 @@ ok64 PUPTmpSeal(u8csp run, u8bp tmp, path8s dir, u8cs ext, u64 key,
     FILEUnMap(tmp);
     if (__ != OK) FILEUnLink($path(tpath));
     nedo fail(__);
-    try(FILERename, $path(tpath), $path(rpath));
-    nedo {
-        FILEUnLink($path(tpath));
-        fail(__);
-    }
+    //  PUPS-26B04KwMzK: link, never rename: a taken name is not clobbered
+    try(FILEHardLink, $path(rpath), $path(tpath));
+    FILEUnLink($path(tpath));
+    if (__ == FILEEXIST) __ = PUPTAKEN;
+    nedo fail(__);
     if (durable) call(pup_dir_sync, dir);
     call(PUPMap, run, dir, ext, key);
     done;
