@@ -229,6 +229,23 @@ ok64 HTTPtest5() {
     done;
 }
 
+// CODE-26B05DAhPQ: an obs-fold line is refused, never re-paired into
+// `Transfer-Encoding: chunked` (quickjab HTTPfuzz repro).
+ok64 HTTPtest6() {
+    sane(1);
+    a$str(req,
+          "GET / HTTP/1.1\r\n"
+          "A:\r\n Transfer-Encoding\r\nchunked: z\r\n\r\n");
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 16);
+    state.headers = hdrsidle;
+    ok64 o = HTTPutf8Drain(req, &state);
+    a$str(te, "Transfer-Encoding");
+    u8cs val = {};
+    want(o != OK || HTTPfind(&val, te, hdrsdata) != OK);
+    done;
+}
+
 ok64 HTTPtest() {
     sane(1);
     call(HTTPtest1);
@@ -236,6 +253,7 @@ ok64 HTTPtest() {
     call(HTTPtest3);
     call(HTTPtest4);
     call(HTTPtest5);
+    call(HTTPtest6);
     done;
 }
 
