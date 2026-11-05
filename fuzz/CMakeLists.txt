@@ -73,6 +73,10 @@ target_link_libraries(QSORTfuzz abc)
 #  ABC-004: u1 bitmap set-algebra vs a reference set model.
 add_executable(BITfuzz BIT.c ../RON.c)
 
+#  PUPS-26B04CThJv: the PUPS kv64 house vs a plain array model, two lanes.
+add_executable(PUPSfuzz PUPS.c)
+target_link_libraries(PUPSfuzz abc)
+
 #add_executable(SST SST.c)
 #target_link_options(SST PRIVATE "${FUZZ_LDD_FLAGS}")
 #target_compile_options(SST PRIVATE "${FUZZ_C_FLAGS}")
