@@ -646,77 +646,6 @@ ok64 FILEBookEnsureTest() {
     done;
 }
 
-// MEM-011 repro: FILEFlush must consume the written DATA prefix (advance
-// buf[1]), not grow DATA into uninitialised IDLE (advance buf[2]).  Drive a
-// FILE_WANT_BUFS stream past PAGESIZE, flush, and assert the written prefix
-// was consumed: DATA shrinks, PAST grows, the buffer never reaches into the
-// uninitialised IDLE tail.  Pre-fix the buggy `u8bFed(buf,r)` left DATA at
-// 2*N and PAST at 0, so a second flush re-wrote the data plus N zero bytes.
-ok64 FILEFlushStreamTest() {
-    sane(1);
-    a_path(path, $cstr("/tmp"));
-    a_cstr(tmpl, "FILEFlushStream_XXXXXX");
-    call(PATHu8bAddTmp, path, tmpl);
-
-    //  Use the runtime page size rather than the compile-time PAGESIZE
-    //  macro (4 KiB): FILEBookCreate rounds the initial book up to the
-    //  kernel page, and macOS arm64 ships 16 KiB pages.  If we sized N
-    //  against 4 KiB but the file was ftruncate'd to 16 KiB, the post-
-    //  flush FILESize check would see the padded 16 KiB, not N.
-    size_t const sp_test = FILESysPage();
-
-    // Booked write stream: 8MB reserved, 1 page initial -> FILE_WANT_BUFS slot
-    u8bp buf = NULL;
-    call(FILEBookCreate, &buf, $path(path), 8 * MB, sp_test);
-    int fd = FILEBookedFD(buf);
-    test(fd >= 0, FILEFAIL);
-
-    // Feed a position-dependent pattern well past one page so the flush fires.
-    size_t const N = 3 * sp_test;
-    for (size_t i = 0; i < N; i++) {
-        call(FILEBookEnsure, buf, 1);
-        call(u8bFeed1, buf, (u8)(i & 0xFF));
-    }
-    testeqv((long long)(u8bDataLen(buf)), (long long)(N), "%lld");
-    testeqv((long long)(u8bPastLen(buf)), (long long)(0), "%lld");
-
-    // First flush: writes the whole DATA, must consume the written prefix.
-    call(FILEFlush, &fd);
-    // FIX: written prefix consumed -> DATA emptied, never grown into IDLE.
-    // BUG: u8bFed grew DATA to 2*N (the extra N bytes uninitialised IDLE).
-    testeqv((long long)(u8bDataLen(buf)), (long long)(0), "%lld");
-
-    // Second flush is a no-op (DATA below threshold); must not corrupt.
-    call(FILEFlush, &fd);
-    testeqv((long long)(u8bDataLen(buf)), (long long)(0), "%lld");
-
-    call(FILEUnBook, buf);
-
-    // Read the file back: exactly the N fed bytes, in order, no duplication
-    // and no trailing garbage from a re-flushed uninitialised tail.
-    int rfd = FILE_CLOSED;
-    call(FILEOpen, &rfd, $path(path), O_RDONLY);
-    size_t fsize = 0;
-    call(FILESize, &fsize, &rfd);
-    testeqv((long long)(fsize), (long long)(N), "%lld");
-    //  Read-back buffer sized for the largest reasonable kernel page —
-    //  16 KiB on macOS arm64 — times 3.  Static stack budget for any
-    //  PAGESIZE we plausibly run on.
-    aBpad2(u8, back, 3 * 64 * 1024);
-    call(FILEDrain, rfd, backidle);
-    while (u8bDataLen(backbuf) < N && u8bHasRoom(backbuf)) {
-        call(FILEDrain, rfd, backidle);
-    }
-    testeqv((long long)(u8bDataLen(backbuf)), (long long)(N), "%lld");
-    u8csp got = u8bDataC(backbuf);
-    for (size_t i = 0; i < N; i++) {
-        testeqv((long long)((*got)[i]), (long long)((u8)(i & 0xFF)), "%lld");
-    }
-    call(FILEClose, &rfd);
-    call(FILEUnLink, $path(path));
-    done;
-}
-
 //  FILEExists guards a seed so it never truncates a live file (SUBS-016 /
 //  ULOG-001): FILENONE for a missing path, OK once present; the guard
 //  `if (FILENONE==FILEExists) FILECreate` leaves existing content intact.
@@ -864,7 +793,7 @@ ok64 FILEFdLeakTest() {
 }
 
 //  ABC-013 repro: a partial write in FILEFlushThreshold must consume only
-//  the written prefix (cf. FILEFlush); Bate() dropped the unwritten tail.
+//  the written prefix; Bate() dropped the unwritten tail.
 ok64 FILEFlushThresholdPipeTest() {
     sane(1);
     size_t const CHUNK = 4096, TAIL = 512;
@@ -1004,11 +933,11 @@ ok64 FILETrimKeepsDirtyTest() {
     done;
 }
 
-//  ABC-013 repro: FILE_BOOK gap entries (grown by u8psFed, never written)
-//  must read as NULL so un-booked fds fail FILENOBOOK, not mmap garbage.
+//  ABC-013 repro: a mapped (not booked) fd below a booked one must read
+//  book_end NULL and fail FILENOBOOK, not mmap garbage.
 ok64 FILEBookGapTest() {
     sane(1);
-    //  Push the next free fd high so booking feeds a wide FILE_BOOK gap.
+    //  Push the next free fd high so the map lands on a lower fd.
     int pads[40];
     int npads = 0;
     for (; npads < 40; npads++) {
@@ -1047,16 +976,79 @@ ok64 FILEBookGapTest() {
     done;
 }
 
+//  CODE-26B068lK6V: a buffered fd: FILEFlush writes only past a page,
+//  FILEFlushAll drains, an oversize feed goes straight out, close drains.
+ok64 FILEStreamTest() {
+    sane(1);
+    int pfd[2] = {FILE_CLOSED, FILE_CLOSED};
+    test(0 == pipe(pfd), FILEFAIL);
+    size_t const sp = PAGESIZE, BIG = 3 * sp, TOTAL = 100 + sp + 7 + BIG + 5;
+    call(FILEBuffer, pfd[1], 2 * sp);
+    test(FILEBuffer(pfd[1], sp) == BADARG, FAILSANITY);  // slot is taken
+    u8bp buf = FILESlot(pfd[1]);
+    want(FILEBookedFD(buf) == FILE_CLOSED);  // never seen as a mapping
+    want(FILEReMap(buf, sp) == NONE);
+    a_pad(u8, pat, 4 * 4096);
+    for (size_t i = 0; i < BIG; i++) u8bFeed1(pat, (u8)(i * 7));
+    u8cs all = {pat[0], pat[0] + BIG};
+    u8cs a = {all[0], all[0] + 100}, b = {all[0] + 100, all[0] + 100 + sp};
+    call(FILEBufFeed, pfd[1], a);
+    call(FILEFlush, pfd + 1);
+    same(u8bDataLen(buf), 100);  // below the threshold: kept
+    call(FILEBufFeed, pfd[1], b);
+    call(FILEFlush, pfd + 1);
+    same(u8bDataLen(buf), 0);
+    u8cs c = {all[0], all[0] + 7};
+    call(FILEBufFeed, pfd[1], c);
+    call(FILEFlushAll, pfd + 1);
+    same(u8bDataLen(buf), 0);
+    call(FILEBufFeed, pfd[1], all);  // larger than the buffer
+    u8cs d = {all[0], all[0] + 5};
+    call(FILEBufFeed, pfd[1], d);
+    same(u8bDataLen(buf), 5);
+    int wfd = pfd[1];
+    call(FILEClose, &wfd);  // drains the 5 and unmaps
+    want(buf[0] == NULL);
+    a_pad(u8, got, 6 * 4096);
+    size_t n = 0;
+    for (ssize_t r; (r = read(pfd[0], got[0] + n, 6 * 4096 - n)) > 0;)
+        n += (size_t)r;
+    same(n, TOTAL);
+    want(0 == memcmp(got[0], all[0], 100 + sp));
+    want(0 == memcmp(got[0] + 100 + sp + 7, all[0], BIG));
+    close(pfd[0]);
+    done;
+}
+
+//  CODE-26B068lK6V: FILECloseAll unbooks/unmaps and closes live slots.
+ok64 FILECloseAllTest() {
+    sane(1);
+    a_path(path, $cstr("/tmp"));
+    a_cstr(tmpl, "FILECloseAll_XXXXXX");
+    call(PATHu8bAddTmp, path, tmpl);
+    u8bp book = NULL, map = NULL;
+    call(FILEBookCreate, &book, $path(path), 64 * KB, 4 * KB);
+    call(FILEMapRO, &map, $path(path));
+    int bfd = FILEBookedFD(book), mfd = FILEBookedFD(map);
+    want(bfd >= 0 && mfd >= 0);
+    call(FILECloseAll);
+    want(book[0] == NULL && map[0] == NULL);
+    want(fcntl(bfd, F_GETFD) < 0 && fcntl(mfd, F_GETFD) < 0);
+    call(FILEUnLink, $path(path));
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
     call(FILEFdLeakTest);
     call(FILEErrTest);
     call(FILEExistsTest);
-    call(FILEFlushStreamTest);
     call(FILEFlushThresholdPipeTest);
     call(FILETrimMapPastTest);
     call(FILETrimKeepsDirtyTest);
     call(FILEBookGapTest);
+    call(FILEStreamTest);
+    call(FILECloseAllTest);
     call(FILEtest1);
     call(FILEtest2);
     call(FILE3);

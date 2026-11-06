@@ -344,11 +344,68 @@ ok64 FILESync(int const *fd) {
     done;
 }
 
-ok64 FILEClose(int *fd) {
+//  CODE-26B068lK6V: one zeroed record per fd, touched only by the fd's
+//  holder, so threads need no locks; book_end is set in FILE_BOOK mode.
+enum { FILE_FREE, FILE_MAP_RO, FILE_MAP_RW, FILE_BOOK, FILE_STREAM };
+typedef struct {
+    Bu8 buf;
+    u8 *book_end;
+    u8 mode;
+} FILEslot;
+static FILEslot FILE_SLOT[FILE_MAX_OPEN];
+
+u8bp FILESlot(int fd) {
+    return fd >= 0 && fd < FILE_MAX_OPEN ? FILE_SLOT[fd].buf : NULL;
+}
+
+//  The fd number is the slot's lock: b[0] is cleared last with release
+//  before close(), and the next opener of that number acquires it.
+fun void FILEslotFree(u8c **b) {
+    b[1] = b[2] = b[3] = NULL;
+    __atomic_store_n(&b[0], NULL, __ATOMIC_RELEASE);
+}
+
+fun b8 FILEslotIsFree(u8bp slot) {
+    return slot != NULL && __atomic_load_n(&slot[0], __ATOMIC_ACQUIRE) == NULL;
+}
+
+fun u8bp FILEstream(int fd) {
+    u8bp s = FILESlot(fd);
+    if (s == NULL || FILEslotIsFree(s)) return NULL;
+    return FILE_SLOT[fd].mode == FILE_STREAM ? s : NULL;
+}
+
+//  A slot that is not a stream buffer: mapped, booked, or free.
+int FILEBookedFD(u8bp buf) {
+    size_t off = (uintptr_t)buf - (uintptr_t)FILE_SLOT;
+    if (off % sizeof(FILEslot) != 0) return FILE_CLOSED;
+    size_t fd = off / sizeof(FILEslot);
+    if (fd >= FILE_MAX_OPEN || FILE_SLOT[fd].mode == FILE_STREAM)
+        return FILE_CLOSED;
+    return (int)fd;
+}
+
+//  Plain close: the slot is already released, so it is not read again.
+static ok64 FILEclose(int *fd) {
     sane(FILEok(*fd));
     testc(0 == close(*fd), FILENOCLSE);
     *fd = FILE_CLOSED;
     done;
+}
+
+//  CODE-26B068lK6V: a buffered fd is drained and its buffer unmapped first;
+//  the fd is closed even if that drain fails (its code is returned).
+ok64 FILEClose(int *fd) {
+    sane(FILEok(*fd));
+    u8bp buf = FILEstream(*fd);
+    ok64 o = buf != NULL ? FILEFlushAll(fd) : OK;
+    if (buf != NULL) {
+        FILE_SLOT[*fd].mode = FILE_FREE;
+        u8bUnMap(buf);
+        FILEslotFree((u8c **)buf);
+    }
+    call(FILEclose, fd);
+    return o;
 }
 
 ok64 FILECreate(int *fd, path8s path) {
@@ -527,87 +584,44 @@ ok64 FILErmrf(path8s path) {
 }
 
 // System page size for mmap (may differ from PAGESIZE on Apple Silicon)
-size_t FILESysPage(void) {
-    static size_t p = 0;
-    if (!p) p = sysconf(_SC_PAGESIZE);
-    return p;
-}
+size_t FILESysPage(void) { return (size_t)sysconf(_SC_PAGESIZE); }
 
-//  ABC-004: per-fd read/write flag map — a u1b bitmap (FILE_MAX_OPEN bits,
-//  allocated in FILEInit via u1bMap).  Addressed through u1bData/u1bDataC +
-//  u1sSet/u1sClr/u1At; the old BitUnset `|= ~(1<<bit)` bug cannot recur.
-u64 *FILE_RW[4] = {};
-u8p *FILE_BOOK[4] = {};  // Booked VA range ends
-Bu8 *FILE_WANT_BUFS = NULL;
-u8bwantf FILE_WANTS[FILE_MAX_OPEN] = {};
-
-// Booked buffer callback: grow mapping on idle-want
-fun ok64 FILEBookWant(u8bp buf, b8 rw, size_t need) {
-    sane(Bok(buf));
-    if (!rw) done;  // booked (mmap'd) data is always available
-    return FILEBookGrow(buf, need);
-}
-
-// Stream-mode gateway: ensure idle space
-ok64 u8bWantIdleLen(u8bp buf, size_t need) {
-    sane(Bok(buf));
-    if (u8bIdleLen(buf) >= need) done;
-    int fd = FILEBookedFD(buf);
-    test(fd >= 0 && FILE_WANTS[fd], BNOROOM);
-    return FILE_WANTS[fd](buf, YES, need);
-}
-
-// Stream-mode gateway: ensure data available
-ok64 u8bWantDataLen(u8bp buf, size_t need) {
-    sane(Bok(buf));
-    if (u8bDataLen(buf) >= need) done;
-    int fd = FILEBookedFD(buf);
-    test(fd >= 0 && FILE_WANTS[fd], NODATA);
-    return FILE_WANTS[fd](buf, NO, need);
-}
-
-ok64 FILEBookInit() {
-    sane(1);
-    if (FILE_WANT_BUFS) done;
-    size_t sz = sizeof(Bu8) * FILE_MAX_OPEN;
-    FILE_WANT_BUFS = mmap(NULL, sz, PROT_READ | PROT_WRITE,
-                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    test(FILE_WANT_BUFS != MAP_FAILED, MMAPFAIL);
+//  CODE-26B068lK6V: give a plain fd a write buffer of `size` bytes, a
+//  reserve map that never grows; FILEClose drains and drops it.
+ok64 FILEBuffer(int fd, size_t size) {
+    sane(FILEok(fd) && size > 0);
+    u8bp slot = FILESlot(fd);
+    test(FILEslotIsFree(slot), BADARG);
+    call(u8bMap, slot, size);
+    FILE_SLOT[fd].mode = FILE_STREAM;
     done;
 }
 
+ok64 FILEBufFeed(int fd, u8csc src) {
+    sane($ok(src));
+    u8bp buf = FILEstream(fd);
+    test(buf != NULL, BADARG);
+    size_t len = (size_t)$len(src);
+    if (u8bIdleLen(buf) < len) call(FILEFlushAll, &fd);
+    if (u8bIdleLen(buf) < len) return FILEFeedAll(fd, src);
+    return u8bFeed(buf, src);
+}
+
+//  Write a page or more out, consuming only what write() took (MEM-011)
 ok64 FILEFlush(int const *fd) {
-    sane(fd && *fd >= 0 && *fd < FILE_MAX_OPEN && FILE_WANT_BUFS);
-    u8bp buf = FILE_WANT_BUFS[*fd];
-    if (u8bDataLen(buf) >= PAGESIZE) {
-        //  ABC-013: EINTR-retry, matching FILEFeed/FILEDrain.
-        ssize_t r;
-        do { r = write(*fd, *u8bDataC(buf), u8bDataLen(buf));
-        } while (r < 0 && errno == EINTR);
-        if (r < 0) fail(FILEERROR);  // todo
-        if (r == 0) done;  // nothing written: avoid a no-op flush loop
-        // Consume the written prefix (advance PAST->DATA boundary buf[1]);
-        // never grow DATA into the uninitialised IDLE tail (MEM-011).
-        call(u8bUsed, buf, (size_t)r);
-        if (u8bPastLen(buf) >= u8bDataLen(buf)) u8bShift(buf, 0);
-        // todo if grows too fast
-    }
+    sane(fd != NULL);
+    u8bp buf = FILEstream(*fd);
+    test(buf != NULL, BADARG);
+    call(FILEFlushThreshold, *fd, buf, PAGESIZE);
+    if (u8bPastLen(buf) >= u8bDataLen(buf)) u8bShift(buf, 0);
     done;
 }
 
 ok64 FILEFlushAll(int const *fd) {
-    sane(fd && *fd >= 0 && *fd < FILE_MAX_OPEN && FILE_WANT_BUFS);
-    u8bp buf = FILE_WANT_BUFS[*fd];
-    test(buf[0] != NULL, BADARG);
-    u8csp data = u8bDataC(buf);
-    while (u8bDataLen(buf)) {
-        //  ABC-013: EINTR-retry; ssize_t so write() is not int-truncated.
-        ssize_t r;
-        do { r = write(*fd, *data, u8csLen(data));
-        } while (r < 0 && errno == EINTR);
-        if (r < 0) fail(FILEERROR);  // todo
-        u8csFed(data, (size_t)r);
-    }
+    sane(fd != NULL);
+    u8bp buf = FILEstream(*fd);
+    test(buf != NULL, BADARG);
+    while (u8bDataLen(buf)) call(FILEFlushThreshold, *fd, buf, 1);
     Breset(buf);
     done;
 }
@@ -621,8 +635,8 @@ ok64 FILEFlushThreshold(int fd, u8b buf, size_t threshold) {
         do { written = write(fd, *u8bData(buf), u8bDataLen(buf));
         } while (written < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (written < 0) return FILEERROR;  // TODO vocabulary
-        //  ABC-013: consume only the written prefix (cf. FILEFlush) — a
-        //  partial write must not lose the DATA tail.
+        //  ABC-013: consume only the written prefix — a partial write
+        //  must not lose the DATA tail.
         call(u8bUsed, buf, (size_t)written);
     }
     done;
@@ -668,24 +682,15 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
     done;
 }
 
-ok64 FILENoteMap(int const *fd, u8bp buf, b8 rw) {
-    sane(*fd > FILE_CLOSED && u8bOK(buf));
-    call(FILEInit);
-    rw ? u1sSet(u1bData(FILE_RW), (u32)*fd) : u1sClr(u1bData(FILE_RW), (u32)*fd);
-    done;
-}
-
 ok64 FILEFindMap(int *fd, u8bp buf) {
     sane(fd != NULL && u8bOK(buf));
     int bfd = FILEBookedFD(buf);
     if (bfd >= 0) { *fd = bfd; done; }
-    // Slow path: linear search by base pointer
-    if (FILE_WANT_BUFS) {
-        for (int i = 0; i < FILE_MAX_OPEN; i++) {
-            if (FILE_WANT_BUFS[i][0] == buf[0]) {
-                *fd = i;
-                done;
-            }
+    // Slow path: a copy of a record, scan by base (reads every slot)
+    for (int i = 0; i < FILE_MAX_OPEN; i++) {
+        if (FILE_SLOT[i].buf[0] == buf[0] && FILE_SLOT[i].mode != FILE_STREAM) {
+            *fd = i;
+            done;
         }
     }
     fail(NONE);
@@ -730,28 +735,29 @@ ok64 FILETrimMap(u8bp buf) {
     done;
 }
 
-ok64 FILEDropMap(int *fd, u8bp buf) {
-    sane(u8bOK(buf));
-    call(FILEFindMap, fd, buf);
-    u1sClr(u1bData(FILE_RW), (u32)*fd);
-    done;
-}
-
+//  CODE-26B068lK6V: process teardown, single-threaded: unbook, unmap or
+//  drain, and close, every live slot; returns the last failure, if any.
 ok64 FILECloseAll() {
-    sane(1);
-    // todo unmap/close all managed fds
-    call(u1bFree, FILE_RW);
-    done;
+    ok64 o = OK;
+    for (int fd = 0; fd < FILE_MAX_OPEN; ++fd) {
+        u8bp buf = FILE_SLOT[fd].buf;
+        u8 mode = FILE_SLOT[fd].mode;
+        if (buf[0] == NULL) continue;
+        int dfd = fd;
+        ok64 r = mode == FILE_BOOK     ? FILEUnBook(buf)
+                 : mode == FILE_STREAM ? FILEClose(&dfd)
+                                       : FILEUnMap(buf);
+        if (r != OK) o = r;
+    }
+    return o;
 }
 
 //  Inner worker: all the fallible map logic.  Owns nothing; the
 //  wrapper FILEMapFD closes the fd on any non-OK return from here.
 static ok64 FILEMapFD_(u8bp *buf, int const *fd, int mode) {
     sane(buf != NULL && FILEok(*fd));
-    test(*fd >= 0 && *fd < FILE_MAX_OPEN, BADARG);
-    call(FILEBookInit);
-    u8bp slot = FILE_WANT_BUFS[*fd];
-    test(slot[0] == NULL, BADARG);  // slot must be free
+    u8bp slot = FILESlot(*fd);
+    test(FILEslotIsFree(slot), BADARG);
     size_t size;
     call(FILESize, &size, fd);
     u8 *map = (u8 *)mmap(NULL, size, mode, MAP_FILE | MAP_SHARED, *fd, 0);
@@ -760,7 +766,7 @@ static ok64 FILEMapFD_(u8bp *buf, int const *fd, int mode) {
     b[0] = b[1] = b[2] = b[3] = map;
     b[3] += size;
     if (0 == (mode & PROT_WRITE)) b[2] += size;
-    call(FILENoteMap, fd, slot, (mode & PROT_WRITE) != 0);
+    FILE_SLOT[*fd].mode = (mode & PROT_WRITE) ? FILE_MAP_RW : FILE_MAP_RO;
     *buf = slot;
     done;
 }
@@ -867,10 +873,10 @@ ok64 FILEMapCreateAt(u8bp *buf, int dir, path8s path, size_t size) {
 ok64 FILEReMap(u8bp buf, size_t new_size) {
     sane(Bok(buf));
     int fd = FILEBookedFD(buf);
-    test(fd >= 0, NONE);
-    b8 rw = u1At(u1bDataC(FILE_RW), (u32)fd);
+    u8 mode = fd >= 0 ? FILE_SLOT[fd].mode : FILE_FREE;
+    test(mode == FILE_MAP_RO || mode == FILE_MAP_RW, NONE);
     int prot = PROT_READ;
-    if (rw) prot |= PROT_WRITE;
+    if (mode == FILE_MAP_RW) prot |= PROT_WRITE;
     // Unmap old
     FILETestC(-1 != munmap(buf[0], buf[3] - buf[0]));
     u8c **b = (u8c **)buf;
@@ -892,8 +898,8 @@ ok64 FILEUnMapFD(u8b buf, int const *fd) {
     sane(Bok(buf));
     u8c **b = (u8c **)buf;
     FILETestC(-1 != munmap(buf[0], Blen(b)));
-    u1sClr(u1bData(FILE_RW), (u32)*fd);
-    b[0] = b[1] = b[2] = b[3] = NULL;
+    if (FILESlot(*fd) != NULL) FILE_SLOT[*fd].mode = FILE_FREE;
+    FILEslotFree(b);
     done;
 }
 
@@ -902,7 +908,7 @@ ok64 FILEUnMap(u8bp buf) {
     int fd = FILEBookedFD(buf);
     test(fd >= 0, NONE);
     call(FILEUnMapFD, buf, &fd);
-    call(FILEClose, &fd);
+    call(FILEclose, &fd);
     done;
 }
 
@@ -910,11 +916,10 @@ ok64 FILEUnMap(u8bp buf) {
 //  and FILEUnMap it (munmap + close + fd=-1); NONE if not a live FILE map.
 ok64 FILEUnMapBase(u8 *base) {
     sane(base != NULL);
-    call(FILEInit);
     int fd = FILE_CLOSED;
     u8 *const probe[4] = { base, base, base, base };
     call(FILEFindMap, &fd, probe);
-    call(FILEUnMap, FILE_WANT_BUFS[fd]);
+    call(FILEUnMap, FILE_SLOT[fd].buf);
     done;
 }
 
@@ -930,9 +935,7 @@ ok64 FILEUnMapBase(u8 *base) {
 static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
                         int mode) {
     sane(buf != NULL && FILEok(*fd));
-    test(*fd >= 0 && *fd < FILE_MAX_OPEN, BADARG);
-
-    call(FILEBookInit);
+    test(FILESlot(*fd) != NULL, BADARG);
 
     size_t actual_size;
     call(FILESize, &actual_size, fd);
@@ -981,8 +984,8 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
     }
 
     // Slot must be free
-    u8bp slot = FILE_WANT_BUFS[*fd];
-    test(slot[0] == NULL, BADARG);
+    u8bp slot = FILE_SLOT[*fd].buf;
+    test(FILEslotIsFree(slot), BADARG);
 
     // Reserve entire VA range with PROT_NONE (no access yet)
     u8 *base = (u8 *)mmap(NULL, book_size, PROT_NONE,
@@ -1018,22 +1021,8 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
     b[3] = ro ? b[2]
               : map + (actual_size ? map_size : 0);
 
-    // Track the mapping and booked end
-    call(FILEInit);
-    call(FILENoteMap, fd, slot, YES);
-
-    // Store booked end in FILE_BOOK
-    size_t fdlen = u8pbDataLen(FILE_BOOK);
-    if (*fd >= (int)fdlen) {
-        u8psFed(u8pbIdle(FILE_BOOK), *fd - fdlen + 1);
-        //  ABC-013: sFed grows DATA without writing — NULL the gap so no
-        //  stale entry ever passes the FILENOBOOK sentinel checks.
-        for (size_t i = fdlen; i < (size_t)*fd; i++)
-            *u8pbAtP(FILE_BOOK, i) = NULL;
-    }
-    *u8pbAtP(FILE_BOOK, *fd) = base + book_size;
-
-    FILE_WANTS[*fd] = FILEBookWant;
+    FILE_SLOT[*fd].mode = FILE_BOOK;
+    FILE_SLOT[*fd].book_end = base + book_size;
     *buf = slot;
     done;
 }
@@ -1121,8 +1110,8 @@ ok64 FILEBookExtend(u8bp buf, size_t new_size) {
     test(fd >= 0, FILENOBOOK);
 
     // Get booked end
-    u8p booked_end = *u8pbAtP(FILE_BOOK, fd);
-    test(booked_end != NULL, FILENOBOOK);
+    test(FILE_SLOT[fd].mode == FILE_BOOK, FILENOBOOK);
+    u8p booked_end = FILE_SLOT[fd].book_end;
 
     u8p base = buf[0];
     size_t book_size = booked_end - base;
@@ -1190,8 +1179,8 @@ ok64 FILEUnBook(u8bp buf) {
     test(fd >= 0, FILENOBOOK);
 
     // Get booked end
-    u8p booked_end = *u8pbAtP(FILE_BOOK, fd);
-    test(booked_end != NULL, FILENOBOOK);
+    test(FILE_SLOT[fd].mode == FILE_BOOK, FILENOBOOK);
+    u8p booked_end = FILE_SLOT[fd].book_end;
 
     u8p base = buf[0];
     size_t book_size = booked_end - base;
@@ -1199,22 +1188,10 @@ ok64 FILEUnBook(u8bp buf) {
     // Unmap the entire booked range (includes file mapping + reserved)
     FILETestC(munmap(base, book_size) == 0);
 
-    // Clear tracking
-    *u8pbAtP(FILE_BOOK, fd) = NULL;
-    u1sClr(u1bData(FILE_RW), (u32)fd);
-
-    // Shrink FILE_BOOK tracking array if possible
-    u8psp data = u8pbData(FILE_BOOK);
-    while (!$empty(data) && *u8psLast(data) == NULL) u8psPuked(data, 1);
-
-    FILE_WANTS[fd] = NULL;
-
-    call(FILEClose, &fd);
-
-    // Clear buffer slot
-    u8c **b = (u8c **)buf;
-    b[0] = b[1] = b[2] = b[3] = NULL;
-
+    FILE_SLOT[fd].book_end = NULL;
+    FILE_SLOT[fd].mode = FILE_FREE;
+    FILEslotFree((u8c **)buf);  // CODE-26B068lK6V: before close, not after
+    call(FILEclose, &fd);
     done;
 }
 

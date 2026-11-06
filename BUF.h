@@ -252,12 +252,6 @@ fun ok64 u8sPop32(u8cs s, u32p last) {
     return OK;
 }
 
-// Stream-mode gateway: ensure idle/data space for file-backed buffers.
-// For booked buffers: extends file+mapping. For streaming: flushes/reads.
-// Plain allocated buffers return BNOROOM/NODATA.
-ok64 u8bWantIdleLen(u8bp buf, size_t need);
-ok64 u8bWantDataLen(u8bp buf, size_t need);
-
 // range32/match32 collection types (typedefs are in B.h)
 #define X(M, name) M##range32##name
 #include "Bx.h"

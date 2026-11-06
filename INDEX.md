@@ -45,7 +45,7 @@ A buffer is four pointers splitting memory into PAST/DATA/IDLE; the verb that cr
  -  `u8bAlign`/`u8bAcq`/`u8bAren` — the slice-rental trio: align IDLE, snapshot DATA into a surviving `u8cs`.
  -  `Balloc`/`Brealloc`/`Breserve`/`Bfree` — the untyped (`Bvoid`) backing-memory ops the typed `bAllocate` use.
  -  `range32`/`match32` + `range32Z`/`match32Z` — byte-range and haystack/needle-range records with comparators.
- -  `u8bPrintf`/`u8bWantIdleLen`/`u8bWantDataLen` (BUF.h) — formatted append + grow-on-demand helpers over a buffer.
+ -  `u8bPrintf` (BUF.h) — formatted append over a buffer.
 
 ###  OK.h, PRO.h, TEST.h — errors, call discipline, tests
 

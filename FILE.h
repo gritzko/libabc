@@ -86,14 +86,6 @@ ok64 FILEErr(ok64 def);
         if (!(cond)) return FILEErr(FILEFAIL); \
     } while (0)
 
-extern u64 *FILE_RW[4];   // per-fd read-write flag bitmap (u1b)
-extern u8p *FILE_BOOK[4];       // Booked VA range ends
-extern Bu8 *FILE_WANT_BUFS;   // Per-fd booked buffer slots [FILE_MAX_OPEN]
-
-// Stream-mode callback: rw=YES → ensure idle (flush/grow), rw=NO → ensure data (read)
-typedef ok64 (*u8bwantf)(u8bp buf, b8 rw, size_t need);
-extern u8bwantf FILE_WANTS[];   // [FILE_MAX_OPEN], parallel to FILE_WANT_BUFS
-
 /*
 typedef int *FILE;
 
@@ -258,6 +250,11 @@ fun ok64 FILEDeepScanDir(path8bp path, path8f f, void0p arg) {
 
 ok64 FILESync(int const *fd);
 
+// CODE-26B068lK6V: buffered fd — FILEBuffer maps a `size`-byte write buffer
+// into the fd's slot (FILESlot); FILEBufFeed appends (draining when full),
+// FILEFlush writes a page or more, FILEFlushAll all; FILEClose drains.
+ok64 FILEBuffer(int fd, size_t size);
+ok64 FILEBufFeed(int fd, u8csc src);
 ok64 FILEFlush(int const *fd);
 ok64 FILEFlushAll(int const *fd);
 
@@ -578,7 +575,7 @@ ok64 FILEMapRO(u8bp *buf, path8s path);
 ok64 FILEMapROAt(u8bp *buf, int dir, path8s path);
 
 // ABC-023: map for reading and close the fd at once — fills the CALLER's own
-// buf (no FILE_WANT_BUFS slot, no fd); an empty file gives the empty record.
+// buf (no per-fd slot, no fd); an empty file gives the empty record.
 ok64 FILEMapOnce(u8bp buf, path8s path);
 
 // ABC-023: release a FILEMapOnce record — plain munmap, no fd to close;
@@ -593,7 +590,7 @@ ok64 FILEMapCreate(u8bp *buf, path8s path, size_t size);
 
 ok64 FILEMapCreateAt(u8bp *buf, int dir, path8s path, size_t size);
 
-// Unmaps the buffer (buf must point into FILE_WANT_BUFS).
+// Unmaps the buffer (buf must be a per-fd slot).
 ok64 FILEUnMap(u8bp buf);
 
 // ABC-020: release a live mapping by its base pointer (find slot + FILEUnMap).
@@ -673,15 +670,12 @@ fun ok64 FILEBookFeed(u8bp buf, u8csc src) {
 // Sync mapped region to disk
 ok64 FILEMSync(u8bp buf);
 
-// O(1) fd lookup for booked buffers (buf points into FILE_WANT_BUFS)
-fun int FILEBookedFD(u8bp buf) {
-    if (!FILE_WANT_BUFS || !buf) return FILE_CLOSED;
-    size_t off = (u8cp)buf - (u8cp)FILE_WANT_BUFS;
-    if (off % sizeof(Bu8) != 0) return FILE_CLOSED;
-    size_t idx = off / sizeof(Bu8);
-    if (idx >= FILE_MAX_OPEN) return FILE_CLOSED;
-    return (int)idx;
-}
+// CODE-26B068lK6V: fd's own slot record (NULL if fd is out of range);
+// Map*/Book* hand these out, a slot is touched only by its fd's holder.
+u8bp FILESlot(int fd);
+
+// O(1) fd of a map/book slot by its address; FILE_CLOSED for any other buf
+int FILEBookedFD(u8bp buf);
 
 // Check if buffer is booked
 fun b8 FILEIsBooked(u8bp buf) {
@@ -696,16 +690,11 @@ ok64 FILETrimBook(u8bp buf);
 
 // . . . . . . . .
 
+// Teardown: unbook/unmap/drain and close every live slot (not thread-safe)
 ok64 FILECloseAll();
-ok64 FILEBookInit();
 
-fun ok64 FILEInit() {
-    if (*FILE_RW != NULL) return OK;
-    ok64 o = u1bAllocate(FILE_RW, (u32)FILE_MAX_OPEN);
-    if (o == OK) o = u8pbAllocate(FILE_BOOK, FILE_MAX_OPEN);
-    if (o == OK) o = FILEBookInit();
-    return o;
-}
+// CODE-26B068lK6V: the slots are static and zeroed, nothing to init
+fun ok64 FILEInit() { return OK; }
 // . . . . . . . .
 
 fun ok64 FILEout(u8 const *const *txt) {
