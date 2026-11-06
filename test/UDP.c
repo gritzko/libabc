@@ -94,6 +94,11 @@ ok64 UDPtestTrunc() {
     aNETraw(src);
     ok64 rc = UDPDrain(readidle, src, fd);
     if (rc != NETNOSPACE) fail(UDPFAIL);
+    // CODE-26B06585xv: the refused datagram stays queued
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+    aBpad2(u8, big, 64);
+    call(UDPDrain, bigidle, src, fd);
+    $testeq(msg, bigdata);
 
     call(UDPClose, fd);
     call(UDPClose, cfd);

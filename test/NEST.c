@@ -67,11 +67,25 @@ ok64 NESTtest3() {
     done;
 }
 
+// CODE-26B06585xv: a splice of an absent var fails with no mark added
+ok64 NESTtest4() {
+    sane(1);
+    aBpad(u8, ct, 128);
+    NESTreset(ct);
+    a_cstr(templ, "no vars");
+    call(NESTFeed, ct, templ);
+    size_t idle = $len(NESTidle(ct));
+    want(NESTSpliceAll(ct, 0x25) == NESTNONE);
+    want($len(NESTidle(ct)) == idle);
+    done;
+}
+
 ok64 NESTtest() {
     sane(1);
     call(NESTtest1);
     call(NESTtest2);
     call(NESTtest3);
+    call(NESTtest4);
     done;
 }
 

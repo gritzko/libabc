@@ -264,6 +264,23 @@ ok64 ZINTTestFeedTight() {
     done;
 }
 
+// CODE-26B06585xv: a short slice fails with nothing written and
+// nothing consumed; u128feed needs only ZINT128len bytes of room.
+ok64 ZINTTestFailClean() {
+    sane(1);
+    u64 vals[] = {1, 0x12345};
+    a$(u64c, w, vals);
+    a_pad(u8, buf, 3);
+    want(ZINTu8sFeedBlocked(buf_idle, w) != OK);
+    want(u8bDataLen(buf) == 0);
+    want(w[0] == vals);
+    a_pad(u8, b10, 10);
+    u128 a = {._64 = {5, 7}};
+    call(ZINTu128feed, b10_idle, &a);
+    want(u8bDataLen(b10) == 2);
+    done;
+}
+
 ok64 ZINTTest() {
     sane(1);
     call(ZINTTest1);
@@ -274,6 +291,7 @@ ok64 ZINTTest() {
     call(ZINTTestFeed128Short);
     call(ZINTTestUndeltaWrap);
     call(ZINTTestFeedTight);
+    call(ZINTTestFailClean);
     done;
 }
 

@@ -55,17 +55,17 @@ ok64 NESTSplice(u8bp ct, u64 var) {
 
 ok64 NESTSpliceMany(u8bp ct, u64 var, b8 some) {
     sane(Bok(ct));
+    // CODE-26B06585xv: search first, so NESTNONE adds no mark
+    u32 n = $len(NESTlog(ct)), i = n;
+    while (i > 0 && (NESTmark(ct, i)->var != var || NESTmark(ct, i)->ins))
+        --i;
+    if (i == 0) fail(NESTNONE);
     mark128 mark = {.pos = $len(NESTdata(ct))};
     call(NESTaddmark, ct, &mark);
-    int found = 0;
-    for (u32 i = $len(NESTlog(ct)); i > 0; --i) {
+    for (; i > 0; --i) {
         mark128* m = NESTmark(ct, i);
-        if (m->var == var && m->ins == 0) {
-            m->ins = $len(NESTlog(ct));
-            ++found;
-        }
+        if (m->var == var && m->ins == 0) m->ins = n + 1;
     }
-    if (!found) fail(NESTNONE);
     done;
 }
 

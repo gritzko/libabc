@@ -19,33 +19,38 @@ ok64 ZINTu64feed($u8 into, u64 n) {
 
 ok64 ZINTu8sFeedBlocked(u8s into, u64cs ints) {
     if (!into || !ints) return BADARG;
-    ok64 o = OK;
+    // CODE-26B06585xv: size the run first, so NOROOM writes nothing
+    u64 need = 0, n = 0;
+    $for(u64c, i, ints) {
+        if ((n++ & 3) == 0) ++need;
+        need += *i <= 0xff ? 1 : *i <= 0xffff ? 2 : *i <= 0xffffffff ? 4 : 8;
+    }
+    if (u8sLen(into) < need) return NOROOM;
     u32 l = 0;
     u8p bh = 0;
-    while (o == OK && !u64csEmpty(ints)) {
+    while (!u64csEmpty(ints)) {
         if (l == 0) {
             bh = *into;
-            if (!u8sLen(into)) return NOROOM;
             ++*into;
             *bh = 0;
         }
         if (**ints <= 0xff) {
-            o = u8sFeed8(into, (u8*)*ints);
+            u8sFeed8(into, (u8*)*ints);
             *bh |= (0 << l);
         } else if (**ints <= 0xffff) {
-            o = u8sFeed16(into, (u16*)*ints);
+            u8sFeed16(into, (u16*)*ints);
             *bh |= (1 << l);
         } else if (**ints <= 0xffffffff) {
-            o = u8sFeed32(into, (u32*)*ints);
+            u8sFeed32(into, (u32*)*ints);
             *bh |= (2 << l);
         } else {
-            o = u8sFeed64(into, (u64*)*ints);
+            u8sFeed64(into, (u64*)*ints);
             *bh |= (3 << l);
         }
         ++*ints;
         l = (l + 2) & 7;
     }
-    return o;
+    return OK;
 }
 
 ok64 ZINTu8sDrainBlocked(u8cs from, u64s ints) {
