@@ -46,8 +46,9 @@ typedef Bu8 NETaddr;
 fun ok64 NETInfo(NETaddr text, NETaddr raw) {
     char host[NETmaxhost], service[NETmaxserv];
     u8$ addr = NETraw(raw);
+    // STD-26B068vihR: numeric host; a name would cost a PTR query per peer
     int s = getnameinfo((struct sockaddr*)addr[0], $len(addr), host, NETmaxhost,
-                        service, NETmaxserv, NI_NUMERICSERV);
+                        service, NETmaxserv, NI_NUMERICHOST | NI_NUMERICSERV);
     if (s != 0) {
         return NETBADADDR;
     }

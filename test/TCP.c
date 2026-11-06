@@ -46,6 +46,10 @@ ok64 TCPtest1() {
     int sfd;
     aNETraw(caddr);
     call(TCPAccept, &sfd, caddr, fd);
+    // STD-26B068vihR: the peer text is numeric, no reverse DNS
+    aNETAddress(peer, "", "");
+    call(NETInfo, peer, caddr);
+    testeq(0, strcmp((char *)peer[0], "127.0.0.1"));
 
     a$str(bubu, "BuBu");
     call(FILEFeedAll, cfd, bubu);
