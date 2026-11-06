@@ -78,6 +78,17 @@ add_executable(BITfuzz BIT.c ../RON.c)
 add_executable(PUPSfuzz PUPS.c)
 target_link_libraries(PUPSfuzz abc)
 
+#  JSON-26B065OmZ3: JSONutf8Parse vs yyjson; optional, never vendored
+find_path(YYJSON_INC yyjson.h)
+find_library(YYJSON_LIB yyjson)
+if (YYJSON_INC AND YYJSON_LIB)
+    set_source_files_properties(../JSON.rl.c PROPERTIES
+        COMPILE_OPTIONS "-Wno-unused-variable;-Wno-unused-const-variable")
+    add_executable(JSONfuzz JSON.c ../JSON.c ../JSON.rl.c)
+    target_include_directories(JSONfuzz SYSTEM PRIVATE ${YYJSON_INC})
+    target_link_libraries(JSONfuzz abc ${YYJSON_LIB})
+endif ()
+
 #  FUZZ-26B04IO_g6: TARGETfuzz replays the local, uncommitted corpus/TARGET/
 #  once, no fuzzing; lsan.supp mutes a musl libFuzzer leak
 file(GLOB FUZZ_CORPORA CONFIGURE_DEPENDS LIST_DIRECTORIES true

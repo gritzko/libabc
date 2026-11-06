@@ -355,6 +355,7 @@ Ragel-generated SAX-style streaming lexers; the lexer enums/callbacks live in th
 
  -  `HTTPLexer`/`HTTPutf8Drain`/`HTTPutf8Feed`/`HTTPfind` — drive the HTTP lexer over a stream, look up a header by key.
  -  `JSONLexer`/`JSONfmtInit`/`JSONFmt` — the JSON SAX lexer and a re-indenting pretty-printer.
+ -  `JSONutf8Parse` — RFC 8259 pull parser: one token per call, caller stack is all the state, `JSONSYNTAX`/`NODATA`, strict UTF-8.
  -  `JSONEscape`/`JSONUnEscape`/`JSONEscapeAll`/`JSONUnEscapeAll` — escape/unescape JSON text ↔ raw bytes.
 
 ##  Text & terminal

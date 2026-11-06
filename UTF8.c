@@ -62,6 +62,7 @@ ok64 _utf8sDrain32(u32 *cp, utf8cs data) {
         if ((utf8[3] & 0b11000000) != 0b10000000) fail(UTF8BAD);
         code_point = (byte & 0b00000111) << 18 | (utf8[1] & 0b00111111) << 12 |
                      (utf8[2] & 0b00111111) << 6 | (utf8[3] & 0b00111111);
+        // JSON-26B065OmZ3: a 4-byte form below U+10000 is overlong
         if (code_point < 0x10000 || 0x10ffff < code_point) fail(UTF8BAD);
         *data += 4;
     } else {

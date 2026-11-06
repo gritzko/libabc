@@ -112,7 +112,6 @@ static ok64 JSONfmtLiteral(u8cs tok, void *ctx) {
 static ok64 JSONfmtOpenObject(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
-    test(f->depth < JSON_MAX_NEST, JSONFULL);
     call(JSONfmtPre, f);
     call(u8sFeed1, f->out, '{');
     ++f->depth;
@@ -123,7 +122,6 @@ static ok64 JSONfmtOpenObject(u8cs tok, void *ctx) {
 static ok64 JSONfmtCloseObject(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
-    test(f->depth > 0, JSONBAD);
     --f->depth;
     if (!f->need_nl) {
         call(JSONfmtNL, f);
@@ -136,7 +134,6 @@ static ok64 JSONfmtCloseObject(u8cs tok, void *ctx) {
 static ok64 JSONfmtOpenArray(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
-    test(f->depth < JSON_MAX_NEST, JSONFULL);
     call(JSONfmtPre, f);
     call(u8sFeed1, f->out, '[');
     ++f->depth;
@@ -147,7 +144,6 @@ static ok64 JSONfmtOpenArray(u8cs tok, void *ctx) {
 static ok64 JSONfmtCloseArray(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
-    test(f->depth > 0, JSONBAD);
     --f->depth;
     if (!f->need_nl) {
         call(JSONfmtNL, f);
@@ -190,10 +186,105 @@ ok64 JSONfmtInit(JSONstate *state, JSONfmt *fmt) {
     done;
 }
 
+// --- Pull parser (JSON-26B065OmZ3) ---
+
+// JSONLexer stops on the first token; a private code, never returned.
+con ok64 JSONSTOP = 0x4dc61771d619;
+
+static ok64 JSONpullTok(u8cs tok, void *ctx) {
+    u8csMv((u8c **)ctx, tok);
+    return JSONSTOP;
+}
+
+static JSONstate const JSONPULL = {
+    .on_string = JSONpullTok,     .on_number = JSONpullTok,
+    .on_literal = JSONpullTok,    .on_open_object = JSONpullTok,
+    .on_close_object = JSONpullTok, .on_open_array = JSONpullTok,
+    .on_close_array = JSONpullTok, .on_colon = JSONpullTok,
+    .on_comma = JSONpullTok,
+};
+
+// Stack bytes: `.` root done; object `{` fresh, `K` key due, `:` colon
+// due, `=` value due, `}` comma/close due; array `[` fresh, `V` value
+// due, `]` comma/close due. Returns the event, 0 if `b` is out of place.
+fun u8 JSONstep(u8bp stack, u8 b) {
+    u8 *t = u8bHasData(stack) ? u8bLast(stack) : NULL;
+    u8 top = t ? *t : 0;
+    switch (b) {
+        case ':':
+            if (top != ':') return 0;
+            *t = '=';
+            return b;
+        case ',':
+            if (top != '}' && top != ']') return 0;
+            *t = top == '}' ? 'K' : 'V';
+            return b;
+        case '}':
+        case ']':  // '{'+2 == '}', '['+2 == ']'
+            if (top != b && top + 2 != b) return 0;
+            u8bPop(stack);
+            return b;
+        case '"':
+            if (top != '{' && top != 'K') break;
+            *t = ':';
+            return 'k';
+    }
+    if (top != 0 && top != '[' && top != 'V' && top != '=') return 0;
+    b8 open = b == '{' || b == '[';
+    if (u8bIdleLen(stack) < (size_t)(open + !top)) return 0;
+    if (top)
+        *t = top == '=' ? '}' : ']';
+    else
+        u8bFeed1(stack, '.');
+    if (open) u8bFeed1(stack, b);
+    return b == '-' || (b >= '0' && b <= '9') ? '1' : b;
+}
+
+ok64 JSONutf8Parse(u8p event, utf8csp token, utf8cs input, u8bp stack) {
+    sane(event != NULL && token != NULL && $ok(input) && u8bOK(stack));
+    for (;;) {
+        u8cs tok = {};
+        JSONstate lex = JSONPULL;
+        u8csMv(lex.data, input);
+        lex.ctx = tok;
+        ok64 o = JSONLexer(&lex);
+        if (o == OK) {  // whitespace only: the end
+            input[0] = input[1];
+            b8 fin = u8bHasData(stack) && *u8bLast(stack) == '.';
+            return fin ? NODATA : JSONSYNTAX;
+        }
+        if (o != JSONSTOP) {
+            input[0] = lex.data[0];
+            return o;
+        }
+        input[0] = tok[0];
+        a_dup(u8c, str, tok);  // JSON-26B065wahm: strict UTF-8 in strings
+        if (*tok[0] == '"' && utf8sValid(str) != OK) {
+            input[0] = str[0];
+            return JSONBAD;
+        }
+        u8 e = JSONstep(stack, *tok[0]);
+        if (e == 0) return JSONSYNTAX;
+        input[0] = tok[1];
+        if (e == ':' || e == ',') continue;
+        *event = e;
+        u8csMv(token, tok);
+        return OK;
+    }
+}
+
 ok64 JSONFmt(u8s out, u8cs json, u8cs indent) {
     sane(u8sOK(out) && $ok(json));
     JSONfmt fmt = {.out = {out[0], out[1]}, .indent = {indent[0], indent[1]}};
     JSONstate state = {.data = {json[0], json[1]}};
+    aBpad(u8, stack, JSON_MAX_NEST + 1);  // validation caps fmt depth
+    a_dup(u8c, in, json);
+    u8 e = 0;
+    u8cs tok = {};
+    ok64 o = OK;
+    while ((o = JSONutf8Parse(&e, tok, in, stack)) == OK) {
+    }
+    if (o != NODATA) fail(o);
     call(JSONfmtInit, &state, &fmt);
     call(JSONLexer, &state);
     out[0] = fmt.out[0];

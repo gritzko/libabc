@@ -154,9 +154,9 @@ ok64 JSONNestTest() {
     call(JSONFmt, out_idle, ok, indent);
     a_pad(u8, out2, 1 << 18);
     u8cs over = {deep, deep + 2 * JSON_MAX_NEST + 2};
-    want(JSONFULL == JSONFmt(out2_idle, over, indent));
+    want(JSONSYNTAX == JSONFmt(out2_idle, over, indent));
     u8cs close = u8scstr("]");
-    want(JSONBAD == JSONFmt(out_idle, close, indent));
+    want(JSONSYNTAX == JSONFmt(out_idle, close, indent));
     done;
 }
 
@@ -199,6 +199,122 @@ ok64 JSONUnEscapeTest() {
     done;
 }
 
+// JSON-26B065OmZ3: pull-parse a whole doc into `ev`, return the last code
+static ok64 JSONpullAll(u8s ev, u8cs json, u8bp stack) {
+    u8 e = 0;
+    u8cs tok = {};
+    ok64 o = OK;
+    while ((o = JSONutf8Parse(&e, tok, json, stack)) == OK)
+        if (u8sFeed1(ev, e) != OK) return NOROOM;
+    return o;
+}
+
+// Structural must-fail cases (JSONTestSuite style): the token-level
+// JSONLexer takes them, JSONutf8Parse must refuse at the offending token
+ok64 JSONSyntaxTest() {
+    sane(1);
+    typedef struct {
+        const char *in;
+        int at;
+    } NCase;
+    NCase n[] = {
+        {"", 0},        {"  \n", 3},     {"[1,]", 3},       {"{\"a\":1,}", 7},
+        {"[,1]", 1},    {"[1,,2]", 3},   {"[1}", 2},        {"[1,2", 4},
+        {"]", 0},       {"{}{}", 2},     {"[][]", 2},       {"{\"a\":}", 5},
+        {"{\"a\"}", 4}, {"{1:2}", 1},    {"{\"a\"::1}", 5}, {":", 0},
+        {",", 0},       {"[\"a\":1]", 4}, {"{\"a\":1", 6},
+    };
+    for (size_t i = 0; i < sizeof(n) / sizeof(n[0]); ++i) {
+        u8cs json = u8scstr(n[i].in);
+        JSONstate lex = {.data = {json[0], json[1]}};
+        want(JSONLexer(&lex) == OK);
+        a_pad(u8, ev, 64);
+        aBpad(u8, stack, JSON_MAX_NEST + 1);
+        ok64 o = JSONpullAll(ev_idle, json, stack);
+        if (o != JSONSYNTAX || json[0] != (u8c *)n[i].in + n[i].at) {
+            fprintf(stderr, "FAIL n_ case %zu '%s': %s at %ld\n", i, n[i].in,
+                    ok64str(o), (long)(json[0] - (u8c *)n[i].in));
+            fail(TESTFAIL);
+        }
+    }
+    // y_: valid documents end in NODATA with the exact event sequence
+    JSONCase y[] = {
+        {"{}", "{}"},
+        {"{\"a\":[1,{\"b\":null}],\"c\":\"d\"}", "{k[1{kn}]k\"}"},
+        {" \t\r\n[ 1 ] \n", "[1]"},
+        {"[1e5,-0,true,false]", "[11tf]"},
+        {"\"abc\"", "\""},
+        {"-0.0e+0", "1"},
+        {"[[],{},[{}]]", "[[]{}[{}]]"},
+    };
+    for (size_t i = 0; i < sizeof(y) / sizeof(y[0]); ++i) {
+        u8cs json = u8scstr(y[i].input);
+        a_pad(u8, ev, 64);
+        aBpad(u8, stack, JSON_MAX_NEST + 1);
+        want(JSONpullAll(ev_idle, json, stack) == NODATA);
+        want(u8csEmpty(json));
+        u8cs got = {ev[1], ev_idle[0]};
+        u8cs expect = u8scstr(y[i].expected);
+        want(u8csEq(got, expect));
+        u8 e = 0;
+        u8cs tok = {};
+        want(JSONutf8Parse(&e, tok, json, stack) == NODATA);
+    }
+    // tokens are zero-copy slices, strings as lexed (quotes included)
+    u8cs doc = u8scstr("{\"k\": \"v\\n\"}");
+    aBpad(u8, st, 8);
+    u8 e = 0;
+    u8cs tok = {};
+    call(JSONutf8Parse, &e, tok, doc, st);
+    call(JSONutf8Parse, &e, tok, doc, st);
+    want(e == 'k' && $len(tok) == 3 && *tok[0] == '"');
+    call(JSONutf8Parse, &e, tok, doc, st);
+    want(e == '"' && $len(tok) == 5 && *tok[0] == '"');
+    // JSON-26B065wahm: strings must be valid UTF-8 (JSONLexer takes them)
+    NCase u[] = {
+        {"[\"\xc0\xaf\"]", 2},
+        {"[\"\xff\"]", 2},
+        {"[\"\xe2\x82\"]", 2},
+        {"[\"\xed\xa0\x80\"]", 2},
+        {"{\"\xed\xa0\x80\":1}", 2},
+        {"[\"\xf0\x8f\xbf\xbf\"]", 2},  // overlong U+FFFF, UTF8.c fix
+    };
+    for (size_t i = 0; i < sizeof(u) / sizeof(u[0]); ++i) {
+        u8cs json = u8scstr(u[i].in);
+        JSONstate lex = {.data = {json[0], json[1]}};
+        want(JSONLexer(&lex) == OK);
+        a_pad(u8, ev, 64);
+        aBpad(u8, stack, JSON_MAX_NEST + 1);
+        want(JSONpullAll(ev_idle, json, stack) == JSONBAD);
+        want(json[0] == (u8c *)u[i].in + u[i].at);
+    }
+    u8cs utf = u8scstr("[\"\xc3\xa9\xf0\x9f\x98\x80\"]");
+    aBpad(u8, ust, 8);
+    a_pad(u8, uev, 64);
+    want(JSONpullAll(uev_idle, utf, ust) == NODATA);
+    // lexical errors stay JSONBAD, input at the offending byte
+    u8cs bad = u8scstr("[01]");
+    u8c *bad0 = bad[0];
+    a_pad(u8, ev, 64);
+    aBpad(u8, bst, 8);
+    want(JSONpullAll(ev_idle, bad, bst) == JSONBAD && bad[0] == bad0 + 2);
+    done;
+}
+
+// Nesting cap: a stack of N bytes nests N-1 deep (JSONFmt: JSONNestTest)
+ok64 JSONDepthTest() {
+    sane(1);
+    a_pad(u8, ev, 64);
+    aBpad(u8, s4, 4);
+    u8cs three = u8scstr("[[{\"a\":1}]]");
+    want(JSONpullAll(ev_idle, three, s4) == NODATA);
+    aBpad(u8, s4b, 4);
+    u8cs four = u8scstr("[[[[1]]]]");
+    u8c *four0 = four[0];
+    want(JSONpullAll(ev_idle, four, s4b) == JSONSYNTAX && four[0] == four0 + 3);
+    done;
+}
+
 ok64 JSONtest() {
     sane(1);
     call(JSONEscapeTest);
@@ -206,6 +322,8 @@ ok64 JSONtest() {
     call(JSONCompactTest);
     call(JSONPrettyTest);
     call(JSONNestTest);
+    call(JSONSyntaxTest);
+    call(JSONDepthTest);
     done;
 }
 
