@@ -190,6 +190,8 @@ if (WASM_MODE)  # WASI has no sys/wait.h, termios.h
     list(REMOVE_ITEM ABC_CORE_SOURCES FILE.c ANSI.c PUPS.c)  # PUPS needs FILE.c (mmap)
 endif()
 add_library(abc-core STATIC ${ABC_HEADERS} ${ABC_CORE_SOURCES})
+# BUILD-26B06AcuSy: glibc hides pipe2/accept4 without it, musl does not
+target_compile_definitions(abc-core PUBLIC _GNU_SOURCE)
 if (WASM_MODE)
     # users of abc-core include B.h etc., so they need the same defines
     target_compile_definitions(abc-core INTERFACE _WASI_EMULATED_MMAN _WASI_EMULATED_SIGNAL _WASI_EMULATED_PROCESS_CLOCKS _WASI_EMULATED_GETPID)
@@ -212,6 +214,7 @@ if (NOT sodium OR NOT SODIUM_INCLUDE_DIR)
     list(APPEND ABC_SKIPPED "SHA NACL (no sodium)")
 endif()
 add_library(abc STATIC ${ABC_HEADERS} ${ABC_SOURCES})
+target_compile_definitions(abc PUBLIC _GNU_SOURCE)
 if (WITH_CURL)
     target_link_libraries(abc CURL::libcurl)
 else()
