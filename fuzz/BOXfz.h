@@ -3,6 +3,7 @@
 //  BOX.cpp drives them against std::map.
 #ifndef ABC_FUZZ_BOXFZ_H
 #define ABC_FUZZ_BOXFZ_H
+#include "BOX.h"
 #include "INT.h"
 
 #ifdef __cplusplus
@@ -18,7 +19,7 @@ typedef struct bk {
 #define BF_SUM 1
 #define BF_ROWS 1024
 
-//  `past` cells go to PAST (fewer DATA cells: FULL), `cap` rows of memtable.
+//  `past` cells go to PAST (fewer DATA cells: BOXFULL), `cap` rows of memtable.
 void bfInit(size_t past, size_t cap);
 b8 bfNoRoom(int lane);
 b8 bfNoCell(int lane);

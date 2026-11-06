@@ -158,7 +158,7 @@ ok64 PAGEtestStream() {
     u64 recv_count = 0;
     while (recv_count < STREAM_COUNT) {
         ok64 o = PAGEEnsureData(&receiver, sizeof(u64));
-        if (o == END) break;
+        if (o == PAGEEND) break;
         test(o == OK, PAGEFAIL);
         u8csp data = u8bDataC(receiver.buf);
         test(*(u64 *)(*data) == recv_count, PAGEFAIL);

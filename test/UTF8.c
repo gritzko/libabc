@@ -75,14 +75,14 @@ struct utf8bad_case {
 };
 
 static struct utf8bad_case const utf8bad_cases[] = {
-    {{0xC0, 0x80}, 2, UTFBAD},             {{0xC1, 0xBF}, 2, UTFBAD},
-    {{0xC2, 0x80}, 2, OK},                 {{0xE0, 0x80, 0x80}, 3, UTFBAD},
-    {{0xE0, 0x9F, 0xBF}, 3, UTFBAD},       {{0xE0, 0xA0, 0x80}, 3, OK},
-    {{0xED, 0x9F, 0xBF}, 3, OK},           {{0xED, 0xA0, 0x80}, 3, UTFBAD},
-    {{0xED, 0xBF, 0xBF}, 3, UTFBAD},       {{0xEE, 0x80, 0x80}, 3, OK},
-    {{0xF0, 0x80, 0x80, 0x80}, 4, UTFBAD}, {{0xF0, 0x8F, 0xBF, 0xBF}, 4, UTFBAD},
+    {{0xC0, 0x80}, 2, UTF8BAD},             {{0xC1, 0xBF}, 2, UTF8BAD},
+    {{0xC2, 0x80}, 2, OK},                 {{0xE0, 0x80, 0x80}, 3, UTF8BAD},
+    {{0xE0, 0x9F, 0xBF}, 3, UTF8BAD},       {{0xE0, 0xA0, 0x80}, 3, OK},
+    {{0xED, 0x9F, 0xBF}, 3, OK},           {{0xED, 0xA0, 0x80}, 3, UTF8BAD},
+    {{0xED, 0xBF, 0xBF}, 3, UTF8BAD},       {{0xEE, 0x80, 0x80}, 3, OK},
+    {{0xF0, 0x80, 0x80, 0x80}, 4, UTF8BAD}, {{0xF0, 0x8F, 0xBF, 0xBF}, 4, UTF8BAD},
     {{0xF0, 0x90, 0x80, 0x80}, 4, OK},     {{0xF4, 0x8F, 0xBF, 0xBF}, 4, OK},
-    {{0xF4, 0x90, 0x80, 0x80}, 4, UTFBAD},
+    {{0xF4, 0x90, 0x80, 0x80}, 4, UTF8BAD},
 };
 
 // STD-26B068SZeb: every 3- and 4-byte lead x continuation combination
@@ -112,7 +112,7 @@ ok64 UTF8test3() {
                         ok = v >= 0x10000 && v <= 0x10FFFF;
                     }
                     u8cs d = {buf, buf + (b0 < 0xF0 ? 3 : 4)};
-                    same(utf8sDrain32(&cp, d), ok ? OK : UTFBAD);
+                    same(utf8sDrain32(&cp, d), ok ? OK : UTF8BAD);
                     if (ok) same(cp, v);
                 }
     done;
@@ -125,7 +125,7 @@ ok64 UTF8test4() {
     for (u32 cp = 0; cp <= 0x110000; cp++) {
         a_pad(u8, buf, 4);
         b8 bad = (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF;
-        same(utf8sFeed32(buf_idle, cp), bad ? UTFBAD : OK);
+        same(utf8sFeed32(buf_idle, cp), bad ? UTF8BAD : OK);
         if (bad) {
             same($len(buf_data), 0);
             continue;
@@ -137,7 +137,7 @@ ok64 UTF8test4() {
         same($len(d), 0);
     }
     a_pad(u8, big, 4);
-    same(utf8sFeed32(big_idle, 0xFFFFFFFF), UTFBAD);
+    same(utf8sFeed32(big_idle, 0xFFFFFFFF), UTF8BAD);
     done;
 }
 

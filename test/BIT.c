@@ -147,11 +147,11 @@ ok64 BITalgebra_test() {
     u1$for (i, u1sConst(a)) { want(ra.bit[i]); seen++; }
     testeqv((long long)seen, (long long)rc, "%lld");
 
-    //  Word-length mismatch guard: 3-word dst vs 2-word src -> BITLEN.
+    //  Word-length mismatch guard: 3-word dst vs 2-word src -> BITBADARG.
     Bu1 bs = {};
     call(u1bMap, bs, 128);  // 2 words
     u64s shorter; u64sMv(shorter, u1bData(bs));
-    testeqv((long long)u1sOr(a, u1sConst(shorter)), (long long)BITLEN, "%lld");
+    testeqv((long long)u1sOr(a, u1sConst(shorter)), (long long)BITBADARG, "%lld");
     want(!u1sEq(u1sConst(a), u1sConst(shorter)));
     call(u1bUnMap, bs);
 

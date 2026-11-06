@@ -49,18 +49,18 @@ fun ok64 X(HASH, _scan)(size_t *ndx, X($, ) data, HASH_T const *rec) {
     size_t base = (*ndx) & ~MASK;
     for (size_t i = off + 1; i < off + ABC_HASH_LINE; ++i) {
         *ndx = base + (i & MASK);
-        if (X(, IsZero)(data[0] + *ndx)) return NONE;
+        if (X(, IsZero)(data[0] + *ndx)) return HASHNONE;
         // ABC-015: (rec, slot) arg order, same as Get/Del below
         if (X(, KeyEq)(rec, *data + *ndx)) return OK;
     }
-    return FULL;
+    return HASHFULL;
 }
 
 fun ok64 X(HASH, _find)(size_t *ndx, X($, ) data, HASH_T const *rec) {
     u64 hash = X(, Hash)(rec);
     *ndx = hash & LMASK;
     // is0 first: the all-zero record is the empty slot, never found
-    if (X(, IsZero)(data[0] + *ndx)) return NONE;
+    if (X(, IsZero)(data[0] + *ndx)) return HASHNONE;
     if (X(, KeyEq)(rec, $atp(data, *ndx))) return OK;
     return X(HASH, _scan)(ndx, data, rec);
 }
@@ -70,38 +70,38 @@ fun ok64 X(HASH, _get)(HASH_T *rec, X($, ) data, size_t ndx, u64 hash) {
     size_t base = ndx & ~MASK;
     for (size_t i = (off + 1) & MASK; i != off; i = (i + 1) & MASK) {
         ndx = base + i;
-        if (X(, IsZero)(data[0] + ndx)) return NONE;
+        if (X(, IsZero)(data[0] + ndx)) return HASHNONE;
         if (X(, KeyEq)(rec, $atp(data, ndx))) {
             *rec = $at(data, ndx);
             return OK;
         }
         if (ABC_HASH_CONVERGE && ABC_HASH_MISSSTOP &&
             X(, Hash)($atp(data, ndx)) > hash)
-            return NONE;
+            return HASHNONE;
     }
-    return NONE;
+    return HASHNONE;
 }
 
 fun ok64 X(HASH, Get)(HASH_T *rec, X($, ) data) {
     u64 hash = X(, Hash)(rec);
     size_t ndx = hash & LMASK;
-    if (X(, IsZero)(data[0] + ndx)) return NONE;
+    if (X(, IsZero)(data[0] + ndx)) return HASHNONE;
     if (X(, KeyEq)(rec, $atp(data, ndx))) {
         *rec = $at(data, ndx);  // TODO mv
         return OK;
     }
     if (ABC_HASH_CONVERGE && ABC_HASH_MISSSTOP &&
         X(, Hash)($atp(data, ndx)) > hash)
-        return NONE;
+        return HASHNONE;
     return X(HASH, _get)(rec, data, ndx, hash);
 }
 
 // HASH-26B02G3r5y: read-only lookup, no copies, no mutation (unlike
 // Probe under CONVERGE).  OK: *slot is the resident with rec's key;
-// NONE: absent, *slot untouched.
+// HASHNONE: absent, *slot untouched.
 fun ok64 X(HASH, At)(HASH_T const **slot, X($, ) data, HASH_T const *rec) {
     size_t ndx = 0;
-    if (OK != X(HASH, _find)(&ndx, data, rec)) return NONE;
+    if (OK != X(HASH, _find)(&ndx, data, rec)) return HASHNONE;
     *slot = data[0] + ndx;
     return OK;
 }
@@ -109,12 +109,12 @@ fun ok64 X(HASH, At)(HASH_T const **slot, X($, ) data, HASH_T const *rec) {
 fun ok64 X(HASH, _probe)(HASH_T **slot, X($, ) data, HASH_T const *rec,
                          u64 hash);
 
-// OK (rec's key now holds rec, or the X(,Merge) fold) or FULL (rec's line
+// OK (rec's key now holds rec, or the X(,Merge) fold) or HASHFULL (rec's line
 // is full, the table untouched): Probe + Mv, the same layout either way.
 fun ok64 X(HASH, Put)(X($, ) data, HASH_T const *rec) {
     HASH_T *slot = NULL;
     ok64 o = X(HASH, _probe)(&slot, data, rec, X(, Hash)(rec));
-    if (o == FULL) return o;
+    if (o == HASHFULL) return o;
 #ifdef ABC_HASH_MERGE
     if (o == OK) {
         X(, Merge)(slot, rec);
@@ -149,20 +149,20 @@ fun b8 X(HASH, _shiftlap)(X($, ) data, size_t ndx) {
 fun ok64 X(HASH, _shift)(X($, ) data, size_t ndx) {
     sane($ok(data) && (i64)ndx < $len(data));
     X(HASH, _shiftlap)(data, ndx);
-    return X(, IsZero)(data[0] + ndx) ? NONE : OK;  // refilled: nonzero
+    return X(, IsZero)(data[0] + ndx) ? HASHNONE : OK;  // refilled: nonzero
 }
 
-// NONE if absent (std::erase count 0); callers that don't care ignore it
+// HASHNONE if absent (std::erase count 0); callers that don't care ignore it
 fun ok64 X(HASH, Del)(X($, ) data, HASH_T const *rec) {
     size_t ndx = 0;
     ok64 o = X(HASH, _find)(&ndx, data, rec);
-    if (o == NONE || o == FULL) return NONE;
+    if (o == HASHNONE || o == HASHFULL) return HASHNONE;
     o = X(HASH, _shift)(data, ndx);
-    return o == NONE ? OK : o;
+    return o == HASHNONE ? OK : o;
 }
 
 // HASH-26B02Ggncg: delete the entry at slot ndx while iterating.  OK: a later
-// entry moved into ndx, re-examine it; NONE: ndx is empty now.  An unvisited
+// entry moved into ndx, re-examine it; HASHNONE: ndx is empty now.  An unvisited
 // entry never moves before ndx; a visited one (a wrapped line) may be seen
 // twice.  The loop: HASH.md "Delete while iterating".
 fun ok64 X(HASH, DelAt)(X($, ) data, size_t ndx) {
@@ -170,11 +170,11 @@ fun ok64 X(HASH, DelAt)(X($, ) data, size_t ndx) {
 }
 
 // Iteration: OK and *ndx at the first live slot at or after *ndx, else
-// NONE (the table's end).  Start at 0, ++ndx to go on.
+// HASHNONE (the table's end).  Start at 0, ++ndx to go on.
 fun ok64 X(HASH, Next)(size_t *ndx, X($, ) data) {
     for (; *ndx < (size_t)$len(data); ++*ndx)
         if (!X(, IsZero)(data[0] + *ndx)) return OK;
-    return NONE;
+    return HASHNONE;
 }
 
 // HASH-26A275TmIX: in-place growth (HASH.md "Growth in place"): DATA is the
@@ -190,7 +190,7 @@ fun void X(HASH, _growCopy)(X($, ) data) {
             if (X(, IsZero)(p)) continue;
             u64 h = X(, Hash)(p);  // hashed once, Put would rehash
             HASH_T *s = NULL;  // <= LINE into 0s: fits
-            if ((h & half) && NONE == X(HASH, _probe)(&s, data, p, h))
+            if ((h & half) && HASHNONE == X(HASH, _probe)(&s, data, p, h))
                 X(, Mv)(s, p);
         }
     }
@@ -198,13 +198,13 @@ fun void X(HASH, _growCopy)(X($, ) data) {
 
 // Phase 3 step: slot ndx of the lower half holds a stale copy (its home
 // under the doubled length is in the upper half)?  Delete it by the
-// backward shift (copy-before-zero), OK; else NONE.  An entry the
+// backward shift (copy-before-zero), OK; else HASHNONE.  An entry the
 // shift brings into ndx may be stale too: call again.
 fun ok64 X(HASH, _unstale)(X($, ) data, size_t ndx) {
     HASH_T const *p = data[0] + ndx;
-    if (X(, IsZero)(p) || !(X(, Hash)(p) & ($len(data) >> 1))) return NONE;
+    if (X(, IsZero)(p) || !(X(, Hash)(p) & ($len(data) >> 1))) return HASHNONE;
     ok64 o = X(HASH, _shift)(data, ndx);
-    return o == NONE ? OK : o;
+    return o == HASHNONE ? OK : o;
 }
 
 // Phase 3: unstale the whole lower half, line by line.  A shift running
@@ -225,13 +225,13 @@ fun void X(HASH, _growClean)(X($, ) data) {
 }
 
 // Grow the table (DATA) 2x in place: phase 1, phase 2 (the flip: DATA's
-// end moves, one word store), phase 3.  NOROOM if IDLE is shorter than
+// end moves, one word store), phase 3.  HASHNOROOM if IDLE is shorter than
 // DATA; never maps.  Never overflows a line: one doubling always fits.
 fun ok64 X(HASH, Grow)(X(B, ) buf) {
     sane(buf != NULL && buf[0] != NULL);
     size_t len = X(, bDataLen)(buf);
-    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), BADARG);
-    test(X(, bIdleLen)(buf) >= len, NOROOM);
+    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), HASHBADARG);
+    test(X(, bIdleLen)(buf) >= len, HASHNOROOM);
     X($, ) data = {buf[1], buf[2] + len};
     X(HASH, _growCopy)(data);
     call(X(, bFed), buf, len);
@@ -241,14 +241,14 @@ fun ok64 X(HASH, Grow)(X(B, ) buf) {
 
 // HASH-26A275ba4V: rehash every entry of from's DATA into into's DATA, a
 // table the caller set up at any power-of-2 length; never maps, from is read
-// only, the tables must not overlap (BADARG).  FULL: into is left partially
+// only, the tables must not overlap (HASHBADARG).  HASHFULL: into is left partially
 // filled, none lost, from intact.  HASH.md "Move into another table".
 fun ok64 X(HASH, Move)(X(B, ) into, X(B, ) from) {
     sane(into != NULL && into[0] != NULL && from != NULL && from[0] != NULL);
     X($, ) data = {into[1], into[2]};
     size_t len = $len(data);
-    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), BADARG);
-    test(from[2] <= into[1] || into[2] <= from[1], BADARG);
+    test(len >= ABC_HASH_LINE && 0 == (len & (len - 1)), HASHBADARG);
+    test(from[2] <= into[1] || into[2] <= from[1], HASHBADARG);
     for (HASH_T const *p = from[1]; p < from[2]; ++p) {
         if (X(, IsZero)(p)) continue;
         call(X(HASH, Put), data, p);
@@ -263,15 +263,15 @@ fun ok64 X(HASH, PutGrow)(X(B, ) buf, HASH_T const *rec) {
     for (;;) {
         X($, ) data = {buf[1], buf[2]};
         ok64 o = X(HASH, Put)(data, rec);
-        if (o != FULL) return o;
+        if (o != HASHFULL) return o;
         call(X(HASH, Grow), buf);
     }
 }
 
 // HASH-26A274tV3C: get-or-insert in one probe, rec hashed once, never copied.
-// OK: *slot is the resident.  NONE: *slot is the zeroed slot Put would use;
+// OK: *slot is the resident.  HASHNONE: *slot is the zeroed slot Put would use;
 // fill it or Unprobe it before any other op (under CONVERGE it hides the
-// displaced residents, moved as Put moves them).  FULL: nothing touched.
+// displaced residents, moved as Put moves them).  HASHFULL: nothing touched.
 fun ok64 X(HASH, _probe)(HASH_T **slot, X($, ) data, HASH_T const *rec,
                          u64 hash) {
     size_t fit = hash & LMASK;
@@ -302,7 +302,7 @@ fun ok64 X(HASH, _probe)(HASH_T **slot, X($, ) data, HASH_T const *rec,
                 s = d;
             }
             *slot = s;
-            return NONE;
+            return HASHNONE;
         }
         if (X(, KeyEq)(rec, s)) {
             *slot = s;
@@ -316,28 +316,28 @@ fun ok64 X(HASH, _probe)(HASH_T **slot, X($, ) data, HASH_T const *rec,
             }
         }
     }
-    return FULL;
+    return HASHFULL;
 }
 
 fun ok64 X(HASH, Probe)(HASH_T **slot, X($, ) data, HASH_T const *rec) {
     return X(HASH, _probe)(slot, data, rec, X(, Hash)(rec));
 }
 
-// HASH-26B02GitHz: undo a NONE Probe left unfilled (lookup-only use,
+// HASH-26B02GitHz: undo a HASHNONE Probe left unfilled (lookup-only use,
 // an error path): a backward shift at the slot, the Put layout restored.
 fun ok64 X(HASH, Unprobe)(X($, ) data, HASH_T *slot) {
     ok64 o = X(HASH, _shift)(data, slot - data[0]);
-    return o == NONE ? OK : o;
+    return o == HASHNONE ? OK : o;
 }
 
 // Probe a growable table (DATA, see Grow), Grow-ing it while rec's line is
-// full: OK or NONE as Probe, *slot into the (grown) table; else Grow's failure.
+// full: OK or HASHNONE as Probe, *slot into the (grown) table; else Grow's failure.
 fun ok64 X(HASH, ProbeGrow)(HASH_T **slot, X(B, ) buf, HASH_T const *rec) {
     sane(buf != NULL && buf[0] != NULL);
     for (;;) {
         X($, ) data = {buf[1], buf[2]};
         ok64 o = X(HASH, Probe)(slot, data, rec);
-        if (o != FULL) return o;
+        if (o != HASHFULL) return o;
         call(X(HASH, Grow), buf);
     }
 }

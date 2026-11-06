@@ -27,13 +27,13 @@ ok64 HEAPtest1() {
     done;
 }
 // ABC-015: sTopsZ fabricated a 1-element slice over an empty heap (OOB
-// for consumers); it must MISS instead, like its twin HITTops.
+// for consumers); it must say HEAPNONE instead, like its twin HITTops.
 ok64 HEAPtest2() {
     sane(1);
     u32 none[1];
     u32sc empty = {none, none};
     u32s eqs = {NULL, NULL};
-    testeqv((long long)(u32sTopsZ(empty, eqs, u32Z)), (long long)(MISS),
+    testeqv((long long)(u32sTopsZ(empty, eqs, u32Z)), (long long)(HEAPNONE),
             "%lld");
     // normal case: run of equal minimums lands at the front
     u32 arr[] = {1, 1, 2, 1, 3, 4};

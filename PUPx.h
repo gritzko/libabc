@@ -35,7 +35,7 @@ fun void X(PUP, Split)(X(, cs) rows, X(, cs) toc, X(, csc) cell) {
     toc[1] = toc[0] + (size_t)u8csLen(t) / sizeof(X(, ));
 }
 
-//  D-1: a put is a BOX put; NOROOM says the memtable is full, commit it.
+//  D-1: a put is a BOX put; BOXNOROOM says the memtable is full, commit it.
 fun ok64 X(PUP, Put)(X(, csb) h, X(, ) const *rec) {
     return X(BOX, Put)(h, rec);
 }
@@ -86,33 +86,33 @@ fun ok64 X(PUP, _find)(X(, ) *out, X(, csc) cell, X(, ) const *key) {
             *out = *ge;
             return OK;
         }
-        if (i == 0) return NONE;
+        if (i == 0) return PUPNONE;
         rows[0] += (i - 1) * per;
         if ((size_t)$len(rows) > per) rows[1] = rows[0] + per;
     }
     X(, sc) rr = {(X(, ) *)rows[0], (X(, ) *)rows[1]};
     X(, ) const *p = X(, sBinSearch)(key, rr);
-    if (!p) return NONE;
+    if (!p) return PUPNONE;
     *out = *p;
     return OK;
 }
 
 //  Point lookup: the memtable and DATA (BOX Get), then PAST youngest first,
 //  or with ABC_X_MERGE the fold of every version, oldest first, as Read
-//  does.  A dead row is NONE.
+//  does.  A miss or a dead row is PUPNONE.
 fun ok64 X(PUP, Get)(X(, ) *out, X(, csb) h, X(, ) const *key) {
 #ifdef ABC_X_MERGE
     b8 hit = NO;
     X(, ) row;
     for (X(, cs) const *c = h[0]; c < h[1]; c++)
         if (X(PUP, _find)(&row, *c, key) == OK) X(BOX, _add)(out, &row, &hit);
-    ok64 o = X(BOX, _getx)(out, h, key, hit) ? OK : NONE;
+    ok64 o = X(BOX, _getx)(out, h, key, hit) ? OK : PUPNONE;
 #else
     ok64 o = X(BOX, Get)(out, h, key);
-    for (X(, cs) const *c = h[1]; o == NONE && c > h[0]; c--)
+    for (X(, cs) const *c = h[1]; ok64is(o, NONE) && c > h[0]; c--)
         o = X(PUP, _find)(out, c[-1], key);
 #endif
-    return o == OK && PUPx_DEAD(out) ? NONE : o;
+    return (o == OK && PUPx_DEAD(out)) || ok64is(o, NONE) ? PUPNONE : o;
 }
 
 //  Feed `out` the read view, oldest first: ToC-clipped PAST, then DATA after
@@ -139,7 +139,7 @@ fun ok64 X(PUP, Range)(X(, css) into, X(, csb) h, X(, ) const *lo,
     if (o != OK) return o;
     into[1] = b[2];
     o = X(HIT, SeekRange)(into, lo, hi);
-    return o == NONE ? OK : o;
+    return o == HITNONE ? OK : o;
 }
 
 //  Merge `runs` (consumed) into the IDLE of `into`, the younger row wins;
@@ -220,7 +220,8 @@ fun ok64 X(PUP, _fresh)(u8csp run, u64 *key, u64csc keys, path8s dir,
 fun ok64 X(PUP, _create)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
                          X(, csc) rows, u64 *key, b8 durable, u64 lo) {
     sane(h != NULL && u64bOK(keys));
-    test(h[2] - h[0] < ABC_PUP_MAX_RUNS && u64bIdleLen(keys) > 0, PUPNOROOM);
+    test(h[2] - h[0] < ABC_PUP_MAX_RUNS, PUPFULL);
+    test(u64bIdleLen(keys) > 0, PUPNOROOM);
     u8cs run = {};
     b8 taken = NO;
     if (*key == 0) {
@@ -368,7 +369,7 @@ fun ok64 X(PUP, Commit)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
     sane(h != NULL && u64bOK(keys));
     X(, ) **mem = X(BOX, Mem)(h);
     if (Bdatalen(h) == 0 && mem[2] == mem[1]) done;
-    test(h[2] - h[0] < ABC_PUP_MAX_RUNS, PUPNOROOM);
+    test(h[2] - h[0] < ABC_PUP_MAX_RUNS, PUPFULL);
     call(X(BOX, Sort), h, YES);
     test(u64bIdleLen(keys) > 0, PUPNOROOM);
     X(, csc) rows = {h[1][0][0], h[1][0][1]};

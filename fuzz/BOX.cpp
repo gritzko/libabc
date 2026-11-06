@@ -4,8 +4,8 @@
 // the kv lane (youngest wins) and the sum lane (ABC_X_MERGE) run it in step.
 // Per op only codes (and Gets) are checked, a failed write by its snapshot;
 // at the end a full Range+Merge, Gets and Sort(all) against the map.  The
-// header bytes pick the PAST cells (few DATA cells: FULL) and a small
-// memtable (NOROOM).  wiki/Containers.mkd is the contract; the C side: BOX.c.
+// header bytes pick the PAST cells (few DATA cells: BOXFULL) and a small
+// memtable (BOXNOROOM).  wiki/Containers.mkd is the contract; the C side: BOX.c.
 
 #include <map>
 #include <vector>
@@ -21,7 +21,7 @@ typedef std::map<u16, u16> bfmodel;
 
 static u8 bf_byte(u8cs in) { return $empty(in) ? 0 : *in[0]++; }
 
-//  Mostly a 1-byte key (folds), from 0xf0 on a full u16 (u16max = BADARG).
+//  Mostly a 1-byte key (folds), from 0xf0 on a full u16 (u16max = BOXBADARG).
 static u16 bf_key(u8cs in) {
     u8 b = bf_byte(in);
     if (b < 0xf0) return b;
@@ -40,11 +40,11 @@ static ok64 bf_put(ok64 *code, bfmodel &m, int lane, bk r) {
     ok64 o = bfPut(lane, r, &same);
     *code = o;
     if (r.key == u16max) {
-        must(o == BADARG, "Put Max");
+        must(o == BOXBADARG, "Put Max");
     } else if (o == OK) {
         bf_apply(m, lane, r);
     } else {
-        must(o == NOROOM ? noroom : o == FULL && nocell, "Put code");
+        must(o == BOXNOROOM ? noroom : o == BOXFULL && nocell, "Put code");
     }
     if (o != OK) must(same, "failed Put changed the BOX");
     done;
@@ -58,11 +58,11 @@ static ok64 bf_batch(ok64 *code, bfmodel &m, int lane,
     ok64 o = bfBatch(lane, rows.data(), rows.size(), &same);
     *code = o;
     if (max) {
-        must(o == BADARG, "PutBatch Max");
+        must(o == BOXBADARG, "PutBatch Max");
     } else if (o == OK) {
         for (bk const &r : rows) bf_apply(m, lane, r);
     } else {
-        must(o == NOROOM || o == FULL, "PutBatch code");
+        must(o == BOXNOROOM || o == BOXFULL, "PutBatch code");
     }
     //  a refused batch may have sealed the pending segment (Containers.mkd)
     if (o != OK && (max || !seg)) must(same, "failed PutBatch changed BOX");
@@ -77,7 +77,7 @@ static ok64 bf_get(bfmodel const &m, int lane, u16 k) {
     if (it != m.end()) {
         must(o == OK && got.key == k && got.val == it->second, "Get");
     } else {
-        must(o == NONE, "Get absent");
+        must(o == BOXNONE, "Get absent");
     }
     done;
 }
@@ -91,9 +91,9 @@ static ok64 bf_range(ok64 *code, bfmodel const &m, int lane, u16 lo, u16 hi,
     ok64 o = bfRange(lane, lo, hi, slots, OUT, &n);
     *code = o;
     size_t runs = bfRuns(lane);
-    if (o == NOROOM) must(runs > slots, "Range NOROOM");
+    if (o == BOXNOROOM) must(runs > slots, "Range BOXNOROOM");
     if (o != OK) {
-        must(o == NOROOM || o == FULL, "Range code");
+        must(o == BOXNOROOM || o == BOXFULL, "Range code");
         done;
     }
     must(runs <= slots, "Range runs");
@@ -150,7 +150,7 @@ FUZZ(u8, BOXfuzz) {
             case 6: {
                 b8 same = NO;
                 ok = bfSort(BF_KV, (op & 8) != 0, &same);
-                if (ok != OK) must(ok == FULL && same, "Sort");
+                if (ok != OK) must(ok == BOXFULL && same, "Sort");
                 oc = bfSort(BF_SUM, (op & 8) != 0, &same);
             } break;
             case 7: {
@@ -166,7 +166,7 @@ FUZZ(u8, BOXfuzz) {
     ok64 rk = OK, rc = OK;
     call(bf_range, &rk, mk, BF_KV, 0, u16max, ABC_HIT_MAX_RUNS);
     call(bf_range, &rc, mc, BF_SUM, 0, u16max, ABC_HIT_MAX_RUNS);
-    must(rk == rc && (rk == OK || rk == FULL), "final Range");
+    must(rk == rc && (rk == OK || rk == BOXFULL), "final Range");
     for (auto const &kv : mk) {
         call(bf_get, mk, BF_KV, kv.first);
         call(bf_get, mk, BF_KV, (u16)(kv.first + 1));

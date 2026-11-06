@@ -80,7 +80,7 @@ static ok64 hp_pop(hplane &l, hp *out) {
     ok64 o = l.rev ? HEAPhpPopZ(&v, l.b, hpRZ) : HEAPhpPop(&v, l.b);
     *out = v;
     if (empty) {
-        must(o == NODATA && l.len() == 0, "Pop empty");
+        must(o == HEAPNONE && l.len() == 0, "Pop empty");
         done;
     }
     must(o == OK && v.key == l.top(), "Pop key");
@@ -126,7 +126,7 @@ FUZZ(u8, HEAPfuzz) {
                     hp *eqs[2] = {};
                     ok64 o = hpsTopsZ(d, eqs, l.rev ? hpRZ : hpZ);
                     if (l.m.empty()) {
-                        must(o == MISS, "Tops empty");
+                        must(o == HEAPNONE, "Tops empty");
                         break;
                     }
                     u16 t = l.top();

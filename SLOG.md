@@ -49,8 +49,6 @@ only contain entries with rank < rank(P).
 // Error codes
 con ok64 SLOGNOROOM = 0x7156105d86d8616;
 con ok64 SLOGBAD    = 0x1c55840b28d;
-con ok64 SLOGMISS   = 0x71561059271c;
-con ok64 SLOGEOF    = 0x1c55840e60f;
 con ok64 SLOGNONE   = 0x7156105d85ce;
 
 #define SLOG_K 'k'   // intermediate skip record

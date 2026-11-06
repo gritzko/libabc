@@ -98,7 +98,7 @@ ok64 PACKfileTest() {
     SHAClose(&sha_read, &hash_read);
 
     // Verify hashes match
-    test(sha256eq(&hash_orig, &hash_read), PACKCORRUPT);
+    test(sha256eq(&hash_orig, &hash_read), PACKBAD);
 
     call(PACKClose, &pr);
 

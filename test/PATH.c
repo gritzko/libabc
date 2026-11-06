@@ -125,7 +125,7 @@ ok64 PATHTestNext() {
         // Verify END
         u8cs seg = {};
         ok64 o = PATHu8sDrain(rem, seg);
-        if (o != END) {
+        if (o != PATHEND) {
             fprintf(stderr, "FAIL next[%zu]: expected END after segments\n", i);
             return PATHFAIL;
         }
@@ -497,7 +497,7 @@ ok64 PATHTestAren() {
     a$str(too_big, "longer");
     u8cs out = {};
     ok64 o = PATHu8bAren(small, out, too_big);
-    test(o == BNOROOM, FAIL);
+    test(o == PATHNOROOM, FAIL);
     call(u8bFree, small);
 
     call(u8bFree, arena);
@@ -542,7 +542,7 @@ ok64 PATHTestAcq() {
     call(u8bFeed, small, two);
     u8cs out = {};
     ok64 o = PATHu8bAcq(small, out);
-    test(o == BNOROOM, FAIL);
+    test(o == PATHNOROOM, FAIL);
     call(u8bFree, small);
 
     call(u8bFree, arena);

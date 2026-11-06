@@ -41,25 +41,25 @@ one miss only: control line and slot line load in parallel.
 Codes are the shared ones (01.h), as in HASH.md:
 
   - `Init(buf, len)`: an empty table of len slots on a mapped buffer;
-    `BADARG` for a bad len, `NOROOM` past the max.
+    `SWISBADARG` for a bad len, `SWISNOROOM` past the max.
   - A lookup or insert on an un-Init-ed (empty DATA) buffer fails
     `sane()`; Next/DelAt see no slots.
-  - `Get(&rec, buf)`, `At(&slot, buf, &rec)`: OK or NONE.
+  - `Get(&rec, buf)`, `At(&slot, buf, &rec)`: OK or SWISNONE.
   - `Put(buf, &rec)`: OK (overwrite, or `X(,Merge)` with
-    `ABC_SWISS_MERGE`) or `FULL`: 7/8 of the slots are live or tombs.
-  - `Probe(&slot, buf, &rec)`: OK, the resident; NONE, a zeroed slot to
-    fill, or `Unprobe(buf, slot)`; FULL.
-  - `Del(buf, &rec)`: OK or NONE.  `DelAt(buf, ndx)`: always NONE, the
+    `ABC_SWISS_MERGE`) or `SWISFULL`: 7/8 of the slots are live or tombs.
+  - `Probe(&slot, buf, &rec)`: OK, the resident; SWISNONE, a zeroed slot to
+    fill, or `Unprobe(buf, slot)`; SWISFULL.
+  - `Del(buf, &rec)`: OK or SWISNONE.  `DelAt(buf, ndx)`: always SWISNONE, the
     slot is empty now; nothing ever moves, so a scan erases in place:
 
         for (size_t i = 0; OK == SWISSkv64Next(&i, tab); ++i)
             if (match(tab[1] + i)) SWISSkv64DelAt(tab, i);
 
-  - `Grow(buf)`: doubles in place (rehash), `NOROOM` if IDLE or the
-    control array is short.  `PutGrow`, `ProbeGrow`: on FULL, rehash at
+  - `Grow(buf)`: doubles in place (rehash), `SWISNOROOM` if IDLE or the
+    control array is short.  `PutGrow`, `ProbeGrow`: on SWISFULL, rehash at
     the same length if under 7/16 is live (tombs purged), else Grow.
-  - `Move(into, from)`: Put every resident of from into into, FULL
-    leaves the prefix in; `BADARG` if the ranges overlap.
+  - `Move(into, from)`: Put every resident of from into into, SWISFULL
+    leaves the prefix in; `SWISBADARG` if the ranges overlap.
 
 ##  Deletion and rehash
 

@@ -519,7 +519,7 @@ ok64 RONTest64Reject() {
     }
     u8 buf[RON64_WORD_LEN - 1] = {};
     u8s into = {buf, buf + sizeof(buf)};
-    want(RONu8sFeed64(into, ~0UL) == SNOROOM);
+    want(RONu8sFeed64(into, ~0UL) == RONNOROOM);
     want(into[0] == buf && buf[0] == 0);
     done;
 }

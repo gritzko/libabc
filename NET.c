@@ -21,7 +21,7 @@ ok64 NETResolve(struct addrinfo **result, URIstate const *uri, b8 tcp) {
         // Use scheme as port (e.g., "http" -> 80 via /etc/services)
         call(u8sFeed, port_idle, uri->scheme);
     } else {
-        fail(BADARG);
+        fail(NETBADARG);
     }
     call(u8sFeed1, host_idle, 0);  // Null terminate for getaddrinfo
     call(u8sFeed1, port_idle, 0);
@@ -37,7 +37,7 @@ ok64 NETResolve(struct addrinfo **result, URIstate const *uri, b8 tcp) {
     int s = getaddrinfo(node, (char *)*port_data, &hints, result);
     if (s != 0) {
         trace("getaddrinfo: %s\n", gai_strerror(s));
-        return NETBADADDR;
+        return NETBAD;
     }
     done;
 }

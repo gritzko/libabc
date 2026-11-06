@@ -202,7 +202,7 @@ ok64 BSDDiff(u8s patch, u8csc old, u8csc neu, i64s work) {
     u8cp nb = neu[0];
 
     // workspace: I[0..oldsize], V[0..oldsize]
-    test($len(work) >= (i64)BSDWorkLen(oldsize), BADARG);
+    test($len(work) >= (i64)BSDWorkLen(oldsize), BSDBADARG);
 
     i64p I = work[0];
     i64p V = I + oldsize + 1;
@@ -381,16 +381,16 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
     sane(neu != NULL && old != NULL && patch != NULL);
 
     i64 patchlen = (i64)$len(patch);
-    test(patchlen >= 24, BSDCORRUPT);
+    test(patchlen >= 24, BSDBAD);
 
     u8cp pb = patch[0];
 
     // Check magic
-    test(memcmp(pb, "BSDIFF01", 8) == 0, BSDBADMAGC);
+    test(memcmp(pb, "BSDIFF01", 8) == 0, BSDBAD);
 
     i64 neusize = BSDofftin(pb + 8);
     i64 ctrl_count = BSDofftin(pb + 16);
-    test(neusize >= 0 && ctrl_count >= 0, BSDCORRUPT);
+    test(neusize >= 0 && ctrl_count >= 0, BSDBAD);
     test($len(neu) >= neusize, BSDNOROOM);
 
     i64 oldsize = (i64)$len(old);
@@ -404,7 +404,7 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
     u8cp cp = pb + 24;
     // Reject ctrl_count before multiplying: (patchlen-24)/24 is exact
     // and non-negative, so ctrl_bytes = ctrl_count*24 cannot overflow.
-    test(ctrl_count <= (patchlen - 24) / 24, BSDCORRUPT);
+    test(ctrl_count <= (patchlen - 24) / 24, BSDBAD);
     i64 ctrl_bytes = ctrl_count * 24;
 
     // Body bytes after the ctrl block hold the diff then extra blocks.
@@ -427,10 +427,10 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
             tp += 8;  // skip seek
             // dl and el each fit in what the body still has unspent.
             test(dl >= 0 && dl <= body - total_diff - total_extra,
-                 BSDCORRUPT);
+                 BSDBAD);
             total_diff += dl;
             test(el >= 0 && el <= body - total_diff - total_extra,
-                 BSDCORRUPT);
+                 BSDBAD);
             total_extra += el;
         }
     }
@@ -450,9 +450,9 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
         cp += 8;
 
         // Bound by subtraction; neusize - newpos stays non-negative.
-        test(diff_len >= 0 && diff_len <= neusize - newpos, BSDCORRUPT);
+        test(diff_len >= 0 && diff_len <= neusize - newpos, BSDBAD);
         // Re-validate the diff source has these bytes before block end.
-        test(diff_len <= dpend - dp, BSDCORRUPT);
+        test(diff_len <= dpend - dp, BSDBAD);
 
         // Read diff bytes and add old data
         memcpy(nb + newpos, dp, diff_len);
@@ -464,19 +464,19 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
         newpos += diff_len;
         oldpos += diff_len;
 
-        test(extra_len >= 0 && extra_len <= neusize - newpos, BSDCORRUPT);
+        test(extra_len >= 0 && extra_len <= neusize - newpos, BSDBAD);
         // Re-validate the extra source has these bytes before block end.
-        test(extra_len <= epend - ep, BSDCORRUPT);
+        test(extra_len <= epend - ep, BSDBAD);
 
         // Copy extra bytes
         memcpy(nb + newpos, ep, extra_len);
         ep += extra_len;
         newpos += extra_len;
         // STD-26B068tST7: keep oldpos in [0, oldsize], no signed overflow.
-        test(seek_off >= -oldpos && seek_off <= oldsize - oldpos, BSDCORRUPT);
+        test(seek_off >= -oldpos && seek_off <= oldsize - oldpos, BSDBAD);
         oldpos += seek_off;
     }
-    test(newpos == neusize, BSDCORRUPT);  // STD-26B0682SmO
+    test(newpos == neusize, BSDBAD);  // STD-26B0682SmO
 
     // Advance output slice past written data
     neu[0] += neusize;

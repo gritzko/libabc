@@ -18,14 +18,14 @@ ok64 ZINTu64feed($u8 into, u64 n) {
 }
 
 ok64 ZINTu8sFeedBlocked(u8s into, u64cs ints) {
-    if (!into || !ints) return BADARG;
-    // CODE-26B06585xv: size the run first, so NOROOM writes nothing
+    if (!into || !ints) return ZINTBADARG;
+    // CODE-26B06585xv: size the run first, so ZINTNOROOM writes nothing
     u64 need = 0, n = 0;
     $for(u64c, i, ints) {
         if ((n++ & 3) == 0) ++need;
         need += *i <= 0xff ? 1 : *i <= 0xffff ? 2 : *i <= 0xffffffff ? 4 : 8;
     }
-    if (u8sLen(into) < need) return NOROOM;
+    if (u8sLen(into) < need) return ZINTNOROOM;
     u32 l = 0;
     u8p bh = 0;
     while (!u64csEmpty(ints)) {
@@ -54,7 +54,7 @@ ok64 ZINTu8sFeedBlocked(u8s into, u64cs ints) {
 }
 
 ok64 ZINTu8sDrainBlocked(u8cs from, u64s ints) {
-    if (!from || !ints) return BADARG;
+    if (!from || !ints) return ZINTBADARG;
     ok64 o = OK;
     u32 l = 0;
     u8 bh = 0;

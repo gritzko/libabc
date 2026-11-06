@@ -5,6 +5,8 @@
 #include "BUF.h"
 #include "OK.h"
 
+con ok64 NUMNOROOM = 0x177965d86d8616;
+
 // Number-to-English-words conversion, 64-bit ready
 
 con u8c* NUM_ONES[] = {
@@ -36,7 +38,7 @@ con NUMscale NUM_SCALES[] = {
 
 fun ok64 NUMu8sFeedStr(u8s into, u8c* s) {
     while (*s) {
-        if (*into >= into[1]) return NOROOM;
+        if (*into >= into[1]) return NUMNOROOM;
         **into = *s++;
         ++*into;
     }
@@ -44,7 +46,7 @@ fun ok64 NUMu8sFeedStr(u8s into, u8c* s) {
 }
 
 fun ok64 NUMu8sFeedSep(u8s into) {
-    if (*into >= into[1]) return NOROOM;
+    if (*into >= into[1]) return NUMNOROOM;
     **into = ' ';
     ++*into;
     return OK;

@@ -51,7 +51,8 @@ A buffer is four pointers splitting memory into PAST/DATA/IDLE; the verb that cr
 
 `ok64` codes are human-readable Base64 names; `PRO.h` turns them into stack-traced control flow. `PRO.h` must never be included by a header (it pollutes the namespace). Guide: [PRO.md].
 
- -  `ok64str`/`OKprint`/`OKscan`/`ok64is` — render an `ok64` to its Base64 name, parse one back.
+ -  `ok64str`/`OKprint`/`OKscan`/`ok64is` — render an `ok64` to its Base64 name, parse one back; `ok64is(o, NONE)` matches any MODULE+NONE.
+ -  A code is MODULE (2-4 chars; S, B for slices, buffers) + REASON, 10 chars max: NOROOM NODATA NONE END FULL BAD BADARG FAIL NOMEM AGAIN (CODE-26B068XgTv); bare reasons are for outside depots.
  -  `sane(c)` — function entry guard: declares the hidden status var and bails `FAILSANITY` if the precondition fails.
  -  `call(f, …)`/`try(f, …)`/`done`/`fail(code)` — invoke a procedure, return-on-error or accumulate-and-continue.
  -  `ABC_BASS` — the thread-local LIFO scratch arena set up by the entry macros.
@@ -159,10 +160,10 @@ A rapidhash wrapper for hash tables and bloom-style keying.
 
 A bucketed linear-probe table laid out directly in a buffer slice; the length MUST be a power of two. Guide: [HASH.md].
 
- -  `HASHGet`/`HASHAt`/`HASHPut`/`HASHDel`/`HASHDelAt`/`HASHNext` — point lookup, insert/upsert (an `ABC_HASH_MERGE` fold), backward-shift delete, iteration; codes `NONE`, `FULL` (a full line), `NOROOM`, `BADARG`.
- -  `HASHGrow`/`HASHPutGrow` — a growable table is a buffer's DATA, its IDLE the room: `Grow` doubles DATA in place (phases `_growCopy`, flip, `_growClean`), `NOROOM` when IDLE < DATA, never maps.
- -  `HASHMove` — rehash every entry of one table (a buffer's DATA) into another the caller set up (pow2, any size, no maps); `FULL` on a full line, the target partially filled, nothing lost, the source intact.
- -  `HASHProbe`/`HASHProbeGrow` — single-probe get-or-insert: `OK` with `*slot` at the resident, `NONE` with `*slot` at the zeroed slot the caller fills, `FULL` (Probe only) on a full line; one hash, no copy of `rec`; under `ABC_HASH_CONVERGE` the fill leaves Put's layout.
+ -  `HASHGet`/`HASHAt`/`HASHPut`/`HASHDel`/`HASHDelAt`/`HASHNext` — point lookup, insert/upsert (an `ABC_HASH_MERGE` fold), backward-shift delete, iteration; codes `HASHNONE`, `HASHFULL` (a full line), `HASHNOROOM`, `HASHBADARG`.
+ -  `HASHGrow`/`HASHPutGrow` — a growable table is a buffer's DATA, its IDLE the room: `Grow` doubles DATA in place (phases `_growCopy`, flip, `_growClean`), `HASHNOROOM` when IDLE < DATA, never maps.
+ -  `HASHMove` — rehash every entry of one table (a buffer's DATA) into another the caller set up (pow2, any size, no maps); `HASHFULL` on a full line, the target partially filled, nothing lost, the source intact.
+ -  `HASHProbe`/`HASHProbeGrow` — single-probe get-or-insert: `OK` with `*slot` at the resident, `HASHNONE` with `*slot` at the zeroed slot the caller fills, `HASHFULL` (Probe only) on a full line; one hash, no copy of `rec`; under `ABC_HASH_CONVERGE` the fill leaves Put's layout.
  -  Each instantiating type supplies `TypeHash` + `TypeKeyEq`; `HASHx` keys and probes through those, never the name.
  -  `ABC_HASH_LINE`/`ABC_HASH_CONVERGE` — compile-time knobs for probe-line width and Robin-Hood-style convergence on insert.
 
@@ -202,7 +203,7 @@ Index-based prev/next links living inside buffer records (no pointers).
 
 An in-memory sorted container (BOX-26A26EbjLj): one house, a 64-cell `X(,csb)` (`a_box`, PUPS-26B045Ffpb) whose DATA cells are the runs, fed to HITx as they are, and whose last two cells are the memtable `X(,b)` (`BOXMem`; PAST = sorted runs back to back, DATA = the unsorted segment), mapped by the owner. Needs `X(,Z)`, `X(,KeyEq)` and `X(,Max)` (the tombstone, sorts last, tested by key); optional `ABC_X_MERGE` (+ `X(,Merge)`, one knob for HITx/BOXx/PUPx), `ABC_BOX_SEG` (segment bytes, 512). The PUPS memtable runs on it. Guide: [BOX.md].
 
- -  `BOXPut`/`BOXPutBatch` — append (a Max key is `BADARG`, no room `NOROOM`, no run slot `FULL`; a failed put stores nothing); past c the segment becomes a run (`BOXSort`).
+ -  `BOXPut`/`BOXPutBatch` — append (a Max key is `BOXBADARG`, no room `BOXNOROOM`, no run slot `BOXFULL`; a failed put stores nothing); past c the segment becomes a run (`BOXSort`).
  -  `BOXSort` — seal the segment, collapse the tailing runs by the 1/8 ladder (or all of them): parallel in-place combine, qsort, trim the max tail.
  -  `BOXGet(out, h, key)`/`BOXRange` — point lookup (newest wins, or the merge fold); the runs trimmed to `[lo, hi)`.
 
@@ -214,7 +215,7 @@ A bit VALUE (`u1`, carried as a b8 0/1; no addressable `u1*`) plus bit addressin
  -  `u1Words(bits)` — u64 words needed for `bits` bits.
  -  `u1bMap`/`u1bAcquire`/`u1bUnMap`/`u1bFree` — owned map creation/release (capacity in BITS, rounded to whole words; DATA spans the whole zeroed map so it is immediately bit-addressable).
  -  `u1bReset`/`u1bData`/`u1bDataC` — re-zero the map (keep size); writable / const word-slice views (use as `u64s` / `u64cs`).
- -  `u1sOr`/`u1sAnd`/`u1sAndNot`/`u1sXor` — word-parallel equal-WORD-length set algebra (`BITLEN` on length mismatch).
+ -  `u1sOr`/`u1sAnd`/`u1sAndNot`/`u1sXor` — word-parallel equal-WORD-length set algebra (`BITBADARG` on length mismatch).
  -  `u1sCount`/`u1sNext`/`u1sEq`/`u1sAny` + `u1$for(i, set)` — popcount, next-set-bit, equality, non-empty, set-bit iterator.
 
 ##  Algorithms
@@ -248,7 +249,7 @@ Binary delta between two byte blobs, no compression, no malloc.
 Shortest path over an implicit graph using a `kv64` heap (by cost) and a `kv64` hash (by node id).
 
  -  `kv64Zval` — comparator ordering `kv64` entries by `val` (cost), giving a min-heap on distance.
- -  `DIJKNOPATH`/`DIJKNOROOM` — the no-route and out-of-scratch outcomes.
+ -  `DIJKNOPATH` — the no-route outcome.
 
 ###  NFA.h, NFAx.h — Thompson NFA regex
 
@@ -263,8 +264,8 @@ Compile a pattern to a Thompson NFA and simulate it over text (full or prefix ma
 `LSM` merges sorted record streams via a heap of cursors; `Yx` is the generic slicer/merger glue; `HITx` is a heap-of-iterators for set ops; `HIT.h` is its comparator-free ladder policy. Guides: [LSM.md], [HIT.md].
 
  -  `LSM`/`LSMMore`/`LSMNext`/`LSMMerge`/`LSMSort` — feed a sorted run, step the merge, drain it.
- -  `HITMerge(into, runs)`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union (an `ABC_X_MERGE` fold), intersection; `NOROOM` the output filled, `NONE` nothing left.
- -  `ABC_HIT_MAX_RUNS`/`ABC_HIT_LADDER_DIV` (HIT.h) — the one run cap (past it: `FULL`), the 1/8 ratio.
+ -  `HITMerge(into, runs)`/`HITIntersect`/`HITSeek`/`HITSeekRange`/`HITTops` — union (an `ABC_X_MERGE` fold), intersection; `HITNOROOM` the output filled, `HITNONE` nothing left.
+ -  `ABC_HIT_MAX_RUNS`/`ABC_HIT_LADDER_DIV` (HIT.h) — the one run cap (past it: `HITFULL`), the 1/8 ratio.
  -  `HITLadderOK`/`HITLadderOverRuns` (HIT.h) — 1/8 predicate and cascade count over run LENGTHS, no element type; `HIT*IsCompact`/`HIT*CompactRuns` just measure a stack and call these.
  -  `Yx` (`_X(push)`/`_X(next)`/`_X(merge)`/`_X(sort)`) — the lower-level push/merge primitives the `LSM` users.
 
@@ -292,7 +293,7 @@ A block-granular skip index (`SKIP`), and a skip-record log for seekable append 
 A directory of immutable sorted runs `<10-RON64 key><ext>`, mmap'd read-only with no fd held (PUPS-26A276Xh2e), a BOX memtable, a 1/8 compaction ladder, an optional per-page ToC. State is one house (`a_pup`, PUPS-26B045Ffpb): PAST the mapped runs, DATA and the memtable BOX's, plus the file keys index-parallel to PAST. Guide: [PUPS.md].
 
  -  `PUP<T>Open`/`Close`/`Create`/`Drop` (PUPx.h) — map a directory's runs into the house, release them, book or drop whole runs.
- -  `PUP<T>Put`/`Commit`/`Ladder` — the memtable (NOROOM: commit), its seal, the compaction.
+ -  `PUP<T>Put`/`Commit`/`Ladder` — the memtable (BOXNOROOM: commit; PUPFULL: ladder), its seal, the compaction.
  -  `PUP<T>Get`/`Range`/`Read`/`Runs`/`Split` — a point lookup, a key range, the merged view, the runs, one run's rows and ToC.
  -  `PUPScan`/`PUPMap`/`PUPNextKey`/`PUPTmpMap`/`PUPTmpSeal`/`PUPTocFeed`/`PUPTocSplit` — the untyped core, one slice at a time.
  -  `PUPLock`/`PUPUnlock`/`PUPUnlink` — the per-directory write lock, retiring runs.

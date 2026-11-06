@@ -154,7 +154,7 @@ ok64 JSONNestTest() {
     call(JSONFmt, out_idle, ok, indent);
     a_pad(u8, out2, 1 << 18);
     u8cs over = {deep, deep + 2 * JSON_MAX_NEST + 2};
-    want(JSONBAD == JSONFmt(out2_idle, over, indent));
+    want(JSONFULL == JSONFmt(out2_idle, over, indent));
     u8cs close = u8scstr("]");
     want(JSONBAD == JSONFmt(out_idle, close, indent));
     done;

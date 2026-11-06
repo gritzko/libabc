@@ -53,7 +53,7 @@ ok64 X(G, grow)() {
         if (!x) continue;
         T r = X(G, of)(x, YES);
         size_t ndx = 0;
-        while (FULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) {
+        while (HASHFULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) {
             size_t was = X(, bDataLen)(buf);
             call(X(HASH, Grow), buf);
             want(X(, bDataLen)(buf) == was * 2);
@@ -87,7 +87,7 @@ ok64 X(G, phases)() {
         x = x * 6364136223846793005ULL + 1442695040888963407ULL;
         T r = X(G, of)(x | 1, YES);
         size_t ndx = 0;
-        if (FULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) break;
+        if (HASHFULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) break;
         call(X(HASH, Put), X(, bData)(buf), &r);
         call(u64bFeed1, keys, x | 1);
     }
@@ -123,7 +123,7 @@ ok64 X(G, phases)() {
     done;
 }
 
-//  Grow never maps: IDLE shorter than DATA is NOROOM, table untouched
+//  Grow never maps: IDLE shorter than DATA is HASHNOROOM, table untouched
 ok64 X(G, room)() {
     sane(1);
     X(B, ) buf = {};
@@ -134,7 +134,7 @@ ok64 X(G, room)() {
     call(X(HASH, Grow), buf);
     call(X(HASH, Grow), buf);
     want(X(, bDataLen)(buf) == GLINE * 4);
-    want(NOROOM == X(HASH, Grow)(buf));
+    want(HASHNOROOM == X(HASH, Grow)(buf));
     want(X(, bDataLen)(buf) == GLINE * 4);
     T g = X(G, of)(7, NO);
     call(X(HASH, Get), &g, X(, bData)(buf));
@@ -157,7 +157,7 @@ ok64 X(G, fulldel)() {
     for (u64 k = 1; u64bIdleLen(keys); ++k) {
         T r = X(G, of)(k, YES);
         size_t ndx = 0;
-        if (FULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) continue;
+        if (HASHFULL == X(HASH, _find)(&ndx, X(, bData)(buf), &r)) continue;
         call(X(HASH, Put), X(, bData)(buf), &r);
         call(u64bFeed1, keys, k);
     }

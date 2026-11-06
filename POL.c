@@ -240,7 +240,7 @@ ok64 POLLoop(u64 timens) {
 
     // Local poll vector - exactly POL_MAXFD entries
     struct pollfd* vec = calloc(POL_MAXFD, sizeof(struct pollfd));
-    if (!vec) return NOROOM;
+    if (!vec) return POLNOMEM;
     ok64 ret = OK;
 
     while (now < till && !pollerbEmpty(POL_QUEUE) && !POL_STOP) {

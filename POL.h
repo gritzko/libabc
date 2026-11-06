@@ -21,6 +21,7 @@ typedef struct poller {
 
 con ok64 POLNONE = 0x196155d85ce;
 con ok64 POLFAIL = 0x196153ca495;
+con ok64 POLNOMEM = 0x658557616396;
 
 ok64 POLInit(int max_fd);
 ok64 POLFree();

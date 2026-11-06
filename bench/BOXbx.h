@@ -38,7 +38,7 @@ ok64 X(bb, Put)(bbhouse *b, BB_T const *rows, size_t n) {
     X(, cs) **h = BBx(_h)(b);
     for (size_t i = 0; i < n; i++) {
         ok64 o = X(BOX, Put)(h, rows + i);
-        if (o == NOROOM || o == FULL) {
+        if (o == BOXNOROOM || o == BOXFULL) {
             X(BOX, Sort)(h, YES);
             o = X(BOX, Put)(h, rows + i);
         }
@@ -97,7 +97,7 @@ ok64 X(pp, Put)(pphouse *b, BB_T const *rows, size_t n) {
     X(, cs) **h = BBx(_h)(b);
     for (size_t i = 0; i < n; i++) {
         ok64 o = X(PUP, Put)(h, rows + i);
-        if (o == NOROOM || o == FULL) {
+        if (o == BOXNOROOM || o == BOXFULL) {
             o = X(pp, _commit)(b);
             if (o == OK) o = X(PUP, Put)(h, rows + i);
         }
@@ -135,7 +135,7 @@ size_t BBx(Get)(BBx_H *b, BB_T const *keys, size_t n, u64 *sum) {
 }
 
 //  Range plus a HIT drain in 256-row chunks: Merge keeps its state in the
-//  run slices, so a NOROOM call resumes where it stopped.
+//  run slices, so a BOXNOROOM call resumes where it stopped.
 size_t BBx(Scan)(BBx_H *b, BB_T const *lo, BB_T const *hi, u64 *sum) {
     a_pad(X(, cs), into, ABC_HIT_MAX_RUNS);
     if (BBx_RANGE(into_idle, BBx(_h)(b), lo, hi) != OK) return 0;
@@ -150,7 +150,7 @@ size_t BBx(Scan)(BBx_H *b, BB_T const *lo, BB_T const *hi, u64 *sum) {
             rows++;
             *sum += p->key;
         }
-    } while (o == NOROOM);
+    } while (o == BOXNOROOM);
     return rows;
 }
 

@@ -69,7 +69,7 @@ static ok64 t_put(kv64csb h, u64b keys, path8s dir, u8cs ext, u64 key,
     sane(1);
     kv64 row = {key, val};
     ok64 o = PUPkv64Put(h, &row);
-    if (o == NOROOM) {
+    if (o == BOXNOROOM) {
         call(t_commit, h, keys, dir, ext, NO, NULL);
         o = PUPkv64Put(h, &row);
     }
@@ -194,7 +194,7 @@ static ok64 PUPTestMemRoundTrip(void) {
     T_DIR(".mem.idx");
     a_pup(kv64, h);
     kv64 pre = {1, 1};
-    want(PUPkv64Put(h, &pre) == NOROOM);  //  D-2: no memtable mapped yet
+    want(PUPkv64Put(h, &pre) == BOXNOROOM);  //  D-2: no memtable mapped yet
     call(kv64bMap, BOXkv64Mem(h), T_PAGE);
     u64 const kv[4][2] = {{7, 70}, {3, 30}, {5, 50}, {3, 31}};
     for (int i = 0; i < 4; i++)
@@ -252,7 +252,7 @@ static ok64 PUPTestMemCollapse(void) {
     done;
 }
 
-//  A full one-page memtable says NOROOM; the owner commits it into a run a
+//  A full one-page memtable says BOXNOROOM; the owner commits it into a run a
 //  fresh scan sees; Drop takes the run and the memtable still takes puts.
 static ok64 PUPTestMemFlush(void) {
     sane(1);
@@ -1224,7 +1224,7 @@ static ok64 PUPTestGet(void) {
         kv64 const *p = kv64sFindGE(oracle, &key);
         b8 in = p < oracle[1] && p->key == k;
         ok64 o = PUPkv64Get(&got, h, &key);
-        want(in ? (o == OK && got.val == p->val) : o == NONE);
+        want(in ? (o == OK && got.val == p->val) : o == PUPNONE);
     }
     kv64bFree(all);
     T_CLOSE(h);
@@ -1299,7 +1299,7 @@ static ok64 PUPTestGetMerge(void) {
     for (u64 k = 0; k < 52; k++) {
         cnt64 key = {k, 0}, got = {};
         ok64 o = PUPcnt64Get(&got, h, &key);
-        want(k < 50 ? (o == OK && got.val == sum[k]) : o == NONE);
+        want(k < 50 ? (o == OK && got.val == sum[k]) : o == PUPNONE);
     }
     cnt64 all[64];
     cnt64s view = {all, all + 64};
@@ -1324,7 +1324,7 @@ static int pup_proc_fds(void) {
 }
 
 //  A full house of ABC_PUP_MAX_RUNS runs is open at once, every one readable,
-//  no fd held; one more create is PUPNOROOM.
+//  no fd held; one more create is PUPFULL.
 static ok64 PUPTestManyRuns(void) {
     sane(1);
     call(FILEInit);
@@ -1335,7 +1335,7 @@ static ok64 PUPTestManyRuns(void) {
     a_pup(kv64, h);
     for (u64 i = 0; i < N; i++)
         call(t_run, h, h_keys, $path(dir), ext, 1000 + i, i, 1, 0);
-    want(t_run(h, h_keys, $path(dir), ext, 2000, 0, 1, 0) == PUPNOROOM);
+    want(t_run(h, h_keys, $path(dir), ext, 2000, 0, 1, 0) == PUPFULL);
     testeqv(pup_proc_fds(), fd0, "%d");
     T_CLOSE(h);
     a_pup(kv64, fresh);
@@ -1353,7 +1353,7 @@ static ok64 PUPTestManyRuns(void) {
 }
 
 //  PUPS-26B05AeY1d: empty creates fill the house (Create never ladders);
-//  at the cap Commit is PUPNOROOM, Ladder forced.
+//  at the cap Commit is PUPFULL, Ladder forced.
 static ok64 PUPTestCap(void) {
     sane(1);
     call(FILEInit);
@@ -1365,9 +1365,9 @@ static ok64 PUPTestCap(void) {
     ok64 o = OK;
     while (o == OK)
         o = PUPkv64Create(h, h_keys, $path(dir), ext, none, 0, NO, NULL);
-    want(o == PUPNOROOM);
+    want(o == PUPFULL);
     call(t_put, h, h_keys, $path(dir), ext, 9, 90);
-    want(PUPkv64Commit(h, h_keys, $path(dir), ext, NO, NULL) == PUPNOROOM);
+    want(PUPkv64Commit(h, h_keys, $path(dir), ext, NO, NULL) == PUPFULL);
     call(PUPkv64Ladder, h, h_keys, $path(dir), ext, NULL, NULL);
     want(Bpastlen(h) < ABC_PUP_MAX_RUNS);
     call(PUPkv64Commit, h, h_keys, $path(dir), ext, NO, NULL);

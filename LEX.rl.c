@@ -1022,7 +1022,7 @@ ok64 LEXLexer(LEXstate* state) {
 
     state->data[0] = p;
     if (p != data[1] || cs < LEX_first_final) {
-        return LEXFAIL;
+        return LEXBAD;
     }
     done;
 }

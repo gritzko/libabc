@@ -25,22 +25,18 @@
 #include "ftw.h"
 
 // Generic FILE error codes
-con ok64 FILEERROR = 0xf49538e6db61b;
 con ok64 FILEBADARG = 0x3d254e2ca34a6d0;
 con ok64 FILEFAIL = 0x3d254e3ca495;
 con ok64 FILENOSYNC = 0x3d254e5d87225cc;
 con ok64 FILENOOPEN = 0x3d254e5d8619397;
 con ok64 FILENOCLSE = 0x3d254e5d831570e;
 con ok64 FILENOSTAT = 0x3d254e5d871d29d;
-con ok64 FILEWRONG = 0xf4953a06d85d0;
+#define FILEWRONG FILENOTDIR  // CODE-26B068XgTv: one-release alias
 con ok64 FILESPAWN = 0xf49539c64a817;
 con ok64 FILESIGNAL = 0x3d254e712417295;
 con ok64 FILENORESZ = 0x3d254e5d86ce723;
 con ok64 FILEEND = 0xf49538e5cd;
 con ok64 FILENONE = 0x3d254e5d85ce;
-con ok64 FILEACCESS = 0x3d254e28c30e71c;
-con ok64 FILENAME = 0x3d254e5ca58e;
-con ok64 FILEBAD = 0xf49538b28d;
 con ok64 FILESKIP = 0x3d254e714499;  // Skip this directory (don't recurse)
 con ok64 FILENOBOOK = 0x3d254e5d82d8614;  // Not a booked mapping
 
@@ -69,7 +65,9 @@ con ok64 FILENOTEMP = 0x3d254e5d874e599;  // ENOTEMPTY: directory not empty
 con ok64 FILEPERM = 0x3d254e64e6d6;      // EPERM: operation not permitted
 con ok64 FILEROFS = 0x3d254e6d83dc;       // EROFS: read-only file system
 con ok64 FILEXDEV = 0x3d254e84d39f;       // EXDEV: cross-device link
-con ok64 FILENAMEBAD = 0xf49539729638b28d;
+con ok64 FILEFULL = 0x3d254e3de555;
+con ok64 FILENODATA = 0x3d254e5d834a74a;
+con ok64 FILENOROOM = 0x3d254e5d86d8616;
 
 // The errno→ok64 mapping is the switch in `FILEErr` (FILE.c).
 
@@ -210,9 +208,9 @@ fun b8 FILEentryZ(u8cscp a, u8cscp b) {
 // Entry slicer for LSMSort - extracts [type][len][name] record from stream
 // TLV-like format: O(1) slicing, no null scan
 fun ok64 FILEentryX(u8csp rec, u8cs stream) {
-    if ($len(stream) < 2) return NODATA;
+    if ($len(stream) < 2) return FILENODATA;
     size_t reclen = 2 + stream[0][1];  // type + len + name
-    if ($len(stream) < (i64)reclen) return NODATA;
+    if ($len(stream) < (i64)reclen) return FILENODATA;
     rec[0] = stream[0];
     rec[1] = stream[0] + reclen;
     stream[0] += reclen;
@@ -228,7 +226,7 @@ ok64 FILEIterOpen(fileitp it, path8bp path);
 ok64 FILEIterOpenSorted(fileitp it, path8bp path, u8bp buf, u8csz z);
 // Close iterator
 ok64 FILEIterClose(fileitp it);
-// Next entry in current directory (returns END when exhausted)
+// Next entry in current directory (returns FILEEND when exhausted)
 ok64 FILENext(fileitp it);
 // Descend into directory (current entry must be DT_DIR)
 ok64 FILEInto(fileitp child, fileitp parent);
@@ -508,7 +506,7 @@ ok64 FILEUnLink(path8s name);
 // Read the target of a symbolic link into `out`.  Resets `out`,
 // feeds the link target bytes, NUL-terminated past the data like any
 // path8b (PATH.h; the NUL is not in the data).  Returns FILEFAIL on
-// readlink() failure; NOROOM if the buffer's idle space can't hold
+// readlink() failure; FILENOROOM if the buffer's idle space can't hold
 // the full target (and the buffer is left empty).
 ok64 FILEReadLink(u8bp out, path8s linkpath);
 

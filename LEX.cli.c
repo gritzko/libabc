@@ -15,7 +15,7 @@ ok64 lexcli() {
     sane(1);
     if ($arglen != 3) {
         fprintf(stderr, "Usage: lex MOD [c|go]\n");
-        fail(BADARG);
+        fail(LEXBADARG);
     }
     a$rg(name, 1);
     a$rg(lang, 2);

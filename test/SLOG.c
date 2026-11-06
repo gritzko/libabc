@@ -174,7 +174,7 @@ ok64 SLOG2() {
         u8csc tgt = {tgtbuf[0], tgtbuf_idle[0]};
 
         ok64 o = SLOGSeek(stkdi, stream, u64TLVless, tgt);
-        if (o == SLOGMISS) {
+        if (o == SLOGNONE) {
             // Target beyond last record
             continue;
         }
@@ -235,7 +235,7 @@ ok64 SLOG3() {
         u8csc tgt = {tgtbuf[0], tgtbuf_idle[0]};
 
         ok64 o = SLOGSeek(stkdi, stream, u64TLVless, tgt);
-        if (o == SLOGMISS) continue;
+        if (o == SLOGNONE) continue;
         test(o == OK, o);
 
         u64 foundoff = *(stkdi[1] - 1);
@@ -299,7 +299,7 @@ ok64 SLOG4() {
         ok64 o = SLOGSeek(stkdi, stream, u64TLVless, tgt);
         if (o != OK) {
             fprintf(stderr, "  seek %" PRIu64 ": %s\n", target, ok64str(o));
-            if (o == SLOGMISS) continue;
+            if (o == SLOGNONE) continue;
             fail(o);
         }
 
@@ -586,7 +586,7 @@ ok64 SLOG8() {
     done;
 }
 
-// Repro from fuzz: minimized crash - SLOGMISS for existing value
+// Repro from fuzz: minimized crash - SLOGNONE for existing value
 ok64 SLOG9() {
     sane(1);
 

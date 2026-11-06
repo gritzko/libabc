@@ -145,7 +145,7 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
             continue;
         }
         ++*p;
-        if ($empty(p)) return BADARG;
+        if ($empty(p)) return SBADARG;
         switch (**p) {
             case 's': {
                 sarg = va_arg(ap, u8 const **);
@@ -170,7 +170,7 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
                                                 va_arg(ap, double));
                 if (n < 0) {
                     va_end(ap);
-                    return BADARG;
+                    return SBADARG;
                 }
                 // ABC-005: snprintf truncation is SNOROOM; its NUL is
                 // not payload, only room-1 bytes actually landed

@@ -18,8 +18,8 @@ winning.  It is one knob per instance, read by HITx, BOXx and PUPx alike
 (PUPS-26B045Ffpb); the outermost of them undefines it (BOXx and PUPx
 include HITx themselves).  The retired `ABC_HIT_MERGE` is a compile error.
 
-Codes: `OK`; `NONE` nothing left (Seek, SeekRange); `NOROOM` the output
-slice filled; `FULL` more than `ABC_HIT_MAX_RUNS` runs.  The destination
+Codes: `OK`; `HITNONE` nothing left (Seek, SeekRange); `HITNOROOM` the output
+slice filled; `HITFULL` more than `ABC_HIT_MAX_RUNS` runs.  The destination
 goes first: `Merge(into, runs)`.
 
 The entry points take an oldest-first `X(,css)` of runs, whose entries
@@ -40,7 +40,7 @@ an element-typed HIT it would never merge with.
 |------------------|-------|-------------------------------------------|
 | `ABC_HIT_MAX_RUNS`   | 64    | runs per merge; ONE cap for every entry point and both JS leaves |
 | `ABC_HIT_LADDER_DIV` | 8     | the 1/8 size-tiered ladder ratio          |
-| `FULL` (01.h)    | —     | the `ok64` every entry point returns above the cap |
+| `HITFULL` (HIT.h) | —     | the `ok64` every entry point returns above the cap |
 
 | Function (HIT.h)      | Description                                  |
 |-----------------------|----------------------------------------------|
@@ -52,7 +52,7 @@ newest-first array silently inverts newest-wins on a keyed lane.  The
 caller owns the convention (in JS, the `abc.index` handle, which holds
 each run's pup key).
 
-Above `ABC_HIT_MAX_RUNS` an entry point just refuses with `FULL` — no
+Above `ABC_HIT_MAX_RUNS` an entry point just refuses with `HITFULL` — no
 windowing, no repair cascade, no youngest-N batching.  A stack that deep
 is damaged or foreign; the cure is to drop the runs and re-derive.
 
@@ -101,7 +101,7 @@ equal rows in age order.
 u64cs runs[3] = {{a, a+4}, {b, b+3}, {c, c+5}};
 u64css heap = {runs, runs + 3};
 u64 buf[64]; u64s out = {buf, buf + 64};
-HITu64Merge(out, heap);  // NOROOM if buf fills
+HITu64Merge(out, heap);  // HITNOROOM if buf fills
 // buf[0..out[0]-buf) contains sorted deduplicated merge
 ```
 
@@ -137,5 +137,5 @@ within each entry.
 
 ```c
 u64 key = 42;
-ok64 o = HITu64Seek(heap, &key);  // NONE if all exhausted
+ok64 o = HITu64Seek(heap, &key);  // HITNONE if all exhausted
 ```

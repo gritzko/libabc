@@ -5,6 +5,7 @@
 #include "NET.h"
 
 con ok64 UDPFAIL = 0x1e3593ca495;
+con ok64 UDPNOROOM = 0x1e3595d86d8616;
 
 #define a$c(name, s, len)          \
     char name[len] = {0};          \
@@ -24,7 +25,7 @@ fun ok64 UDPerrno() {
 }
 
 // CODE-26B06585xv: a zero-length MSG_PEEK|MSG_TRUNC learns the size, so
-// NETNOSPACE leaves the datagram queued for a bigger slice.
+// UDPNOROOM leaves the datagram queued for a bigger slice.
 fun ok64 UDPDrain($u8 into, NETaddr addr, int fd) {
     socklen_t len;
     ssize_t nread;
@@ -34,14 +35,14 @@ fun ok64 UDPDrain($u8 into, NETaddr addr, int fd) {
     if (nread == -1) return UDPerrno();
     // ABC-012: MSG_TRUNC reports the real datagram size; refuse cuts
     // ABC-017: nread >= 0 here; signed compare avoids -Wsign-compare
-    if (nread > $len(into)) return NETNOSPACE;
+    if (nread > $len(into)) return UDPNOROOM;
     do {
         len = (socklen_t)Blen(addr);
         nread = recvfrom(fd, *into, $len(into), MSG_TRUNC,
                          (struct sockaddr *)*addr, &len);
     } while (nread == -1 && errno == EINTR);
     if (nread == -1) return UDPerrno();
-    if (nread > $len(into)) return NETNOSPACE;  // another reader's datagram
+    if (nread > $len(into)) return UDPNOROOM;  // another reader's datagram
     if (len > (socklen_t)Blen(addr)) len = (socklen_t)Blen(addr);
     range64 range = {0, len};
     Bu8rewind(addr, range);

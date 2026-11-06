@@ -5,16 +5,12 @@
 #include "OK.h"
 #include "S.h"
 
-con ok64 TLVRECBAD = 0x1d55f6ce30b28d;
-con ok64 TLVBADREC = 0x1d55f2ca35b38c;
 con ok64 TLVNODATA = 0x1d55f5d834a74a;
 con ok64 TLVBADTYPE = 0x7557cb28d76264e;
 con ok64 TLVNOROOM = 0x1d55f5d86d8616;
-con ok64 TLVOVERFLO = 0x7557d87ce6cf558;
-con ok64 TLVBADCALL = 0x7557cb28d30a555;
 con ok64 TLVBADARG = 0x1d55f2ca34a6d0;
-con ok64 TLVBADKV = 0x7557cb28d51f;
 con ok64 TLVTOOLONG = 0x7557dd6185585d0;
+con ok64 TLVBAD = 0x7557cb28d;
 
 #define TLVaA 0x20
 #define TLV_MAX_LEN ((1 << 30) - 1)
@@ -87,7 +83,7 @@ fun ok64 TLVu8bOuto(u8bp into, u8 type) {
     u8* hdr = into[1] - 5;
     u32 dl = 0;
     memcpy(&dl, hdr + 1, 4);
-    if (hdr - into[0] < (i64)dl) return TLVBADREC;
+    if (hdr - into[0] < (i64)dl) return TLVBAD;
     u8s outer = {hdr, into[3]};
     u8s inner = {into[2], into[3]};
     ok64 o = TLVu8sEnd(outer, inner, type);

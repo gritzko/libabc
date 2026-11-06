@@ -20,11 +20,11 @@ use for GC, runtime or feature creep.
   they are trivially serializable and mmap-friendly. Messy state structs 
   are also fine; just keep them private.
 - **No rug-pulling reallocations.** Only the owner of a buffer can resize it;
-  downstream code returns `NOROOM` instead of reallocating under the
+  downstream code returns `NOROOM` (e.g. `HASHNOROOM`) instead of reallocating under the
   caller's feet. Arenas, ring buffers and pre-sized limits are preferred over
   `malloc`/`free`. Resource acquisition happens at the top of the call chain.
 - **Errors are `ok64` codes** with human-readable Base64 names like
-  `MMAPFAIL`. *Procedures* that can fail return `ok64`; *functions* that 
+  `HASHNOROOM`, MODULE+REASON in 10 chars. *Procedures* that can fail return `ok64`; *functions* that 
   can't fail return values. The [PRO][P] module wraps this into stack-traced
   `call()`/`done`/`fail()` macros.
 

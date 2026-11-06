@@ -91,15 +91,15 @@ struct Lane {
         if (it == ref.end()) ref[k] = v;
         else it->second = MERGE ? it->second + v : v;
     }
-    // a claim may FULL only for an absent key with no room left: snapshot then
+    // a claim may SWISFULL only for an absent key with no room left: snapshot then
     bool maybe_full(u16 k) { return !ref.count(k) && left(tab) == 0; }
 
     void put(u16 k, u32 v) {
         R r = mk(k, v);
         if (maybe_full(k)) save();
         ok64 o = Put(tab, &r);
-        CHECK(o == OK || (o == FULL && !ref.count(k) && left(tab) == 0));
-        if (o == FULL) {
+        CHECK(o == OK || (o == SWISFULL && !ref.count(k) && left(tab) == 0));
+        if (o == SWISFULL) {
             CHECK(same());
             return;
         }
@@ -114,8 +114,8 @@ struct Lane {
             CHECK(o == OK && s->key == k && s->val == ref[k]);
             return;
         }
-        CHECK(o == NONE || (o == FULL && left(tab) == 0));
-        if (o == FULL) {
+        CHECK(o == SWISNONE || (o == SWISFULL && left(tab) == 0));
+        if (o == SWISFULL) {
             CHECK(same());
             return;
         }
@@ -131,20 +131,20 @@ struct Lane {
         R r = mk(k, v);
         ok64 o = PutGrow(tab, &r);
         size_t n = tab[2] - tab[1];
-        CHECK(o == OK || (o == NOROOM && !ref.count(k) && 2 * n > Max(tab)));
+        CHECK(o == OK || (o == SWISNOROOM && !ref.count(k) && 2 * n > Max(tab)));
         CHECK(n >= len && 0 == (n & (n - 1)));
         len = n;
         if (o == OK) model_put(k, v);
     }
     void del(u16 k) {
         R r = mk(k, 0);
-        CHECK(Del(tab, &r) == (ref.erase(k) ? OK : NONE));
+        CHECK(Del(tab, &r) == (ref.erase(k) ? OK : SWISNONE));
     }
     void get(u16 k) {
         R r = mk(k, 0);
         auto it = ref.find(k);
         ok64 o = Get(&r, tab);
-        CHECK(o == (it == ref.end() ? NONE : OK));
+        CHECK(o == (it == ref.end() ? SWISNONE : OK));
         if (o == OK) CHECK(r.key == k && r.val == it->second);
     }
     void at(u16 k) {
@@ -152,7 +152,7 @@ struct Lane {
         R const *s = NULL;
         auto it = ref.find(k);
         ok64 o = At(&s, tab, &r);
-        CHECK(o == (it == ref.end() ? NONE : OK));
+        CHECK(o == (it == ref.end() ? SWISNONE : OK));
         if (o == OK) CHECK(s->key == k && s->val == it->second);
     }
     // SWISS.md: nothing moves on delete, every matching key goes in one pass
@@ -165,13 +165,13 @@ struct Lane {
         }
         for (size_t i = 0; OK == Next(&i, tab); ++i) {
             if ((tab[1][i].key ^ m) & mask) continue;
-            CHECK(NONE == DelAt(tab, i));
+            CHECK(SWISNONE == DelAt(tab, i));
             ++got;
         }
         CHECK(got == want);
     }
     void grow() {
-        ok64 w = 2 * len <= Max(tab) ? OK : NOROOM;
+        ok64 w = 2 * len <= Max(tab) ? OK : SWISNOROOM;
         if (w != OK) save();
         CHECK(w == Grow(tab));
         if (w != OK) {
@@ -180,11 +180,11 @@ struct Lane {
         }
         len *= 2;
     }
-    // Move into an empty table of n slots: FULL once n - n/8 are in
+    // Move into an empty table of n slots: SWISFULL once n - n/8 are in
     void move(size_t n) {
         CHECK(OK == Init(aux, n));
         size_t fit = n - n / 8;
-        ok64 w = ref.size() > fit ? FULL : OK;
+        ok64 w = ref.size() > fit ? SWISFULL : OK;
         save();
         CHECK(w == Move(aux, tab) && same());
         if (w == OK) {

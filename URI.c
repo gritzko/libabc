@@ -477,7 +477,7 @@ ok64 URIu8sEsc(u8s into, u8cs raw) {
         if (URIIsUnreserved(*c)) {
             call(u8sFeed1, into, *c);
         } else {
-            test($len(into) >= 3, URIFAIL);
+            test($len(into) >= 3, URINOROOM);
             call(u8sFeed1, into, '%');
             call(u8sFeed1, into, HEX_DIGITS[(*c >> 4) & 0xF]);
             call(u8sFeed1, into, HEX_DIGITS[*c & 0xF]);

@@ -211,7 +211,7 @@ ok64 LEXonRuleName($cu8c tok, LEXstate *state) {
     $set(state->cur, tok);
     state->ruleno++;
     // ABC-017: generated `u64 mark0[64]` is indexed by ruleno; cap it
-    if (state->ruleno >= 64) fail(LEXNOROOM);
+    if (state->ruleno >= 64) fail(LEXFULL);
 
     if (**tok < 'A' || **tok > 'Z') done;
 
@@ -284,7 +284,7 @@ ok64 lex2rl(u8cs mod, $u8c lang) {
             if ($eq(lang, LEX_TEMPL[nlang][LEX_TEMPL_L])) break;
             ++nlang;
         }
-        if (nlang == LEX_TEMPL_LANG_LEN) fail(BADARG);
+        if (nlang == LEX_TEMPL_LANG_LEN) fail(LEXBADARG);
     }
 
     LEXstate state = {

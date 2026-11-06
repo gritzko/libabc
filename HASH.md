@@ -19,31 +19,31 @@ key 0 needs a nonzero payload (kv `{0,7}` works, u64 key 0 does not).
 
 ##  API
 
-Return codes are the shared ones (01.h): `OK`, `NONE` (absent), `FULL`
-(the record's line is full), `NOROOM` (Grow: IDLE out), `BADARG` (Grow,
+Return codes are HASH's own (HASH.h, CODE-26B068XgTv): `OK`, `HASHNONE` (absent), `HASHFULL`
+(the record's line is full), `HASHNOROOM` (Grow: IDLE out), `HASHBADARG` (Grow,
 Move: a bad length, overlapping tables).  On a `$` slice (the table):
 
   - `Get(&rec, data)`: rec carries the key in, the stored record out.
   - `At(&slot, data, &rec)`: read-only lookup, a const pointer to the
     resident; no copy, no mutation.
   - `Put(data, &rec)`: insert or overwrite (with `ABC_HASH_MERGE`,
-    fold into the resident by `XMerge(resident, &rec)`); FULL leaves the
+    fold into the resident by `XMerge(resident, &rec)`); HASHFULL leaves the
     table untouched, also under CONVERGE (nothing is evicted).
   - `Probe(&slot, data, &rec)`: get-or-insert in one probe, rec hashed
-    once, never copied.  OK: `*slot` is the resident.  NONE: `*slot` is
+    once, never copied.  OK: `*slot` is the resident.  HASHNONE: `*slot` is
     the zeroed slot Put would use; fill it (a nonzero record with rec's
     key) or `Unprobe(data, slot)` it before any other op on the table.
     Under CONVERGE an unfilled slot hides displaced residents.  Put is
     Probe + mv, so either way the layout is the same.
-  - `Del(data, &rec)`: OK or NONE if absent.  `DelAt(data, ndx)`: delete
+  - `Del(data, &rec)`: OK or HASHNONE if absent.  `DelAt(data, ndx)`: delete
     the entry at a slot, see below.
   - `Next(&ndx, data)`: OK with ndx at the first live slot at or after
-    ndx, NONE at the end; the way to iterate, never a raw slot scan.
+    ndx, HASHNONE at the end; the way to iterate, never a raw slot scan.
 
 On a `B` buffer (a growable table, see below): `PutGrow`, `ProbeGrow`
-(Grow while the line is full), `Grow` (`NOROOM` if out of room) and
+(Grow while the line is full), `Grow` (`HASHNOROOM` if out of room) and
 `Move(into, from)`.  A table shorter than its line is not guarded,
-except Grow/Move fail `BADARG` on it.
+except Grow/Move fail `HASHBADARG` on it.
 
 ##  Knobs
 
@@ -51,7 +51,7 @@ Macro parameters, per instantiation (undefined at the end of HASHx.h):
 
   - `ABC_HASH_LINE` the length of a line, default 64.  Cells can only
     be displaced within their line; if a line is full, `Put` returns
-    `FULL`.  The line length (a static_assert) and the table length MUST
+    `HASHFULL`.  The line length (a static_assert) and the table length MUST
     be powers of 2 (the slot is `hash & (len-1)`; anything else corrupts
     the table and may loop the probe).  The retired `lineX` is an error.
   - `ABC_HASH_CONVERGE` whether we want the hash table to be convergent.
@@ -71,7 +71,7 @@ Macro parameters, per instantiation (undefined at the end of HASHx.h):
 ##  Load
 
 A line is full long before the table is: the load at the first
-`FULL`, random u64 keys, and the load a `PutGrow` table keeps
+`HASHFULL`, random u64 keys, and the load a `PutGrow` table keeps
 while growing 16K..4M entries (avg, min..max):
 
     LINE  2^16  2^20  2^24   PutGrow avg (min..max)
@@ -87,7 +87,7 @@ longer (2^24: 39ns vs 12ns at 16).  A Swiss table keeps 0.44..0.87.
 
 `Del` refills the hole by a backward shift: a later entry of the line
 may move into the slot just deleted.  To erase while scanning slots, use
-`DelAt(data, ndx)`: OK means ndx got refilled, re-examine it; NONE
+`DelAt(data, ndx)`: OK means ndx got refilled, re-examine it; HASHNONE
 means ndx is empty now, step on.  An unvisited entry never moves before
 ndx; a visited one may move forward and be seen again.
 
@@ -106,7 +106,7 @@ room it grows into.  Map the max range once, set the initial length:
     call(HASHkv64PutGrow, tab, &rec);   // Get/Put/Del/Probe take kv64bData(tab)
 
 `Grow(buf)` doubles DATA into the first half of IDLE; it never maps or
-copies the table and fails `NOROOM` if IDLE is shorter than DATA (the
+copies the table and fails `HASHNOROOM` if IDLE is shorter than DATA (the
 table is untouched then).  One doubling never overflows a line.  Phases,
 `data` being the doubled view `{DATA head, DATA end + len}`:
 
@@ -133,8 +133,8 @@ DATA, a table the caller set up at any power-of-2 length (at least
 `ABC_HASH_LINE`): bigger, the same, smaller.  It never maps; the caller
 allocates, then unmaps `from` (left intact) if it likes.  `into`'s
 residents stay, a key in both gets `from`'s record.  The tables must
-not overlap (`BADARG`).  Use: the fallback when `Grow` fails
-`NOROOM` (a new map, then Move), shrinking, another line size.
+not overlap (`HASHBADARG`).  Use: the fallback when `Grow` fails
+`HASHNOROOM` (a new map, then Move), shrinking, another line size.
 
     Bkv64 big = {};
     call(kv64bMap, big, 1 << 28);
@@ -142,9 +142,9 @@ not overlap (`BADARG`).  Use: the fallback when `Grow` fails
     call(HASHkv64Move, big, tab);
     call(kv64bUnMap, tab);
 
-`FULL`: some entry's line in `into` is full.  `into` is left
+`HASHFULL`: some entry's line in `into` is full.  `into` is left
 partially filled: the entries of `from` before that one (in slot order)
-are in, none lost (a FULL Put evicts nothing); `from` is intact.
+are in, none lost (a HASHFULL Put evicts nothing); `from` is intact.
 Under `ABC_HASH_CONVERGE` a Move into an empty table is byte-equal to
 one Put-built at its length (tested).
 

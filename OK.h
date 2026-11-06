@@ -13,12 +13,11 @@ typedef uint64_t ok64;
 #define FAIL 0xffffffffffffffffUL
 
 con ok64 FAILSANITY = 0x3ca49570a5d2762;
-con ok64 WAITNOTYET = 0x80a49d5d876239d;
 con ok64 OKNOROOM = 0x6145d86d8616;
-con ok64 OKBADTEXT = 0x1850b28d74e85d;
 con ok64 FAILEQ = 0x3ca49539a;
 con ok64 RONBAD = 0x6d85cb28d;
-con ok64 NEXT	= 0x5ce85d;
+con ok64 RONBADARG = 0x1b6172ca34a6d0;
+con ok64 RONNOROOM = 0x1b6175d86d8616;
 
 // Rotating buffers for ok64str to allow multiple calls in one expression
 static char _ok64_tmp[4][16];

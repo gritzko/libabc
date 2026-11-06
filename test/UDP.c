@@ -74,7 +74,7 @@ ok64 UDPtestBindLeak() {
 }
 
 // ABC-012: a datagram larger than the read slice used to be truncated
-// silently with OK; MSG_TRUNC now surfaces it as NETNOSPACE.
+// silently with OK; MSG_TRUNC now surfaces it as UDPNOROOM.
 ok64 UDPtestTrunc() {
     sane(1);
     char a[64];
@@ -93,7 +93,7 @@ ok64 UDPtestTrunc() {
     aBpad2(u8, read, 4);
     aNETraw(src);
     ok64 rc = UDPDrain(readidle, src, fd);
-    if (rc != NETNOSPACE) fail(UDPFAIL);
+    if (rc != UDPNOROOM) fail(UDPFAIL);
     // CODE-26B06585xv: the refused datagram stays queued
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
     aBpad2(u8, big, 64);

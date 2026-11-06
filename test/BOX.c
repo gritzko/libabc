@@ -100,7 +100,7 @@ ok64 BOX0() {
         if (k <= KEYS && seen[k - 1]) {
             want(o == OK && got == k);
         } else {
-            want(o == NONE);
+            want(o == BOXNONE);
         }
     }
     //  Range [100, 200): the HIT merge equals the oracle
@@ -147,7 +147,7 @@ ok64 BOX1() {
                 if (last[k]) {
                     want(o == OK && got.val == last[k]);
                 } else {
-                    want(o == NONE);
+                    want(o == BOXNONE);
                 }
             }
         }
@@ -186,17 +186,17 @@ ok64 BOX2() {
     done;
 }
 
-//  the tombstone record is refused; a full buffer says NOROOM
+//  the tombstone record is refused; a full buffer says BOXNOROOM
 ok64 BOX3() {
     sane(1);
     a_box(u64, h);
     u64 **recs = BOXu64Mem(h);
     call(u64bMap, recs, 16);
     u64 t = ~0ULL;
-    want(BOXu64Put(h, &t) == BADARG);
+    want(BOXu64Put(h, &t) == BOXBADARG);
     for (u64 i = 1; i <= 16; i++) call(BOXu64Put, h, &i);
     u64 x = 99;
-    want(BOXu64Put(h, &x) == NOROOM);
+    want(BOXu64Put(h, &x) == BOXNOROOM);
     u64bUnMap(recs);
     done;
 }
@@ -232,7 +232,7 @@ ok64 BOX4() {
         if (last[k]) {
             want(o == OK && got.val == last[k]);
         } else {
-            want(o == NONE);
+            want(o == BOXNONE);
         }
     }
     call(BOXkv64Sort, h, YES);
@@ -282,36 +282,36 @@ ok64 BOX5() {
         if (last[k]) {
             want(o == OK && got.val == last[k]);
         } else {
-            want(o == NONE);
+            want(o == BOXNONE);
         }
     }
     kv64 t = kv64Max;
     kv64cs ts = {&t, &t + 1};
-    want(BOXkv64PutBatch(h, ts) == BADARG);
+    want(BOXkv64PutBatch(h, ts) == BOXBADARG);
     kv64bUnMap(recs);
     done;
 }
 
 //  ABC-26B02JHe_k (review repro1): a row with the Max KEY but another value
 //  was taken, tied the tombstones under Z and leaked them into the run.  Now
-//  the tombstone is tested by key: such a row is BADARG and stores nothing.
+//  the tombstone is tested by key: such a row is BOXBADARG and stores nothing.
 ok64 BOXmaxkey() {
     sane(1);
     a_box(kv64, h);
     kv64 **recs = BOXkv64Mem(h);
     call(kv64bMap, recs, 1 << 16);
     kv64 m = {u64max, 1};
-    want(BOXkv64Put(h, &m) == BADARG);
+    want(BOXkv64Put(h, &m) == BOXBADARG);
     want(recs[2] == recs[1]);
     kv64cs ms = {&m, &m + 1};
-    want(BOXkv64PutBatch(h, ms) == BADARG);
+    want(BOXkv64PutBatch(h, ms) == BOXBADARG);
     want(recs[2] == recs[1]);
     u64 s = 5, last[100] = {};
     for (u64 i = 1; i <= 2000; i++) {
         kv64 r = {i % 3 ? rnd(&s) % 100 : u64max, i};
         ok64 o = BOXkv64Put(h, &r);
         if (r.key == u64max) {
-            want(o == BADARG);
+            want(o == BOXBADARG);
         } else {
             want(o == OK);
             last[r.key] = i;
@@ -326,12 +326,12 @@ ok64 BOXmaxkey() {
         if (p > h[1][0][0]) want(p[-1].key < p->key);
     }
     kv64 key = {u64max, 0}, got = {};
-    want(BOXkv64Get(&got, h, &key) == NONE);
+    want(BOXkv64Get(&got, h, &key) == BOXNONE);
     kv64bUnMap(recs);
     done;
 }
 
-//  ABC-26B02JHe_k: a Put whose seal finds no run slot is FULL and stores
+//  ABC-26B02JHe_k: a Put whose seal finds no run slot is BOXFULL and stores
 //  nothing (trunk stored the row, then said BOXFULL); PutBatch alike
 ok64 BOXfullput() {
     sane(1);
@@ -344,20 +344,20 @@ ok64 BOXfullput() {
     for (u64 i = 100; i < 164; i++) call(BOXu64Put, h, &i);
     u64 const *seg = recs[2];
     u64 x = 999, got = 0;
-    want(BOXu64Put(h, &x) == FULL);
+    want(BOXu64Put(h, &x) == BOXFULL);
     want(recs[2] == seg);
     want(*seg != x);  //  BOX-26B04JISf_: IDLE not scribbled
-    want(BOXu64Get(&got, h, &x) == NONE);
+    want(BOXu64Get(&got, h, &x) == BOXNONE);
     u64cs xs = {&x, &x + 1};
-    want(BOXu64PutBatch(h, xs) == FULL);
-    want(BOXu64Get(&got, h, &x) == NONE);
-    want(BOXu64Sort(h, NO) == FULL);
+    want(BOXu64PutBatch(h, xs) == BOXFULL);
+    want(BOXu64Get(&got, h, &x) == BOXNONE);
+    want(BOXu64Sort(h, NO) == BOXFULL);
     want(recs[2] == seg);
-    //  a record buffer out of IDLE is NOROOM, not FULL
+    //  a record buffer out of IDLE is BOXNOROOM, not BOXFULL
     a_box(u64, rn3);
     call(u64bMap, BOXu64Mem(rn3), 4);
     for (u64 i = 1; i <= 4; i++) call(BOXu64Put, rn3, &i);
-    want(BOXu64Put(rn3, &x) == NOROOM);
+    want(BOXu64Put(rn3, &x) == BOXNOROOM);
     u64bUnMap(BOXu64Mem(rn3));
     u64bUnMap(recs);
     done;
@@ -372,7 +372,7 @@ ok64 BOXsigned() {
     i64 **recs = BOXi64Mem(h);
     call(i64bMap, recs, 1 << 16);
     i64 mx = INT64_MAX;
-    want(BOXi64Put(h, &mx) == BADARG);
+    want(BOXi64Put(h, &mx) == BOXBADARG);
     i64 const keys[] = {-1, INT64_MIN, 0, 7, INT64_MAX - 1, -1000};
     for (int r = 0; r < 300; r++)
         for (int i = 0; i < 6; i++) call(BOXi64Put, h, keys + i);
@@ -389,7 +389,7 @@ ok64 BOXsigned() {
     f64kv **fr = BOXf64kvMem(fruns);
     call(f64kvbMap, fr, 1 << 16);
     f64kv inf = {__builtin_inf(), 1};
-    want(BOXf64kvPut(fruns, &inf) == BADARG);
+    want(BOXf64kvPut(fruns, &inf) == BOXBADARG);
     f64 const fk[] = {-__builtin_inf(), 1.5, -0.0, 1.7976931348623157e308, -2.5};
     u64 stamp = 0;
     for (int r = 0; r < 200; r++)

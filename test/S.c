@@ -89,7 +89,7 @@ ok64 findtest() {
 
     // Character not found
     a_dup(u8c,s4,slice);
-    want(u8csFind(s4, 'z') == NONE);
+    want(u8csFind(s4, 'z') == SNONE);
 
     // Test sFind (mutable slice)
     u8s mslice = {data, data + 11};
@@ -138,7 +138,7 @@ ok64 findStest() {
     u8 needle4[] = "foo";
     u8cs n4 = {needle4, needle4 + 3};
     a_dup(u8c,h4,haystack);
-    want(u8csFindS(h4, n4) == NONE);
+    want(u8csFindS(h4, n4) == SNONE);
 
     // Needle longer than haystack
     u8 short_data[] = "hi";
@@ -146,7 +146,7 @@ ok64 findStest() {
     u8 long_needle[] = "hello";
     u8cs ln = {long_needle, long_needle + 5};
     a_dup(u8c,h5,short_hay);
-    want(u8csFindS(h5, ln) == NONE);
+    want(u8csFindS(h5, ln) == SNONE);
 
     // Regression (fuzz crash-d402460f via spot grep): the needle's first
     // byte appears within nlen-1 of the term, so csFind advances the
@@ -157,12 +157,12 @@ ok64 findStest() {
     u8 tail_ndl[] = "ABCDE";              // 5-byte needle, first byte at hay[4]
     u8cs tn = {tail_ndl, tail_ndl + 5};
     a_dup(u8c, hT, th);
-    want(u8csFindS(hT, tn) == NONE);
+    want(u8csFindS(hT, tn) == SNONE);
 
     // Empty needle
     u8cs empty = {needle1, needle1};
     a_dup(u8c,h6,haystack);
-    want(u8csFindS(h6, empty) == NONE);
+    want(u8csFindS(h6, empty) == SNONE);
 
     // Find with repeated first char: "llo" in "hello world, hello universe"
     u8 needle5[] = "llo";
@@ -354,7 +354,7 @@ ok64 copytest() {
     i32 t[3] = {9, 9, 9};
     i32s shrt = {t, t + 3};
     i32cs four = {a, a + 4};
-    want(i32sCopy(shrt, four) == NOROOM);
+    want(i32sCopy(shrt, four) == SNOROOM);
     want(t[0] == 9 && t[1] == 9 && t[2] == 9);
     //  into is not advanced, a longer target keeps its tail
     i32 l[5] = {9, 9, 9, 9, 9};

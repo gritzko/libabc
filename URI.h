@@ -9,6 +9,7 @@ con ok64 URIBAD	= 0x79b48b28d;
 // injection): a reserved delimiter in a component would bleed across a
 // boundary.  URIutf8FeedSafe emits nothing and returns this instead.
 con ok64 URIUNSAFE = 0x1e6d279770a3ce;
+con ok64 URINOROOM = 0x1e6d25d86d8616;
 
 // URIs longer than this are likely a bug somewhere upstream.
 #define MAX_URI_LEN 1024

@@ -23,9 +23,8 @@ typedef u256 blake256;
 
 con ok64 NACLBAD = 0x1728c54b28d;
 con ok64 NACLFAIL = 0x5ca3153ca495;
-con ok64 NACLFAIL0 = 0x1728c54f292540;
 
-// ABC-016: libsodium returns -1; NACLFAIL0 + ret minted undocumented
+// ABC-016: libsodium returns -1; a code minted from ret was undocumented
 // codes, so failures map to the documented NACLFAIL
 fun ok64 NACLed25519create(edpub256 *publicKey, edsec512 *secretKey) {
     if (!SHAsodium()) return NACLFAIL;

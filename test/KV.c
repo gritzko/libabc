@@ -43,7 +43,7 @@ ok64 KV128hash() {
         want(g.val._64[0] == w.val._64[0] && g.val._64[1] == w.val._64[1]);
     }
     kv128 miss = kv128of(5000, 0);
-    want(HASHkv128Get(&miss, kv128bData(buf)) == NONE);
+    want(HASHkv128Get(&miss, kv128bData(buf)) == HASHNONE);
     call(kv128bUnMap, buf);
     done;
 }
@@ -129,7 +129,7 @@ ok64 K96V32hash() {
     call(HASHk96v32Get, &g, k96v32bData(buf));
     want(g.val == 12);
     k96v32 miss = k96v32of(5000, 0);
-    want(HASHk96v32Get(&miss, k96v32bData(buf)) == NONE);
+    want(HASHk96v32Get(&miss, k96v32bData(buf)) == HASHNONE);
     //  the value takes no part in hashing or key equality
     k96v32 a = k96v32of(7, 1), b = k96v32of(7, 2);
     want(k96v32Hash(&a) == k96v32Hash(&b) && k96v32KeyEq(&a, &b));

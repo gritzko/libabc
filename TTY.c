@@ -17,7 +17,7 @@ u8 TTYrgb2ansi(u8 r, u8 g, u8 b) {
 // Feed old-style ANSI foreground escape sequence
 ok64 TTYansifeed(utf8s into, u8 code) {
     sane($ok(into));
-    test($size(into) >= 5, NOROOM);
+    test($size(into) >= 5, TTYNOROOM);
     utf8sFeed1(into, 033);
     utf8sFeed1(into, '[');
     utf8sFeed10(into, code);
@@ -28,7 +28,7 @@ ok64 TTYansifeed(utf8s into, u8 code) {
 // Feed RGB foreground escape sequence
 ok64 TTYrgbfeed(utf8s into, u8 r, u8 g, u8 b) {
     sane($ok(into));
-    test($size(into) >= 19, NOROOM);
+    test($size(into) >= 19, TTYNOROOM);
     utf8sFeed1(into, 033);
     utf8sFeed1(into, '[');
     utf8sFeed1(into, '3');
@@ -48,7 +48,7 @@ ok64 TTYrgbfeed(utf8s into, u8 r, u8 g, u8 b) {
 // Feed reset escape sequence
 ok64 TTYresetfeed(utf8s into) {
     sane($ok(into));
-    test($size(into) >= 4, NOROOM);
+    test($size(into) >= 4, TTYNOROOM);
     utf8sFeed1(into, 033);
     utf8sFeed1(into, '[');
     utf8sFeed1(into, '0');

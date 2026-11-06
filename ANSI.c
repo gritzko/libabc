@@ -83,7 +83,7 @@ static u8 ansi_flag_off(u8 bit) {
 ok64 ANSIu8sFeedDelta(u8s out, ansi64 want, ansi64 prev) {
     sane(u8sOK(out));
     if (want == prev) done;
-    if (u8sLen(out) < 64) fail(NOROOM);
+    if (u8sLen(out) < 64) fail(ANSINOROOM);
 
     u32 wfg = ansi64Fg(want),     pfg = ansi64Fg(prev);
     u8  wfm = ansi64FgMode(want), pfm = ansi64FgMode(prev);
@@ -198,7 +198,7 @@ ok64 ANSIBgColor(ansi64 *bg) {
     }
     ansi_bg_state = 1;            //  default to "probe-and-failed"
     ansi_bg_cached = ANSI_DEFAULT;
-    ansi_bg_cached_err = ANSINOREPLY;
+    ansi_bg_cached_err = ANSINONE;
 
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) {
@@ -241,27 +241,27 @@ ok64 ANSIBgColor(ansi64 *bg) {
     close(fd);
 
     //  Expect: ESC ] 11 ; rgb : RRRR / GGGG / BBBB  (ST | BEL)
-    if (n < 14) { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    if (n < 14) { *bg = ANSI_DEFAULT; fail(ANSINONE); }
     u8c *p = buf, *end = buf + n;
-    if (p[0] != 0x1B || p[1] != ']') { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    if (p[0] != 0x1B || p[1] != ']') { *bg = ANSI_DEFAULT; fail(ANSINONE); }
     p += 2;
     while (p < end && *p != ';') p++;
-    if (p >= end) { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    if (p >= end) { *bg = ANSI_DEFAULT; fail(ANSINONE); }
     p++;
     //  "rgb:" prefix
     if (end - p < 4 ||
         p[0] != 'r' || p[1] != 'g' || p[2] != 'b' || p[3] != ':') {
-        *bg = ANSI_DEFAULT; fail(ANSINOREPLY);
+        *bg = ANSI_DEFAULT; fail(ANSINONE);
     }
     p += 4;
     int r = ansi_parse_hex16(&p, end);
-    if (r < 0 || p >= end || *p != '/') { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    if (r < 0 || p >= end || *p != '/') { *bg = ANSI_DEFAULT; fail(ANSINONE); }
     p++;
     int g = ansi_parse_hex16(&p, end);
-    if (g < 0 || p >= end || *p != '/') { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    if (g < 0 || p >= end || *p != '/') { *bg = ANSI_DEFAULT; fail(ANSINONE); }
     p++;
     int b = ansi_parse_hex16(&p, end);
-    if (b < 0) { *bg = ANSI_DEFAULT; fail(ANSINOREPLY); }
+    if (b < 0) { *bg = ANSI_DEFAULT; fail(ANSINONE); }
 
     u32 rgb = ((u32)(r & 0xFF) << 16) | ((u32)(g & 0xFF) << 8) | (u32)(b & 0xFF);
     ansi64 packed = ANSI64_PACK(0, ANSI_MODE_DEFAULT, rgb, ANSI_MODE_RGB, 0);

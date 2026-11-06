@@ -12,6 +12,8 @@ con ok64 PAGENOROOM = 0x64a40e5d86d8616;
 con ok64 PAGENODATA = 0x64a40e5d834a74a;
 con ok64 PAGEFAIL = 0x64a40e3ca495;
 con ok64 PAGEBADARG = 0x64a40e2ca34a6d0;
+con ok64 PAGEEND = 0x1929038e5cd;
+con ok64 PAGENOMEM = 0x19290397616396;
 
 // Page progress values (0-255 range for read/write)
 #define PAGE_ABSENT 0    // read=0: not loaded

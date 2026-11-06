@@ -7,7 +7,6 @@ con ok64 DNSFAIL = 0xd5dc3ca495;
 con ok64 DNSBAD = 0x35770b28d;
 con ok64 DNSNOROOM = 0xd5dc5d86d8616;
 con ok64 DNSNODATA = 0xd5dc5d834a74a;
-con ok64 DNSBADNAME = 0x35770b28d5ca58e;
 
 #define flip16(x) ((u16)(((x) >> 8) | ((x) << 8)))
 
@@ -163,7 +162,7 @@ fun ok64 DNSNameFeed(u8s into, u8csc text) {
             ++*src;
             continue;
         }
-        if (llen > DNS_LABEL_MAX) return DNSBADNAME;
+        if (llen > DNS_LABEL_MAX) return DNSBAD;
         if ($len(into) < 1 + llen) return DNSNOROOM;
         u8sFeed1(into, (u8)llen);
         a_head(u8c, label, src, llen);
@@ -204,7 +203,7 @@ fun ok64 DNSNameDrain(u8s into, u8cs from, u8csc pkt) {
             if (++hops > DNS_NAME_MAX) return DNSBAD;  // loop guard
             continue;
         }
-        if (len > DNS_LABEL_MAX) return DNSBADNAME;
+        if (len > DNS_LABEL_MAX) return DNSBAD;
         if (p + 1 + len > pkt[1]) return DNSNODATA;
         if ($len(into) < 1 + len) return DNSNOROOM;
         u8sFeed1(into, len);
@@ -223,7 +222,7 @@ fun ok64 DNSNameText(u8s into, u8csc wire) {
         u8 len = **src;
         ++*src;
         if (len == 0) return OK;
-        if (len > DNS_LABEL_MAX) return DNSBADNAME;
+        if (len > DNS_LABEL_MAX) return DNSBAD;
         if ($len(src) < len) return DNSNODATA;
         if (*into > start) {
             if ($empty(into)) return DNSNOROOM;

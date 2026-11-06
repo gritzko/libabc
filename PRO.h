@@ -12,6 +12,9 @@
 #include "BUF.h"
 #include "OK.h"
 
+con ok64 PROBADARG = 0x196d82ca34a6d0;
+con ok64 PRONOROOM = 0x196d85d86d8616;
+
 // CODE-26B065M0M4: call depth is per thread, like ABC_BASS
 extern thread_local uint8_t _pro_depth;
 
@@ -89,7 +92,7 @@ __attribute__((unused)) con char *_pro_indent =
         }                                                               \
     }
 
-// e.g. scan(u64sDrain1, numbers, &i) { ... }  seen(NODATA);
+// e.g. scan(u64sDrain1, numbers, &i) { ... }  seen(SNODATA);
 #define scan(f, ...) while (OK == (__ = f(__VA_ARGS__)))
 
 // `try` is like `call` minus the on-failure return; BASS still
@@ -339,7 +342,7 @@ fun void PROfailAt(ok64 code, char const *file, int line, char const *func) {
 extern u8cs *STD_ARGS[];
 
 fun ok64 _parse_args(int argn, char **args) {
-    if (argn < 0) return BADARG;
+    if (argn < 0) return PROBADARG;
     ok64 o = u8csbAcquire(ABC_BASS, STD_ARGS, (size_t)argn);
     if (o != OK) return o;
     for (int i = 0; i < argn; ++i) {
@@ -372,7 +375,7 @@ fun ok64 PROStderrToFile(char const *name) {
     if (env && *env && *env != '1') {
         // ABC_TRACE=filename - use as-is
         int n = snprintf(path, sizeof(path), "%s", env);
-        if (n < 0 || n >= (int)sizeof(path)) return NOROOM;
+        if (n < 0 || n >= (int)sizeof(path)) return PRONOROOM;
     } else {
         // Default: /tmp/basename-pid.err
         char const *base = name;
@@ -380,7 +383,7 @@ fun ok64 PROStderrToFile(char const *name) {
             if (*p == '/') base = p + 1;
         }
         int n = snprintf(path, sizeof(path), "/tmp/%s-%d.err", base, getpid());
-        if (n < 0 || n >= (int)sizeof(path)) return NOROOM;
+        if (n < 0 || n >= (int)sizeof(path)) return PRONOROOM;
     }
     fprintf(stderr, "stderr: %s\n", path);
     if (!freopen(path, "w", stderr)) return FAILSANITY;

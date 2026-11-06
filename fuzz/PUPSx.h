@@ -114,12 +114,12 @@ fun ok64 X(PF, Get)(PF_ARGS, u32 k) {
     if (X(PF, _live)(&v, k)) {
         must(o == OK && got.key == k && got.val == v, "Get: row");
     } else {
-        must(o == NONE, "Get: ghost row");
+        must(o == PUPNONE, "Get: ghost row");
     }
     done;
 }
 
-//  Merge the house's [lo, hi) and compare with the model, if `deep`.  FULL: the house
+//  Merge the house's [lo, hi) and compare with the model, if `deep`.  BOXFULL: the house
 //  has no cell to seal the segment in, so there is no view to check.
 fun ok64 X(PF, Range)(PF_ARGS, u32 lo, u32 hi, b8 deep) {
     sane(1);
@@ -127,7 +127,7 @@ fun ok64 X(PF, Range)(PF_ARGS, u32 lo, u32 hi, b8 deep) {
     X(, cs) runs[ABC_HIT_MAX_RUNS];
     X(, css) into = {runs, runs + ABC_HIT_MAX_RUNS};
     ok64 o = X(PUP, Range)(into, h, &l, &r);
-    if (o == FULL && Bidlelen(h) == 0) done;
+    if (o == BOXFULL && Bidlelen(h) == 0) done;
     must(o == OK, "Range");
     if (!deep) done;
     X(, s) out = {X(PF, _buf), X(PF, _buf) + PF_KEYS + 1};
@@ -142,7 +142,7 @@ fun ok64 X(PF, Check)(PF_ARGS) {
     sane(1);
     X(, s) out = {X(PF, _buf), X(PF, _buf) + PF_KEYS + 1};
     ok64 o = X(PUP, Read)(out, h);
-    if (o == FULL && Bidlelen(h) == 0) done;
+    if (o == BOXFULL && Bidlelen(h) == 0) done;
     must(o == OK, "Read");
     X(, csc) rows = {X(PF, _buf), out[0]};
     call(X(PF, _rows), rows, 0, PF_KEYS);
@@ -167,11 +167,11 @@ fun ok64 X(PF, Ladder)(PF_ARGS) {
     done;
 }
 
-//  PUPS-26B05AeY1d: at the cap Commit is PUPNOROOM; the caller ladders, retries.
+//  PUPS-26B05AeY1d: at the cap Commit is PUPFULL; the caller ladders, retries.
 fun ok64 X(PF, Commit)(PF_ARGS, b8 durable) {
     sane(1);
     ok64 o = X(PUP, Commit)(PF_PASS, durable, NULL);
-    if (o == PUPNOROOM) {
+    if (o == PUPFULL) {
         call(X(PF, Ladder), PF_PASS);
         o = X(PUP, Commit)(PF_PASS, durable, NULL);
     }
@@ -182,16 +182,16 @@ fun ok64 X(PF, Commit)(PF_ARGS, b8 durable) {
     done;
 }
 
-//  D-1: the owner commits a full memtable (NOROOM) and ladders a full house.
+//  D-1: the owner commits a full memtable (BOXNOROOM) and ladders a full house.
 fun ok64 X(PF, Put)(PF_ARGS, u32 k, u64 v) {
     sane(1);
     X(, ) row = {k, v};
     ok64 o = X(PUP, Put)(h, &row);
-    if (o == NOROOM) {
+    if (o == BOXNOROOM) {
         call(X(PF, Commit), PF_PASS, NO);
         o = X(PUP, Put)(h, &row);
     }
-    if (o == FULL) {
+    if (o == BOXFULL) {
         call(X(PF, Ladder), PF_PASS);
         o = X(PUP, Put)(h, &row);
     }
@@ -209,7 +209,7 @@ fun ok64 X(PF, Create)(PF_ARGS, u32 k, u32 step, u32 n, u64 v) {
         rows[m] = (X(, )){k + m * step, v + m};
     X(, csc) rs = {rows, rows + m};
     ok64 o = X(PUP, Create)(PF_PASS, rs, 0, NO, NULL);
-    if (o == PUPNOROOM) {
+    if (o == PUPFULL) {
         call(X(PF, Ladder), PF_PASS);
         o = X(PUP, Create)(PF_PASS, rs, 0, NO, NULL);
     }

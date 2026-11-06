@@ -179,7 +179,7 @@ pro(LEXLexer, LEXstate* state) {
 
     state->text[0] = p;
     if (p!=text[1] || cs < LEX_first_final) {
-        return LEXfail;
+        return LEXBAD;
     }
     done;
 }

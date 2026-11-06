@@ -408,11 +408,11 @@ ok64 FILEIterTest() {
             scan(FILENext, &child) {
                 if (child.type == DT_REG) file_count++;
             }
-            seen(END);
+            seen(FILEEND);
             call(FILEOuto, &child, &it);
         }
     }
-    seen(END);
+    seen(FILEEND);
     call(FILEIterClose, &it);
 
 
@@ -499,12 +499,12 @@ ok64 FILEIterSortedTest() {
             scan(FILENext, &child) {
                 // Child iteration
             }
-            seen(END);
+            seen(FILEEND);
             call(FILEOuto, &child, &it);
         }
         count++;
     }
-    seen(END);
+    seen(FILEEND);
     call(FILEIterClose, &it);
 
 
@@ -758,13 +758,13 @@ ok64 FILEErrTest() {
     for (size_t i = 0; i < sizeof(M) / sizeof(M[0]); i++) {
         errno = M[i].e;
         //  `def` is a sentinel we must never see for a mapped errno.
-        testeqv((unsigned long long)FILEErr(FILENAMEBAD),
+        testeqv((unsigned long long)FILEErr(FILEFAIL),
                 (unsigned long long)M[i].want, "0x%llx");
     }
     //  An errno the switch does NOT map returns the caller's `def`.
     errno = ECHILD;
-    testeqv((unsigned long long)FILEErr(FILENAMEBAD),
-            (unsigned long long)FILENAMEBAD, "0x%llx");
+    testeqv((unsigned long long)FILEErr(FILEFAIL),
+            (unsigned long long)FILEFAIL, "0x%llx");
     errno = 0;
     done;
 }
@@ -1024,10 +1024,10 @@ ok64 FILEStreamTest() {
     test(0 == pipe(pfd), FILEFAIL);
     size_t const sp = PAGESIZE, BIG = 3 * sp, TOTAL = 100 + sp + 7 + BIG + 5;
     call(FILEBuffer, pfd[1], 2 * sp);
-    test(FILEBuffer(pfd[1], sp) == BADARG, FAILSANITY);  // slot is taken
+    test(FILEBuffer(pfd[1], sp) == FILEBADARG, FAILSANITY);  // slot is taken
     u8bp buf = FILESlot(pfd[1]);
     want(FILEBookedFD(buf) == FILE_CLOSED);  // never seen as a mapping
-    want(FILEReMap(buf, sp) == NONE);
+    want(FILEReMap(buf, sp) == FILENONE);
     a_pad(u8, pat, 4 * 4096);
     for (size_t i = 0; i < BIG; i++) u8bFeed1(pat, (u8)(i * 7));
     u8cs all = {pat[0], pat[0] + BIG};

@@ -41,6 +41,8 @@ typedef u8g   path8g;
 con ok64 PATHFAIL   = 0x64a7513ca495;   // general failure
 con ok64 PATHBAD    = 0x1929d44b28d;    // invalid UTF-8 / forbidden char
 con ok64 PATHNOROOM = 0x64a7515d86d8616; // no room for NUL or data
+con ok64 PATHEND = 0x1929d44e5cd;
+con ok64 PATHFULL = 0x64a7513de555;
 
 // --- Slice predicates / validators ---
 
@@ -69,7 +71,7 @@ void PATHu8sExt(u8csp out, u8cs path);
 // --- Slice iteration ---
 
 // Drain the next segment from cursor, advancing cursor[0].
-// Emits empty segments for runs like "//".  Returns END when exhausted.
+// Emits empty segments for runs like "//".  Returns PATHEND when exhausted.
 ok64 PATHu8sDrain(u8cs cursor, u8csp seg);
 
 // Same, but skip empty segments.  Use this in almost all practical code.
@@ -140,10 +142,10 @@ ok64 PATHu8bBuildN(path8b p, u8c *const **slices);
 // byte after the copy and parks it in PAST so the rented slice is
 // NUL-terminated (path8b invariant) and survives subsequent rentals.
 // `ren[1]` points at the NUL byte (it sits one past the slice end).
-// Returns BNOROOM if the arena can't fit path bytes + NUL.
+// Returns PATHNOROOM if the arena can't fit path bytes + NUL.
 fun ok64 PATHu8bAren(u8 *const *arena, u8csp ren, u8csc orig) {
     size_t n = (size_t)(orig[1] - orig[0]);
-    if (arena[2] + n + 1 > arena[3]) return BNOROOM;
+    if (arena[2] + n + 1 > arena[3]) return PATHNOROOM;
     u8 *base = arena[2];
     if (n) memcpy(base, orig[0], n);
     base[n] = 0;
@@ -166,10 +168,10 @@ fun ok64 PATHu8bAren(u8 *const *arena, u8csp ren, u8csc orig) {
 // byte at the current IDLE start, snapshots DATA into `ren`, then
 // parks both DATA bytes AND the NUL into PAST so the slice stays
 // NUL-terminated across subsequent rentals.  `*ren[1]` is the NUL.
-// Pair with `u8bAlign(arena)` to open the rental.  Returns BNOROOM
+// Pair with `u8bAlign(arena)` to open the rental.  Returns PATHNOROOM
 // if no byte is left for the NUL.
 fun ok64 PATHu8bAcq(u8 *const *arena, u8csp ren) {
-    if (arena[2] >= arena[3]) return BNOROOM;
+    if (arena[2] >= arena[3]) return PATHNOROOM;
     arena[2][0] = 0;
     ren[0] = arena[1];
     ren[1] = arena[2];

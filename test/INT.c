@@ -86,7 +86,7 @@ ok64 BADdec() {
         // not call(): we expect a non-OK code, assert on it rather than return
         otry(i64decdrain, &i, dec);
         // the inner u64decdrain failure must propagate verbatim
-        testeqv((long long)(__), (long long)(BADARG), "%llx");
+        testeqv((long long)(__), (long long)(INTBAD), "%llx");
         // out-parameter must be untouched on the error path (no garbage)
         testeqv((long long)(i), (long long)(sentinel), "%llx");
         __ = OK;

@@ -153,11 +153,11 @@ ok64 FILEReadLink(u8bp out, path8s linkpath) {
     sane(out && $ok(linkpath) && !$empty(linkpath));
     u8bReset(out);
     size_t cap = u8bIdleLen(out);
-    if (cap == 0) return NOROOM;
+    if (cap == 0) return FILENOROOM;
     ssize_t n = readlink((char const *)*linkpath,
                          (char *)u8bIdleHead(out), cap);
     if (n < 0) fail(FILEFAIL);
-    if ((size_t)n >= cap) return NOROOM;   // truncated
+    if ((size_t)n >= cap) return FILENOROOM;   // truncated
     u8bFed(out, (size_t)n);
     call(PATHu8bTerm, out);  //  n < cap: room for the NUL
     done;
@@ -356,7 +356,7 @@ ok64 FILEisdir(path8s path) {
     sane($ok(path) && !$empty(path));
     filestat fs = {};
     call(FILEStat, &fs, path);
-    test(fs.kind == FILE_KIND_DIR, FILEWRONG);
+    test(fs.kind == FILE_KIND_DIR, FILENOTDIR);
     done;
 }
 
@@ -613,7 +613,7 @@ size_t FILESysPage(void) { return (size_t)sysconf(_SC_PAGESIZE); }
 ok64 FILEBuffer(int fd, size_t size) {
     sane(FILEok(fd) && size > 0);
     u8bp slot = FILESlot(fd);
-    test(FILEslotIsFree(slot), BADARG);
+    test(FILEslotIsFree(slot), FILEBADARG);
     call(u8bMap, slot, size);
     FILE_SLOT[fd].mode = FILE_STREAM;
     done;
@@ -622,7 +622,7 @@ ok64 FILEBuffer(int fd, size_t size) {
 ok64 FILEBufFeed(int fd, u8csc src) {
     sane($ok(src));
     u8bp buf = FILEstream(fd);
-    test(buf != NULL, BADARG);
+    test(buf != NULL, FILEBADARG);
     size_t len = (size_t)$len(src);
     if (u8bIdleLen(buf) < len) call(FILEFlushAll, &fd);
     if (u8bIdleLen(buf) < len) return FILEFeedAll(fd, src);
@@ -633,7 +633,7 @@ ok64 FILEBufFeed(int fd, u8csc src) {
 ok64 FILEFlush(int const *fd) {
     sane(fd != NULL);
     u8bp buf = FILEstream(*fd);
-    test(buf != NULL, BADARG);
+    test(buf != NULL, FILEBADARG);
     call(FILEFlushThreshold, *fd, buf, PAGESIZE);
     if (u8bPastLen(buf) >= u8bDataLen(buf)) u8bShift(buf, 0);
     done;
@@ -642,7 +642,7 @@ ok64 FILEFlush(int const *fd) {
 ok64 FILEFlushAll(int const *fd) {
     sane(fd != NULL);
     u8bp buf = FILEstream(*fd);
-    test(buf != NULL, BADARG);
+    test(buf != NULL, FILEBADARG);
     while (u8bDataLen(buf)) call(FILEFlushThreshold, *fd, buf, 1);
     Breset(buf);
     done;
@@ -656,7 +656,7 @@ ok64 FILEFlushThreshold(int fd, u8b buf, size_t threshold) {
         ssize_t written;
         do { written = write(fd, *u8bData(buf), u8bDataLen(buf));
         } while (written < 0 && errno == EINTR);  // ABC-013: EINTR-retry
-        if (written < 0) return FILEERROR;  // TODO vocabulary
+        if (written < 0) return FILEFAIL;  // TODO vocabulary
         //  ABC-013: consume only the written prefix — a partial write
         //  must not lose the DATA tail.
         call(u8bUsed, buf, (size_t)written);
@@ -673,7 +673,7 @@ ok64 FILEEnsureSoft(int fd, u8b buf, size_t needed) {
         ssize_t n;
         do { n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
         } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
-        if (n < 0) return FILEERROR;
+        if (n < 0) return FILEFAIL;
         if (n == 0) break;  // EOF
         u8bFed(buf, n);
     }
@@ -684,7 +684,7 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
     sane(fd >= 0 && Bok(buf));
 
     // Check if buffer can even hold 'needed' bytes
-    test(u8bLen(buf) >= needed, NOROOM);
+    test(u8bLen(buf) >= needed, FILENOROOM);
 
     // First, try to compact if needed
     if (u8bIdleLen(buf) + u8bDataLen(buf) < needed && u8bPastLen(buf) > 0) {
@@ -693,11 +693,11 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
 
     // Read until we have enough
     while (u8bDataLen(buf) < needed) {
-        test(u8bIdleLen(buf) > 0, NOROOM);
+        test(u8bIdleLen(buf) > 0, FILENOROOM);
         ssize_t n;
         do { n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
         } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
-        if (n < 0) return FILEERROR;
+        if (n < 0) return FILEFAIL;
         test(n > 0, FILEEND);  // EOF before getting needed bytes
         u8bFed(buf, (size_t)n);
     }
@@ -715,7 +715,7 @@ ok64 FILEFindMap(int *fd, u8bp buf) {
             done;
         }
     }
-    fail(NONE);
+    fail(FILENONE);
 }
 
 //  PORT-26A239KGXD: OpenBSD has no unified buffer cache, and an ftruncate
@@ -779,7 +779,7 @@ ok64 FILECloseAll() {
 static ok64 FILEMapFD_(u8bp *buf, int const *fd, int mode) {
     sane(buf != NULL && FILEok(*fd));
     u8bp slot = FILESlot(*fd);
-    test(FILEslotIsFree(slot), BADARG);
+    test(FILEslotIsFree(slot), FILEBADARG);
     size_t size;
     call(FILESize, &size, fd);
     u8 *map = (u8 *)mmap(NULL, size, mode, MAP_FILE | MAP_SHARED, *fd, 0);
@@ -850,7 +850,7 @@ ok64 FILEMapOnce(u8bp buf, path8s path) {
 //  A slot-backed record is refused: that one is FILEUnMap's, fd and all.
 ok64 FILEUnMapOnce(u8bp buf) {
     sane(buf != NULL);
-    test(FILEBookedFD(buf) < 0, BADARG);
+    test(FILEBookedFD(buf) < 0, FILEBADARG);
     u8c **b = (u8c **)buf;
     if (b[0] == NULL) done;  // the empty record: nothing was ever mapped
     FILETestC(-1 != munmap((void *)b[0], (size_t)(b[3] - b[0])));
@@ -896,7 +896,7 @@ ok64 FILEReMap(u8bp buf, size_t new_size) {
     sane(Bok(buf));
     int fd = FILEBookedFD(buf);
     u8 mode = fd >= 0 ? FILE_SLOT[fd].mode : FILE_FREE;
-    test(mode == FILE_MAP_RO || mode == FILE_MAP_RW, NONE);
+    test(mode == FILE_MAP_RO || mode == FILE_MAP_RW, FILENONE);
     int prot = PROT_READ;
     if (mode == FILE_MAP_RW) prot |= PROT_WRITE;
     // Unmap old
@@ -928,14 +928,14 @@ ok64 FILEUnMapFD(u8b buf, int const *fd) {
 ok64 FILEUnMap(u8bp buf) {
     sane(Bok(buf));
     int fd = FILEBookedFD(buf);
-    test(fd >= 0, NONE);
+    test(fd >= 0, FILENONE);
     call(FILEUnMapFD, buf, &fd);
     call(FILEclose, &fd);
     done;
 }
 
 //  ABC-020: explicit release by mapping base — find the owning booked slot
-//  and FILEUnMap it (munmap + close + fd=-1); NONE if not a live FILE map.
+//  and FILEUnMap it (munmap + close + fd=-1); FILENONE if not a live FILE map.
 ok64 FILEUnMapBase(u8 *base) {
     sane(base != NULL);
     int fd = FILE_CLOSED;
@@ -957,7 +957,7 @@ ok64 FILEUnMapBase(u8 *base) {
 static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
                         int mode) {
     sane(buf != NULL && FILEok(*fd));
-    test(FILESlot(*fd) != NULL, BADARG);
+    test(FILESlot(*fd) != NULL, FILEBADARG);
 
     size_t actual_size;
     call(FILESize, &actual_size, fd);
@@ -992,7 +992,7 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
     size_t sp = FILESysPage();
     book_size = roundup2(book_size, sp);
     size_t map_size = roundup2(actual_size ? actual_size : 1, sp);
-    test(map_size <= book_size, BADARG);
+    test(map_size <= book_size, FILEBADARG);
 
     // Materialise the mmap'd tail-of-page on disk so RW writes into
     // that range persist on disk-backed filesystems (tmpfs silently
@@ -1007,7 +1007,7 @@ static ok64 FILEBookFD_(u8bp *buf, int const *fd, size_t book_size,
 
     // Slot must be free
     u8bp slot = FILE_SLOT[*fd].buf;
-    test(FILEslotIsFree(slot), BADARG);
+    test(FILEslotIsFree(slot), FILEBADARG);
 
     // Reserve entire VA range with PROT_NONE (no access yet)
     u8 *base = (u8 *)mmap(NULL, book_size, PROT_NONE,
@@ -1140,7 +1140,7 @@ ok64 FILEBookExtend(u8bp buf, size_t new_size) {
 
     size_t sp = FILESysPage();
     new_size = roundup2(new_size, sp);
-    test(new_size <= book_size, BNOROOM);
+    test(new_size <= book_size, FILEFULL);
 
     size_t old_size = buf[3] - base;
     if (new_size <= old_size) done;  // already big enough
@@ -1251,7 +1251,7 @@ fun ok64 FILEScanRecurse(fileitp it, path8bp path, FILE_SCAN mode, path8f f,
             if (r != OK) return r;
         }
     }
-    return o == END ? OK : o;
+    return o == FILEEND ? OK : o;
 }
 
 ok64 FILEScan(path8bp path, FILE_SCAN mode, path8f f, void0p arg) {
@@ -1316,7 +1316,7 @@ fun ok64 FILELoadSorted(fileitp it, DIR *dir, u8csz z) {
         // Dir names get a trailing '/' so the default $cmp comparator orders
         // dirs as if their name ended in '/' (foo.txt < foo/ < foo0).
         u64 stored = nlen + (dtype == DT_DIR ? 1 : 0);
-        test(stored <= 0xff, FILENAMEBAD);
+        test(stored <= 0xff, FILE2LONG);
         call(u8sFeed2, idle, dtype, (u8)stored);
         call(u8sFeed, idle, nm);
         if (dtype == DT_DIR) call(u8sFeed1, idle, '/');
@@ -1331,7 +1331,7 @@ fun ok64 FILELoadSorted(fileitp it, DIR *dir, u8csz z) {
 
     // Remaining idle is tmp for LSMSort (must be >= entries size)
     a_dup(u8, tmp, idle);
-    test($len(tmp) >= $len(entries), BNOROOM);
+    test($len(tmp) >= $len(entries), FILENOROOM);
 
     // Sort entries in place using LSMSort
     call(LSMSort, entries, FILEentryX, z, FILEentryY, tmp);
@@ -1397,14 +1397,14 @@ ok64 FILENext(fileitp it) {
         call(PATHu8bTerm, it->path);
         if ($empty(it->stream)) {
             it->type = 0;
-            return END;
+            return FILEEND;
         }
         // Slice next entry: [type][len][name]
         u8cs entry;
         ok64 o = FILEentryX(entry, it->stream);
         if (o != OK) {
             it->type = 0;
-            return END;
+            return FILEEND;
         }
         it->type = entry[0][0];
         // Stored name may carry a trailing '/' (for dirs). Strip before push
@@ -1427,7 +1427,7 @@ ok64 FILENext(fileitp it) {
     }
 
     // Unsorted mode: use DIR*
-    if (!it->dir) return BADARG;
+    if (!it->dir) return FILEBADARG;
     *u8bIdle(it->path) = it->dirend;
     call(PATHu8bTerm, it->path);
     struct dirent *e;
@@ -1450,7 +1450,7 @@ ok64 FILENext(fileitp it) {
         return OK;
     }
     it->type = 0;
-    return END;
+    return FILEEND;
 }
 
 ok64 FILEInto(fileitp child, fileitp parent) {

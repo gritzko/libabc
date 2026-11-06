@@ -31,9 +31,9 @@
 
 #include "INT.h"
 
-con ok64 BSDBADMAGC = 0x2dc34b28d58a40c;
-con ok64 BSDCORRUPT = 0x2dc34c61b6de65d;
 con ok64 BSDNOROOM = 0xb70d5d86d8616;
+con ok64 BSDBAD = 0x2dc34b28d;
+con ok64 BSDBADARG = 0xb70d2ca34a6d0;
 
 // Workspace size in i64 elements needed for BSDDiff.
 // Caller must provide 2*(oldlen+1) i64 values.

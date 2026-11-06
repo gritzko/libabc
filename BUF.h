@@ -57,10 +57,10 @@ typedef u8s const *u8scp;
 //  Pull one '\n'-terminated line off the head of `in`, advancing past
 //  the newline.  On OK, `line_out` spans the line bytes (excluding
 //  the newline).  Trailing record without a final '\n' is tolerated:
-//  the whole tail becomes one line and `in` ends empty.  Returns NONE
+//  the whole tail becomes one line and `in` ends empty.  Returns SNONE
 //  when `in` is already empty.
 fun ok64 u8csDrainLine(u8cs in, u8csp line_out) {
-    if (u8csEmpty(in)) return NONE;
+    if (u8csEmpty(in)) return SNONE;
     u8c const *start = in[0];
     a_dup(u8c, scan, in);
     (void)u8csFind(scan, '\n');     // scan[0] = '\n' or term
@@ -160,7 +160,6 @@ fun void BitSet(u8b buf, size_t ndx) {
         call(u8cssFeed1, n##$idle, _s); \
     }
 
-con ok64 BADTMPL = 0xb28d756655;
 
 fun ok64 $$feedf($u8 into, u8cs tmpl, u8css args) {
     a_dup(u8c, t, tmpl);
@@ -172,11 +171,11 @@ fun ok64 $$feedf($u8 into, u8cs tmpl, u8css args) {
             continue;
         }
         ++*t;
-        if ($empty(t)) return BADTMPL;
-        if (**t < '1' || **t > '9') return BADTMPL;
+        if ($empty(t)) return BBADARG;
+        if (**t < '1' || **t > '9') return BBADARG;
         int n = **t - '1';
         ++*t;
-        if (n >= $len(args)) return NODATA;
+        if (n >= $len(args)) return BNODATA;
         o = u8sFeed(into, $at(args, n));
     }
     // ABC-005: a failed feed of the LAST item exits with t exhausted;
@@ -190,7 +189,7 @@ fun ok64 u8sPrintf(u8s into, const char *fmt, ...) {
     va_start(ap, fmt);
     int n = vsnprintf((char *)*into, $len(into), fmt, ap);
     va_end(ap);
-    if (n < 0) return BADARG;
+    if (n < 0) return SBADARG;
     if (n >= $len(into)) return SNOROOM;
     *into += n;
     return OK;
@@ -202,7 +201,7 @@ fun ok64 u8gPrintf(u8g g, const char *fmt, ...) {
     va_start(ap, fmt);
     int n = vsnprintf((char *)g[1], u8gRestLen(g), fmt, ap);
     va_end(ap);
-    if (n < 0) return BADARG;
+    if (n < 0) return SBADARG;
     if ((size_t)n >= u8gRestLen(g)) return SNOROOM;
     g[1] += n;
     return OK;
@@ -214,8 +213,8 @@ fun ok64 u8bPrintf(u8bp buf, const char *fmt, ...) {
     va_start(ap, fmt);
     int n = vsnprintf((char *)buf[2], u8bIdleLen(buf), fmt, ap);
     va_end(ap);
-    if (n < 0) return BADARG;
-    if ((size_t)n >= u8bIdleLen(buf)) return SNOROOM;
+    if (n < 0) return BBADARG;
+    if ((size_t)n >= u8bIdleLen(buf)) return BNOROOM;
     u8bFed(buf, (size_t)n);
     return OK;
 }
@@ -229,7 +228,7 @@ fun ok64 u8sFeedCStr($u8 into, const char *str) {
 }
 
 fun ok64 u8sPop1(u8cs s, u8p last) {
-    if (unlikely($len(s) <= 0)) return NODATA;
+    if (unlikely($len(s) <= 0)) return SNODATA;
     --s[1];
     *last = *s[1];
     return OK;
@@ -237,7 +236,7 @@ fun ok64 u8sPop1(u8cs s, u8p last) {
 
 fun ok64 u8sPop(u8cs s, u8sc into) {
     size_t len = $len(into);
-    if (unlikely((i64)len > $len(s))) return NODATA;
+    if (unlikely((i64)len > $len(s))) return SNODATA;
     // ABC-005: pop reads the shed TAIL (like u8sPop1/u8sPop32);
     // it used to copy the head while shedding the tail
     s[1] -= len;
@@ -246,7 +245,7 @@ fun ok64 u8sPop(u8cs s, u8sc into) {
 }
 
 fun ok64 u8sPop32(u8cs s, u32p last) {
-    if (unlikely($len(s) < 4)) return NODATA;
+    if (unlikely($len(s) < 4)) return SNODATA;
     s[1] -= 4;
     memcpy(last, s[1], 4);
     return OK;

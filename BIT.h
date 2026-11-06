@@ -12,7 +12,7 @@
 #include "INT.h"
 
 //  Length mismatch in equal-length set algebra (Or/And/AndNot/Xor/Eq).
-con ok64 BITLEN = 0x2d2755397;
+con ok64 BITBADARG = 0xb49d2ca34a6d0;
 
 //  A bit VALUE; there is no addressable u1*, a bit rides in a b8 (0/1).
 typedef b8 u1;
@@ -44,24 +44,24 @@ fun void u1sPut(u64s s, u32 i, u1 v) { v ? u1sSet(s, i) : u1sClr(s, i); }
 //  Addressable bits = words * 64.
 fun u32 u1sLen(u64csc s) { return (u32)u64csLen(s) << 6; }
 
-//  ---- word-parallel set algebra (equal WORD length, else BITLEN) ------
+//  ---- word-parallel set algebra (equal WORD length, else BITBADARG) ------
 fun ok64 u1sOr(u64s d, u64csc s) {
-    if (u64sLen(d) != u64csLen(s)) return BITLEN;
+    if (u64sLen(d) != u64csLen(s)) return BITBADARG;
     for (size_t i = 0; i < u64sLen(d); i++) d[0][i] |= s[0][i];
     return OK;
 }
 fun ok64 u1sAnd(u64s d, u64csc s) {
-    if (u64sLen(d) != u64csLen(s)) return BITLEN;
+    if (u64sLen(d) != u64csLen(s)) return BITBADARG;
     for (size_t i = 0; i < u64sLen(d); i++) d[0][i] &= s[0][i];
     return OK;
 }
 fun ok64 u1sAndNot(u64s d, u64csc s) {
-    if (u64sLen(d) != u64csLen(s)) return BITLEN;
+    if (u64sLen(d) != u64csLen(s)) return BITBADARG;
     for (size_t i = 0; i < u64sLen(d); i++) d[0][i] &= ~s[0][i];
     return OK;
 }
 fun ok64 u1sXor(u64s d, u64csc s) {
-    if (u64sLen(d) != u64csLen(s)) return BITLEN;
+    if (u64sLen(d) != u64csLen(s)) return BITBADARG;
     for (size_t i = 0; i < u64sLen(d); i++) d[0][i] ^= s[0][i];
     return OK;
 }

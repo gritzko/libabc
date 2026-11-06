@@ -3,6 +3,7 @@
 //  drives them against std::map/std::vector.
 #ifndef ABC_FUZZ_HITFZ_H
 #define ABC_FUZZ_HITFZ_H
+#include "HIT.h"
 #include "INT.h"
 
 #ifdef __cplusplus

@@ -52,7 +52,7 @@ ok64 PUPLock(int *slot, path8s dir) {
         *slot = (int)i;
         done;
     }
-    if (free_slot < 0 && u64bIdleLen(pup_held) < PUP_LQ) return PUPLCKFULL;
+    if (free_slot < 0 && u64bIdleLen(pup_held) < PUP_LQ) return PUPFULL;
     a_cstr(name, ".lock");
     call(PATHu8bPush, lp, name);
     int f = open((char const *)u8bDataHead(lp), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
@@ -117,10 +117,10 @@ ok64 PUPScan(u64b keys, path8sc dir, u8csc ext, u64 ceil, u64csc dead) {
             break;
         }
     }
-    //  Close UNCONDITIONALLY: a non-END FILENext error (e.g. PATHNOROOM) would
-    //  make `seen(END)` fail() past the close and leak the DIR handle.
+    //  Close UNCONDITIONALLY: a non-FILEEND FILENext error (e.g. PATHNOROOM) would
+    //  make `seen(FILEEND)` fail() past the close and leak the DIR handle.
     FILEIterClose(&it);
-    if (__ != END) fail(__);
+    if (__ != FILEEND) fail(__);
     __ = OK;
     u64s fresh = {from, u64bIdleHead(keys)};
     u64sSort(fresh);

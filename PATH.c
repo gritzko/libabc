@@ -88,9 +88,9 @@ void PATHu8sExt(u8csp out, u8cs path) {
 
 ok64 PATHu8sDrain(u8cs cursor, u8csp seg) {
     sane($ok(cursor) && seg != NULL);
-    if ($empty(cursor)) return END;
+    if ($empty(cursor)) return PATHEND;
     if (*cursor[0] == '/') cursor[0]++;
-    if ($empty(cursor)) return END;
+    if ($empty(cursor)) return PATHEND;
     u8cp start = cursor[0];
     while (!$empty(cursor) && *cursor[0] != '/') cursor[0]++;
     seg[0] = start;
@@ -230,12 +230,12 @@ ok64 PATHu8bNorm(path8b out, u8cs orig) {
                 if (!prev_dd) { n--; continue; }
             }
             if (!is_abs) {
-                test(n < 256, PATHFAIL);
+                test(n < 256, PATHFULL);
                 segs[n][0] = seg[0]; segs[n][1] = seg[1]; n++;
             }
             continue;
         }
-        test(n < 256, PATHFAIL);
+        test(n < 256, PATHFULL);
         segs[n][0] = seg[0]; segs[n][1] = seg[1]; n++;
     }
 

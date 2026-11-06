@@ -182,7 +182,7 @@ ok64 SLOGSeek(u64gp stack, u8csc stream, u8zs less, u8csc target) {
         }
     }
 
-    fail(SLOGMISS);
+    fail(SLOGNONE);
 }
 
 ok64 SLOGu8sFeedSkips(u8sp into, u8 lit, u64csc offs, b8 trailen) {
@@ -195,7 +195,7 @@ ok64 SLOGu8sFeedSkips(u8sp into, u8 lit, u64csc offs, b8 trailen) {
 
     // Copy offsets for delta encoding
     size_t count = u64csLen(offs);
-    test(count <= 256, SLOGNOROOM);
+    test(count <= 256, SLOGFULL);
     for (size_t i = 0; i < count; ++i) {
         tmp[0][i] = offs[0][i];
     }

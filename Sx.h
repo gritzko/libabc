@@ -105,7 +105,7 @@ fun b8 X(, cgEmpty)(X(, cg) g) { return g[1] == g[0]; }
 fun ok64 X(, gFed)(X(, g) g, size_t len) {
     // ABC-005: compare lengths, not g[1]+len — the pointer form
     // overflows (UB) for huge len; same pattern as sFed
-    if (len > X(, gRestLen)(g)) return NOROOM;
+    if (len > X(, gRestLen)(g)) return SNOROOM;
     g[1] += len;
     return OK;
 }
@@ -124,12 +124,12 @@ fun ok64 X(, csGauge)(X(, cs) s, X(, cg) g) {
 
 #ifndef ABC_X_$
 fun ok64 X(, gFedP)(X(, g) g, X(, p) * p) {
-    if (g[1] >= g[2]) return NOROOM;
+    if (g[1] >= g[2]) return SNOROOM;
     *p = g[1]++;
     return OK;
 }
 fun ok64 X(, cgFedP)(X(, cg) g, X(, cp) * p) {
-    if (g[1] >= g[2]) return NOROOM;
+    if (g[1] >= g[2]) return SNOROOM;
     *p = g[1]++;
     return OK;
 }
@@ -291,11 +291,11 @@ fun T const *X(, csAtP)(X(, cs) s, size_t pos) { return s[0] + pos; }
 //   *Used1 / *Shed1 : single-element variants.
 //   *UsedAll / *ShedAll : collapse the slice to empty in either direction.
 //
-// Both return MISS if asked to move beyond the opposite border.
+// Both return SNODATA if asked to move beyond the opposite border.
 
 // sUsed*: advance head (consume from the left).
 fun ok64 X(, sUsed)(X(, s) s, size_t len) {
-    if (unlikely((i64)len > $len(s))) return MISS;
+    if (unlikely((i64)len > $len(s))) return SNODATA;
     s[0] += len;
     return OK;
 }
@@ -304,8 +304,8 @@ fun ok64 X(, csUsed)(X(, cs) s, size_t len) { return X(, sUsed)((T **)s, len); }
 //  Bounds-checked sub-slice [from, till) of `whole` into `sub`.
 //  Sets `sub` to a window over `whole`'s data — no copy.
 fun ok64 X(, csSub)(X(, csc) whole, X(, cs) sub, u64 from, u64 till) {
-    if (unlikely(from > till)) return BADRANGE;
-    if (unlikely((size_t)till > X(, csLen)(whole))) return BADRANGE;
+    if (unlikely(from > till)) return SBADARG;
+    if (unlikely((size_t)till > X(, csLen)(whole))) return SBADARG;
     sub[0] = whole[0] + from;
     sub[1] = whole[0] + till;
     return OK;
@@ -322,13 +322,13 @@ fun ok64 X(, csUsedAll)(X(, cs) s) { return X(, sUsedAll)((T **)s); }
 
 // sShed*: retreat term (drop from the right).
 fun ok64 X(, sShed)(X(, s) s, size_t len) {
-    if (unlikely((i64)len > $len(s))) return MISS;
+    if (unlikely((i64)len > $len(s))) return SNODATA;
     s[1] -= len;
     return OK;
 }
 
 fun ok64 X(, csShed1)(X(, cs) s) {
-    if (unlikely(s[0] >= s[1])) return MISS;
+    if (unlikely(s[0] >= s[1])) return SNODATA;
     s[1]--;
     return OK;
 }
@@ -365,7 +365,7 @@ fun ok64 X(, csFind)(X(, cs) haystack, T needle) {
             return OK;
         }
     }
-    return NONE;
+    return SNONE;
 }
 
 fun ok64 X(, sFind)(X(, s) haystack, T needle) {
@@ -381,7 +381,7 @@ fun ok64 X(, csRevFind)(X(, cs) haystack, T needle) {
         if (memcmp(haystack[1] - 1, &needle, sizeof(T)) == 0) return OK;
         --haystack[1];
     }
-    return NONE;
+    return SNONE;
 }
 
 fun ok64 X(, sRevFind)(X(, s) haystack, T needle) {
@@ -393,7 +393,7 @@ fun ok64 X(, csFindS)(X(, cs) haystack, X(, csc) needle) {
     size_t nlen = X(, csLen)(needle);
     if (nlen == 0) {
         *haystack = haystack[1];
-        return NONE;
+        return SNONE;
     }
     while ($len(haystack) >= (i64)nlen) {
         if (X(, csFind)(haystack, **needle) != OK) break;
@@ -405,7 +405,7 @@ fun ok64 X(, csFindS)(X(, cs) haystack, X(, csc) needle) {
         ++*haystack;
     }
     *haystack = haystack[1];
-    return NONE;
+    return SNONE;
 }
 
 fun ok64 X(, sFindS)(X(, s) haystack, X(, csc) needle) {
@@ -420,7 +420,7 @@ fun ok64 X(, csRevFindS)(X(, cs) haystack, X(, csc) needle) {
     size_t nlen = X(, csLen)(needle);
     if (nlen == 0 || $len(haystack) < (i64)nlen) {
         haystack[1] = haystack[0];
-        return NONE;
+        return SNONE;
     }
     for (T const *p = haystack[1] - nlen; p >= haystack[0]; p--) {
         if (memcmp(p, *needle, nlen * sizeof(T)) == 0) {
@@ -429,7 +429,7 @@ fun ok64 X(, csRevFindS)(X(, cs) haystack, X(, csc) needle) {
         }
     }
     haystack[1] = haystack[0];
-    return NONE;
+    return SNONE;
 }
 
 fun ok64 X(, sRevFindS)(X(, s) haystack, X(, csc) needle) {
@@ -438,13 +438,13 @@ fun ok64 X(, sRevFindS)(X(, s) haystack, X(, csc) needle) {
 #endif
 
 fun ok64 X(, sSup)(X(, s) full, X(, s) consumed) {
-    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return BADRANGE;
+    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return SBADARG;
     full[1] = consumed[0];
     return OK;
 }
 
 fun ok64 X(, scSup)(X(, cs) full, X(, cs) consumed) {
-    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return BADRANGE;
+    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return SBADARG;
     full[1] = consumed[0];
     return OK;
 }
@@ -454,9 +454,9 @@ fun void X(, sZero)(X(, s) s) { memset((void *)*s, 0, $size(s)); }
 fun void X(, Zero)(X(, p) p) { memset((void *)p, 0, sizeof(T)); }
 #endif
 //  ABC-26B02JHe_k: copy the records of `from` to the head of `into`,
-//  overlap-safe; NOROOM (nothing written) if `into` is shorter.
+//  overlap-safe; SNOROOM (nothing written) if `into` is shorter.
 fun ok64 X(, sCopy)(X(, sc) into, X(, csc) from) {
-    if ($len(into) < $len(from)) return NOROOM;
+    if ($len(into) < $len(from)) return SNOROOM;
     memmove((void *)*into, (void *)*from, $size(from));
     return OK;
 }
@@ -484,8 +484,8 @@ fun ok64 X(, sDrain)(X(, s) into, X(, cs) from) {
     return OK;
 }
 fun ok64 X(, sFeed)(X(, s) into, X(, csc) from) {
-    if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
-    if (unlikely($size(from) > $size(into))) return NOROOM;
+    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
+    if (unlikely($size(from) > $size(into))) return SNOROOM;
     if ($size(from)) memcpy((void *)*into, (void *)*from, $size(from));
     *into += $len(from);
     return OK;
@@ -496,7 +496,7 @@ fun ok64 X(, gFeed)(X(, g) into, X(, csc) from) {
 }
 
 fun ok64 X(, sFeedSome)(X(, s) into, X(, cs) from) {
-    if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
     size_t len = $len(from);
     if ((i64)len > $len(into)) len = $len(into);
     if (len) memcpy((void *)*into, (void *)*from, len * sizeof(T));
@@ -505,9 +505,9 @@ fun ok64 X(, sFeedSome)(X(, s) into, X(, cs) from) {
 }
 
 fun ok64 X(, sFeedN)(X(, s) into, X(, cs) from, size_t len) {
-    if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
-    if (unlikely($len(into) < (i64)len)) return NOROOM;
-    if (unlikely($len(from) < (i64)len)) return NODATA;
+    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
+    if (unlikely($len(into) < (i64)len)) return SNOROOM;
+    if (unlikely($len(from) < (i64)len)) return SNODATA;
     if (len) memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *into += len;
     *from += len;
@@ -529,12 +529,12 @@ fun T X(, gTop)(X(, g) g) {
     return *X(, sLast)(X(, gLeft)(g));
 }
 fun ok64 X(, gPop)(X(, g) g, X(, p) x) {
-    if (X(, gEmpty)(g)) return NODATA;
+    if (X(, gEmpty)(g)) return SNODATA;
     X(, Mv)(x, X(, sLast)(X(, gLeft)(g)));
     return X(, gShed1)(g);
 }
 fun ok64 X(, gPopN)(X(, g) g, size_t n, X(, cs) popped) {
-    if (X(, gLeftLen)(g) < n) return NODATA;
+    if (X(, gLeftLen)(g) < n) return SNODATA;
     popped[1] = g[1];
     ok64 o = X(, gShed)(g, n);
     popped[0] = g[1];
@@ -595,13 +595,13 @@ fun ok64 X(, csFed)(X(, cs) into, size_t len) {
 }
 
 fun ok64 X(, sPuked)(X(, s) from, size_t len) {
-    if ($len(from) < (i64)len) return NODATA;
+    if ($len(from) < (i64)len) return SNODATA;
     from[1] -= len;
     return OK;
 }
 
 fun ok64 X(, sDrain1)(X(, cs) from, T *into) {
-    if ($empty(from)) return NODATA;
+    if ($empty(from)) return SNODATA;
 #ifndef ABC_X_$
     X(, Mv)(into, *from);
 #else
@@ -721,7 +721,7 @@ fun ok64 X(, sFork)(X(, sc) outer, X(, s) inner) {
 }
 
 fun ok64 X(, sJoin)(X(, s) outer, X(, sc) inner) {
-    if (!X(, sIs)(outer, inner)) return BADRANGE;
+    if (!X(, sIs)(outer, inner)) return SBADARG;
     outer[0] = inner[0];
     return OK;
 }
@@ -742,7 +742,7 @@ fun ok64 X(, csFork)(X(, csc) outer, X(, cs) inner) {
 
 fun ok64 X(, csJoin)(X(, cs) outer, X(, csc) inner) {
     if (!X(, csIs)(outer, inner)) {
-        return BADRANGE;
+        return SBADARG;
     }
     outer[0] = inner[0];
     return OK;

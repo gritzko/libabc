@@ -199,7 +199,7 @@ ok64 HIT6() {
     done;
 }
 
-// HIT7: Seek past all data → NONE
+// HIT7: Seek past all data → HITNONE
 ok64 HIT7() {
     sane(1);
     u64 a[] = {1, 2, 3};
@@ -208,7 +208,7 @@ ok64 HIT7() {
     u64css heap = {runs, runs + 2};
     u64 key = 100;
     ok64 o = HITu64Seek(heap, &key);
-    testeqv((long long)(o), (long long)(NONE), "%lld");
+    testeqv((long long)(o), (long long)(HITNONE), "%lld");
     // DOG-027: Seek no longer compacts — the next Load drops the exhausted
     // entries, so the same emptiness claim is asserted through one.
     a_pad(u64csp, slots, ABC_HIT_MAX_RUNS);
@@ -274,7 +274,7 @@ ok64 HIT10() {
     testeqv((long long)($len(heap)), (long long)((size_t)0), "%lld");
     u64 key = 1;
     ok64 o = HITu64Seek(heap, &key);
-    testeqv((long long)(o), (long long)(NONE), "%lld");
+    testeqv((long long)(o), (long long)(HITNONE), "%lld");
     done;
 }
 
@@ -611,7 +611,7 @@ ok64 HIT23() {
 }
 
 // ABC-015: drains take a bounded slice now; a too-small output must
-// return NOROOM instead of writing past the end.
+// return HITNOROOM instead of writing past the end.
 ok64 HIT24() {
     sane(1);
     u64 a[] = {1, 3, 5, 7};
@@ -620,19 +620,19 @@ ok64 HIT24() {
     u64css heap = {runs, runs + 2};
     u64 buf[3];
     u64s out = {buf, buf + 3};
-    testeqv((long long)(HITu64Merge(out, heap)), (long long)(NOROOM),
+    testeqv((long long)(HITu64Merge(out, heap)), (long long)(HITNOROOM),
             "%lld");
     // the room it had was filled in order
     testeqv((long long)(buf[0]), (long long)((u64)1), "%lld");
     testeqv((long long)(buf[2]), (long long)((u64)3), "%lld");
-    // Compact propagates NOROOM for an undersized `into`
+    // Compact propagates HITNOROOM for an undersized `into`
     u64 c[8], d[8];
     for (int i = 0; i < 8; i++) c[i] = (u64)i, d[i] = (u64)(8 + i);
     u64cs runs2[2] = {{c, c + 8}, {d, d + 8}};
     u64css stack = {runs2, runs2 + 2};
     u64 small[4];
     u64s into = {small, small + 4};
-    testeqv((long long)(HITu64Compact(stack, into)), (long long)(NOROOM),
+    testeqv((long long)(HITu64Compact(stack, into)), (long long)(HITNOROOM),
             "%lld");
     done;
 }
@@ -733,12 +733,12 @@ ok64 HIT27() {
     u64 lo = 0, hi = 1000, key = 3;
     size_t over = ABC_HIT_MAX_RUNS + 1;
 
-    // --- one run past the cap: every entry point returns FULL ---
+    // --- one run past the cap: every entry point returns HITFULL ---
 #define HIT27OVER(EXPR)                                                     \
     hit27fill(v, runs, st, over);                                           \
     out[0] = buf;                                                           \
     out[1] = buf + over;                                                    \
-    testeqv((long long)(EXPR), (long long)(FULL), "%lld")
+    testeqv((long long)(EXPR), (long long)(HITFULL), "%lld")
     HIT27OVER(HITu64Merge(out, st));
     HIT27OVER(HITu64MergeBag(out, st));
     HIT27OVER(HITu64Intersect(out, st, over));
@@ -787,7 +787,7 @@ ok64 HITmerge() {
 
 // PERF-26B057wfOU: Merge's block path: long key-disjoint stretches, cross-run
 // ties (the youngest wins; ABC_X_MERGE folds by age), a 3-row `into` resumed
-// on NOROOM; one row per key per run (HIT.md Merge), a brute-force oracle.
+// on HITNOROOM; one row per key per run (HIT.md Merge), a brute-force oracle.
 ok64 HIT28() {
     sane(1);
     u64 keys[3][48], nk[3] = {0, 0, 0};
@@ -828,12 +828,12 @@ ok64 HIT28() {
         kv64s out = {kgot + ng, kgot + ng + 3};
         o = HITkv64Merge(out, kheap);
         ng = (size_t)(out[0] - kgot);
-    } while (o == NOROOM);
+    } while (o == HITNOROOM);
     do {
         dig64s out = {dgot + nd, dgot + nd + 3};
         d = HITdig64Merge(out, dheap);
         nd = (size_t)(out[0] - dgot);
-    } while (d == NOROOM);
+    } while (d == HITNOROOM);
     want(o == OK && ng == nw && d == OK && nd == nw);
     for (size_t i = 0; i < nw; i++) {
         want(kgot[i].key == kexp[i].key && kgot[i].val == kexp[i].val);

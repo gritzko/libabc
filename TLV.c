@@ -24,7 +24,7 @@ fun ok64 TLVprobe(u8* t, u8* hlen, u64* blen, $cu8c data) {
         memcpy(&l, *data + 1, sizeof(l));
         *blen = l;
     } else {
-        return TLVBADREC;
+        return TLVBAD;
     }
     // Subtraction-based bound: each branch above guaranteed
     // $len(data) >= *hlen, so $len(data) - *hlen cannot underflow.
@@ -97,7 +97,7 @@ ok64 TLVDrainKeyVal(u8* type, u8cs key, $u8c val, u8cs tlv) {
     u8cs body = {tlv[0] + hlen, tlv[0] + hlen + blen};
     // idlen byte + id data + value must fit in body
     // body[0] is idlen, need at least 1 + idlen bytes
-    test($len(body) > 0 && $len(body) > **body, TLVBADKV);
+    test($len(body) > 0 && $len(body) > **body, TLVBAD);
     key[0] = body[0] + 1;
     key[1] = key[0] + **body;
     val[0] = key[1];

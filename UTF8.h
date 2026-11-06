@@ -18,9 +18,9 @@ con u32 MAX_UNICODE_CODEPOINT = 0x10FFFF;
 con u8 MAX_UTF8_SIZE = 4;
 
 con ok64 UTF8NODATA = 0x79d3c85d834a74a;
-con ok64 UTFNOROOM = 0x1e74f5d86d8616;
-con ok64 UTFBAD = 0x79d3cb28d;
-con ok64 UTFBADNUM = 0x1e74f2ca357796;
+con ok64 UTF8BAD = 0x1e74f20b28d;
+con ok64 UTF8BADARG = 0x79d3c82ca34a6d0;
+con ok64 UTF8NOROOM = 0x79d3c85d86d8616;
 
 typedef unsigned char utf8;
 fun b8 utf8Z(utf8 const *a, utf8 const *b) { return *a < *b; }
@@ -63,7 +63,7 @@ fun ok64 utf8sDrain1utf8(utf8s into, utf8cs from) {
 }
 
 fun ok64 utf8sValid(utf8cs utf8) {
-    if (!utf8csOK(utf8)) return BADARG;
+    if (!utf8csOK(utf8)) return UTF8BADARG;
     u32 cp;
     ok64 o = OK;
     while (!$empty(utf8) && o == OK) o = utf8sDrain32(&cp, utf8);

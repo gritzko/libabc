@@ -27,15 +27,16 @@ con ok64 PUPBADARG = 0x197992ca34a6d0;    //  a bad index
 con ok64 PUPTAKEN = 0x65e65d294397;       //  a run or its tmp holds the key
 con ok64 PUPSTAT = 0x1979971d29d;         //  PUPLock: stat(dir) failed
 con ok64 PUPNOOPEN = 0x197995d8619397;    //  PUPLock: open(.lock) failed
-con ok64 PUPLCKFULL = 0x65e6553143de555;  //  PUPLock: held-lock table full
 //  CODE-26A23CSStk: a run it cannot read: 0 bytes (a crashed non-durable
-//  create), unmappable (fds, perms); past 62 runs or keys is PUPNOROOM.
+//  create), unmappable (fds, perms); past 62 runs PUPFULL, out of keys PUPNOROOM.
 con ok64 PUPEMPTY = 0x65e64e599762;
 con ok64 PUPNOMAP = 0x65e657616299;
 con ok64 PUPNOROOM = 0x197995d86d8616;
 //  PUPS-26A309qbG9: PUPGONE: a run listed by the scan was gone by the time it
 //  was mapped (another writer unlinked it); retry the open.
 con ok64 PUPGONE = 0x197994185ce;
+con ok64 PUPFULL = 0x197993de555;
+con ok64 PUPNONE = 0x197995d85ce;
 
 // Feed `dir`'s `<10-RON64><ext>` run keys at or below `ceil`, but not in
 // `dead`, into `keys`, sorted; a misnamed file is skipped (DOG-027), an absent

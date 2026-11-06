@@ -71,7 +71,7 @@ static inline ok64 X(DIJK, Run)(u64 *cost, u64 src, u64 tgt,
             u64 ncost = cur.val + np->val;
             kv64 nprobe = {np->key, 0};
             o = HASHkv64Get(&nprobe, dist);
-            if (o == NONE || ncost < nprobe.val) {
+            if (o == HASHNONE || ncost < nprobe.val) {
                 kv64 entry = {np->key, ncost};
                 o = HASHkv64Put(dist, &entry);
                 if (o != OK) return o;

@@ -216,7 +216,7 @@ ok64 ROCKOpenMerge(ROCKdbp db, path8s path, u8ys merge) {
 ok64 ROCKSetMerge(ROCKdbp db, u8ys merge) {
     sane(db != NULL && db->opt != NULL && merge != NULL);
     // ABC-015: a second SetMerge leaked the first operator; refuse it
-    test(db->mop == NULL, ROCKBAD);
+    test(db->mop == NULL, ROCKBADARG);
     ROCKmerge_state *ms = malloc(sizeof(ROCKmerge_state));
     test(ms != NULL, ROCKFAIL);
     ms->merge = merge;
@@ -265,8 +265,8 @@ ok64 ROCKClose(ROCKdbp db) {
 }
 
 ok64 ROCKGet(ROCKdbp db, u8bp into, u8cs key) {
-    if (db == NULL || db->db == NULL) return ROCKBAD;
-    if (into == NULL || key == NULL) return ROCKBAD;
+    if (db == NULL || db->db == NULL) return ROCKBADARG;
+    if (into == NULL || key == NULL) return ROCKBADARG;
     char *err = NULL;
     size_t vlen = 0;
     char *val =
@@ -283,7 +283,7 @@ ok64 ROCKGet(ROCKdbp db, u8bp into, u8cs key) {
 }
 
 ok64 ROCKPut(ROCKdbp db, u8cs key, u8cs val) {
-    if (db == NULL || db->db == NULL) return ROCKBAD;
+    if (db == NULL || db->db == NULL) return ROCKBADARG;
     char *err = NULL;
     rocksdb_put(db->db, db->wopt, (const char *)key[0], $size(key),
                 (const char *)val[0], $size(val), &err);
@@ -291,7 +291,7 @@ ok64 ROCKPut(ROCKdbp db, u8cs key, u8cs val) {
 }
 
 ok64 ROCKDel(ROCKdbp db, u8cs key) {
-    if (db == NULL || db->db == NULL) return ROCKBAD;
+    if (db == NULL || db->db == NULL) return ROCKBADARG;
     char *err = NULL;
     rocksdb_delete(db->db, db->wopt, (const char *)key[0], $size(key),
                    &err);
@@ -299,7 +299,7 @@ ok64 ROCKDel(ROCKdbp db, u8cs key) {
 }
 
 ok64 ROCKMerge(ROCKdbp db, u8cs key, u8cs val) {
-    if (db == NULL || db->db == NULL) return ROCKBAD;
+    if (db == NULL || db->db == NULL) return ROCKBADARG;
     char *err = NULL;
     rocksdb_merge(db->db, db->wopt, (const char *)key[0], $size(key),
                   (const char *)val[0], $size(val), &err);
@@ -308,35 +308,35 @@ ok64 ROCKMerge(ROCKdbp db, u8cs key, u8cs val) {
 
 // Write batch
 ok64 ROCKBatchOpen(ROCKbatchp wb) {
-    if (wb == NULL) return ROCKBAD;
+    if (wb == NULL) return ROCKBADARG;
     wb->wb = rocksdb_writebatch_create();
     if (wb->wb == NULL) return ROCKFAIL;
     return OK;
 }
 
 ok64 ROCKBatchPut(ROCKbatchp wb, u8cs key, u8cs val) {
-    if (wb == NULL || wb->wb == NULL) return ROCKBAD;
+    if (wb == NULL || wb->wb == NULL) return ROCKBADARG;
     rocksdb_writebatch_put(wb->wb, (const char *)key[0], $size(key),
                            (const char *)val[0], $size(val));
     return OK;
 }
 
 ok64 ROCKBatchDel(ROCKbatchp wb, u8cs key) {
-    if (wb == NULL || wb->wb == NULL) return ROCKBAD;
+    if (wb == NULL || wb->wb == NULL) return ROCKBADARG;
     rocksdb_writebatch_delete(wb->wb, (const char *)key[0], $size(key));
     return OK;
 }
 
 ok64 ROCKBatchMerge(ROCKbatchp wb, u8cs key, u8cs val) {
-    if (wb == NULL || wb->wb == NULL) return ROCKBAD;
+    if (wb == NULL || wb->wb == NULL) return ROCKBADARG;
     rocksdb_writebatch_merge(wb->wb, (const char *)key[0], $size(key),
                              (const char *)val[0], $size(val));
     return OK;
 }
 
 ok64 ROCKBatchWrite(ROCKdbp db, ROCKbatchp wb) {
-    if (db == NULL || db->db == NULL) return ROCKBAD;
-    if (wb == NULL || wb->wb == NULL) return ROCKBAD;
+    if (db == NULL || db->db == NULL) return ROCKBADARG;
+    if (wb == NULL || wb->wb == NULL) return ROCKBADARG;
     char *err = NULL;
     rocksdb_write(db->db, db->wopt, wb->wb, &err);
     return ROCKerr(err);
@@ -378,7 +378,7 @@ ok64 ROCKScan(ROCKdbp db, u8cs prefix, ROCKscanf f, void0p arg) {
 
 // Iterator
 ok64 ROCKIterOpen(ROCKiterp it, ROCKdbp db) {
-    if (it == NULL || db == NULL || db->db == NULL) return ROCKBAD;
+    if (it == NULL || db == NULL || db->db == NULL) return ROCKBADARG;
     it->db = db;
     it->it = rocksdb_create_iterator(db->db, db->ropt);
     if (it->it == NULL) return ROCKFAIL;
@@ -386,31 +386,31 @@ ok64 ROCKIterOpen(ROCKiterp it, ROCKdbp db) {
 }
 
 ok64 ROCKIterSeek(ROCKiterp it, u8cs key) {
-    if (it == NULL || it->it == NULL) return ROCKBAD;
+    if (it == NULL || it->it == NULL) return ROCKBADARG;
     rocksdb_iter_seek(it->it, (const char *)key[0], $size(key));
     return OK;
 }
 
 ok64 ROCKIterSeekForPrev(ROCKiterp it, u8cs key) {
-    if (it == NULL || it->it == NULL) return ROCKBAD;
+    if (it == NULL || it->it == NULL) return ROCKBADARG;
     rocksdb_iter_seek_for_prev(it->it, (const char *)key[0], $size(key));
     return OK;
 }
 
 ok64 ROCKIterSeekFirst(ROCKiterp it) {
-    if (it == NULL || it->it == NULL) return ROCKBAD;
+    if (it == NULL || it->it == NULL) return ROCKBADARG;
     rocksdb_iter_seek_to_first(it->it);
     return OK;
 }
 
 ok64 ROCKIterNext(ROCKiterp it) {
-    if (it == NULL || it->it == NULL) return ROCKBAD;
+    if (it == NULL || it->it == NULL) return ROCKBADARG;
     rocksdb_iter_next(it->it);
     return OK;
 }
 
 ok64 ROCKIterPrev(ROCKiterp it) {
-    if (it == NULL || it->it == NULL) return ROCKBAD;
+    if (it == NULL || it->it == NULL) return ROCKBADARG;
     rocksdb_iter_prev(it->it);
     return OK;
 }
@@ -485,7 +485,7 @@ ok64 ROCKSnapshotRelease(ROCKdbp db) {
 ok64 ROCKGetPath(ROCKdbp db, path8b out) {
     sane(db != NULL && db->db != NULL && out != NULL);
     char *path = rocksdb_property_value(db->db, "rocksdb.dbname");
-    if (path == NULL) fail(ROCKFAIL);
+    if (path == NULL) fail(ROCKBADARG);
     size_t plen = strlen(path);
     u8cs pcs = {(u8cp)path, (u8cp)path + plen};
     ok64 o = u8bFeed(out, pcs);

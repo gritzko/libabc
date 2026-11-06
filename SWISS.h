@@ -7,6 +7,11 @@
 #include "01.h"
 #include "OK.h"
 
+con ok64 SWISBADARG = 0x72049c2ca34a6d0;
+con ok64 SWISFULL = 0x72049c3de555;
+con ok64 SWISNONE = 0x72049c5d85ce;
+con ok64 SWISNOROOM = 0x72049c5d86d8616;
+
 #define SWISS_EMPTY 0x00  // a zeroed control array is an empty table
 #define SWISS_TOMB 0x01
 #define SWISS_MOVE 0x02  // a resident not yet re-placed by a rehash
@@ -27,6 +32,7 @@ fun u32 SWISSEmpty(u8 const *g) {
 }
 #elif defined(__aarch64__) && !defined(ABC_SWISS_SWAR)
 #include <arm_neon.h>
+
 fun u32 SWISS_pack(uint8x16_t m) {
     static u8 const bit[16] = {1, 2, 4, 8, 16, 32, 64, 128,
                                1, 2, 4, 8, 16, 32, 64, 128};

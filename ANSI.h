@@ -4,6 +4,7 @@
 #include "BUF.h"
 
 con ok64 ANSIBAD = 0xa5dc48b28d;
+con ok64 ANSIBADARG = 0x2977122ca34a6d0;
 
 // --- CSI parser (input side) ---
 //
@@ -84,7 +85,7 @@ typedef enum {
 } ANSI_COLOR;
 
 fun ok64 escfeed($u8 data, u8 esc) {
-    if (!$ok(data) || $size(data) < 7) return BADARG;
+    if (!$ok(data) || $size(data) < 7) return ANSIBADARG;
     u8sFeed1(data, 033);  //"\033[91m"
     u8sFeed1(data, '[');
     utf8sFeed10(data, esc);
@@ -94,7 +95,7 @@ fun ok64 escfeed($u8 data, u8 esc) {
 
 // 256-color background: \033[48;5;Nm
 fun ok64 escfeedBG256($u8 data, u8 color) {
-    if (!$ok(data) || $size(data) < 12) return BADARG;
+    if (!$ok(data) || $size(data) < 12) return ANSIBADARG;
     u8sFeed1(data, 033);
     u8sFeed1(data, '[');
     u8sFeed1(data, '4');
@@ -180,7 +181,7 @@ fun u8  ansi64Flags  (ansi64 s) { return (u8)(s >> 56); }
 // from `prev` to `want`.  No-op when they match.  The caller maintains
 // the current state (one ansi64 per output stream); this function
 // neither reads nor writes that state — it just spells the delta.
-// Returns BADARG when the slice is malformed or has < 64 bytes idle
+// Returns ANSIBADARG when the slice is malformed or has < 64 bytes idle
 // (worst case is ~40 bytes for RGB fg + RGB bg + 7 flag transitions).
 ok64 ANSIu8sFeedDelta(u8s out, ansi64 want, ansi64 prev);
 
@@ -198,7 +199,8 @@ b8   ANSIIsTTY(void);
 void ANSISetTTY(b8 v);
 
 con ok64 ANSINOTTY   = 0xa5dc49761d762;       // /dev/tty unavailable
-con ok64 ANSINOREPLY = 0xa5dc49761b399562;    // OSC 11 query timed out or unparseable
+con ok64 ANSINONE = 0x2977125d85ce;
+con ok64 ANSINOROOM = 0x2977125d86d8616;
 
 // Query the terminal's current background color via OSC 11.  On
 // success fills *bg with an ansi64 carrying mode=RGB and the
@@ -208,7 +210,7 @@ con ok64 ANSINOREPLY = 0xa5dc49761b399562;    // OSC 11 query timed out or unpar
 // touching the terminal.  Opens /dev/tty for both ends, briefly
 // switches it to raw mode, writes `\033]11;?\007`, polls for ≤100 ms,
 // and parses `\033]11;rgb:RRRR/GGGG/BBBB` (BEL or ST terminator).
-// Returns ANSINOTTY if /dev/tty can't be opened, ANSINOREPLY if the
+// Returns ANSINOTTY if /dev/tty can't be opened, ANSINONE if the
 // terminal stayed silent or returned garbage.
 ok64 ANSIBgColor(ansi64 *bg);
 

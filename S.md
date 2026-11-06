@@ -50,7 +50,7 @@ Always prefer typed functions over generic macros:
 | Consume N      | `u8sUsed(s, n)`   | `s[0]+=n`     |
 | Trim end by N  | `u8sShed(s, n)`   | `s[1]-=n`     |
 | Copy slice ptrs| `u8sMv(a, b)`     | `$mv(a, b)`   |
-| Copy data      | `u8sCopy(to, fr)` (memmove, NOROOM if short) | -  |
+| Copy data      | `u8sCopy(to, fr)` (memmove, SNOROOM if short) | -  |
 | Feed data      | `u8sFeed(to, fr)` | -             |
 | Feed one       | `u8sFeed1(s, v)`  | -             |
 | Find element   | `u8sFind(s, v)`   | -             |
@@ -61,8 +61,8 @@ Const variants use `cs`: `u8csLen()`, `u8csHead()`, etc.
 The typed functions are the only family that writes or moves borders
 (CODE-26B065tb4L): the legacy `$u8feed`-style `X($, verb)` functions,
 the unchecked `$feed`/`$copy`/`$cut` macros and `u8sFeedn` are gone.
-Short input returns `NODATA`, a bad sub-range `BADRANGE`, a NULL or
-torn slice `BADARG`; `SNOROOM` is still the room code of `sFeed1`.
+Codes are S-prefixed (CODE-26B068XgTv): short input `SNODATA`, no room
+`SNOROOM`, a bad sub-range, a NULL or torn slice `SBADARG`, a miss `SNONE`.
 
 ##  Creation macros
 

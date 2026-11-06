@@ -22,7 +22,7 @@ typedef struct e64 { u64 key; u64 pay[7]; } e64;
 #define BB_DEAD u64max  //  truncated to pay[0]; real payloads stay below 2^32
 
 //  A house of 64 run cells, its last two the memtable buffer (BOX.md);
-//  Put retries a NOROOM/FULL once after Sort(all).
+//  Put retries a BOXNOROOM/BOXFULL once after Sort(all).
 typedef struct bbhouse {
     void const *cells[ABC_HIT_MAX_RUNS][2];
     void *h[4];

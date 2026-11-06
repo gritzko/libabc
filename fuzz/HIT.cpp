@@ -1,9 +1,9 @@
 // abc/fuzz/HIT.cpp — FUZZ-26B04IqDqU: HITx vs std::map and std::vector.
 //
 // The input builds up to 66 strictly ascending runs of {u16 key, u16 val}
-// (key 0 and the zero row allowed; past 64 runs Load is FULL), then every
+// (key 0 and the zero row allowed; past 64 runs Load is HITFULL), then every
 // op runs once on a copy of the runs: Merge and MergeBag into a short `into`
-// (NOROOM, resume), Seek, SeekRange, Intersect, sIntersectMerge, Compact.
+// (HITNOROOM, resume), Seek, SeekRange, Intersect, sIntersectMerge, Compact.
 // The kv lane wants the youngest row, the fold lane the oldest-first compose
 // (HIT.c), MergeBag every row, youngest first among equal keys.
 
@@ -82,25 +82,25 @@ static size_t hf_ladder(hfruns const &runs) {
     return l.size();
 }
 
-//  Merge or MergeBag `chunk` rows at a time, resuming on NOROOM.
+//  Merge or MergeBag `chunk` rows at a time, resuming on HITNOROOM.
 static ok64 hf_drain(ok64 *code, std::vector<hk> &out, int lane, b8 bag,
                      hfruns runs, size_t chunk, size_t total) {
     sane(1);
     size_t n = runs.size(), noroom = 0;
-    ok64 o = NOROOM;
+    ok64 o = HITNOROOM;
     out.clear();
     std::vector<hk> buf(chunk);
-    while (o == NOROOM) {
+    while (o == HITNOROOM) {
         size_t len = chunk;
         o = bag ? hfMergeBag(lane, runs.data(), &n, buf.data(), &len)
                 : hfMerge(lane, runs.data(), &n, buf.data(), &len);
         must(len <= chunk, "into overrun");
         out.insert(out.end(), buf.begin(), buf.begin() + len);
-        if (o == NOROOM) must(len == chunk && ++noroom <= total, "NOROOM");
+        if (o == HITNOROOM) must(len == chunk && ++noroom <= total, "HITNOROOM");
     }
     *code = o;
     if (o == OK) must(noroom == (out.empty() ? 0 : (out.size() - 1) / chunk),
-                      "NOROOM count");
+                      "HITNOROOM count");
     done;
 }
 
@@ -147,16 +147,16 @@ FUZZ(u8, HITfuzz) {
 
     //  Merge, both lanes; MergeBag: every row, youngest first per key
     call(hf_drain, &o, out, HF_KV, NO, runs, chunk, total);
-    must(full ? o == FULL && out.empty() : o == OK && hf_eq(mk, out), "Merge");
+    must(full ? o == HITFULL && out.empty() : o == OK && hf_eq(mk, out), "Merge");
     call(hf_drain, &o, out, HF_FOLD, NO, runs, chunk, total);
-    must(full ? o == FULL : o == OK && hf_eq(mf, out), "fold Merge");
+    must(full ? o == HITFULL : o == OK && hf_eq(mf, out), "fold Merge");
     std::vector<std::tuple<u16, size_t, u16>> bag;
     for (size_t r = 0; r < n; r++)
         for (hk const *p = runs[r].lo; p < runs[r].hi; p++)
             bag.push_back({p->key, n - r, p->val});
     std::sort(bag.begin(), bag.end());
     call(hf_drain, &o, out, HF_KV, YES, runs, chunk, total);
-    must(full ? o == FULL : o == OK && out.size() == bag.size(), "MergeBag");
+    must(full ? o == HITFULL : o == OK && out.size() == bag.size(), "MergeBag");
     for (size_t i = 0; !full && i < bag.size(); i++)
         must(out[i].key == std::get<0>(bag[i]) &&
                  out[i].val == std::get<2>(bag[i]),
@@ -169,7 +169,7 @@ FUZZ(u8, HITfuzz) {
         size_t cn = n;
         o = hfSeek(lane, c.data(), &cn, seek);
         b8 any = m.lower_bound(seek) != m.end();
-        must(full ? o == FULL : o == (any ? OK : NONE), "Seek code");
+        must(full ? o == HITFULL : o == (any ? OK : HITNONE), "Seek code");
         if (full) continue;
         c.resize(cn);
         call(hf_drain, &o, out, lane, NO, c, total + 1, total);
@@ -183,7 +183,7 @@ FUZZ(u8, HITfuzz) {
         o = hfSeekRange(lane, c.data(), &cn, lo, hi);
         auto it = m.lower_bound(lo);
         b8 any = it != m.end() && it->first < hi;
-        must(full ? o == FULL : o == (any ? OK : NONE), "SeekRange code");
+        must(full ? o == HITFULL : o == (any ? OK : HITNONE), "SeekRange code");
         if (full) continue;
         c.resize(cn);
         call(hf_drain, &o, out, lane, NO, c, total + 1, total);
@@ -203,7 +203,7 @@ FUZZ(u8, HITfuzz) {
         out.resize(len);
         o = hfIntersect(c.data(), &cn, n, out.data(), &len);
         out.resize(len);
-        must(full ? o == FULL : o == OK && hf_eq(want, out), "Intersect");
+        must(full ? o == HITFULL : o == OK && hf_eq(want, out), "Intersect");
     }
     //  sIntersectMerge of the two halves, keys only
     if (n >= 2 && !full) {
@@ -238,7 +238,7 @@ FUZZ(u8, HITfuzz) {
             std::vector<hk> into(ccap + 1);
             o = hfCompact(lane, c.data(), &cn, into.data(), &len);
             if (m < 2 || tail > ccap) {
-                must(o == (m < 2 ? OK : NOROOM) && cn == n && len == 0,
+                must(o == (m < 2 ? OK : HITNOROOM) && cn == n && len == 0,
                      "Compact refused");
                 continue;
             }

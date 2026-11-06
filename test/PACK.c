@@ -58,7 +58,7 @@ ok64 PACKtestBasic() {
     // Verify data
     u8cp data = pr.pg->buf[0];
     for (int i = 0; i < PAGESIZE; i++) {
-        test(data[i] == (u8)(i & 0xFF), PACKCORRUPT);
+        test(data[i] == (u8)(i & 0xFF), PACKBAD);
     }
 
     // Read page 3 (first of second batch)
@@ -67,7 +67,7 @@ ok64 PACKtestBasic() {
 
     data = pr.pg->buf[0] + PAGESIZE * 3;
     for (int i = 0; i < PAGESIZE; i++) {
-        test(data[i] == (u8)((i + 0x33) & 0xFF), PACKCORRUPT);
+        test(data[i] == (u8)((i + 0x33) & 0xFF), PACKBAD);
     }
 
     call(PACKClose, &pr);
@@ -241,7 +241,7 @@ ok64 PACKtestOpenFail() {
 // against the file.  A page holds >=1 compressed byte, so npages can never
 // exceed the on-disk data area (fsize-16-idxsize).  Here the trailer claims
 // 100 pages but the file has ZERO data area: pre-fix PACKOpen returned OK
-// with a wild datalen (buf[2]=buf[0]+datalen); post-fix rejects PACKCORRUPT.
+// with a wild datalen (buf[2]=buf[0]+datalen); post-fix rejects PACKBAD.
 // (The same bound also guards the near-u64max ceil-div wrap.)
 ok64 PACKtestTrailerWrap() {
     sane(1);

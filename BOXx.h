@@ -86,13 +86,13 @@ fun void X(BOX, _pass)(X(, css) sel) {
 fun X(, ) **X(BOX, Mem)(X(, csb) h) { return (X(, ) **)h[3]; }
 
 //  Seal the segment into a run, then collapse the tailing runs the 1/8 ladder
-//  selects — or, with `all`, every run into one.  FULL: no free house cell;
+//  selects — or, with `all`, every run into one.  BOXFULL: no free house cell;
 //  checked first, nothing changes then.
 fun ok64 X(BOX, Sort)(X(, csb) h, b8 all) {
     BOX_T **rb = X(BOX, Mem)(h);
     X(, cs) **sb = (X(, cs) **)h;
     b8 seg = rb[2] > rb[1];
-    if (seg && sb[2] == sb[3]) return FULL;
+    if (seg && sb[2] == sb[3]) return BOXFULL;
     if (seg) {
         (*sb[2])[0] = rb[1];
         (*sb[2])[1] = rb[2];
@@ -138,15 +138,15 @@ fun ok64 X(BOX, Sort)(X(, csb) h, b8 all) {
 
 //  Insert one record into the sorted segment, an equal key folded in place
 //  (PERF-26B057V5O9); past c bytes the segment becomes a run (X(BOX,Sort)).
-//  BADARG: a Max-key row; NOROOM: the memtable has no IDLE; FULL: the seal
+//  BOXBADARG: a Max-key row; BOXNOROOM: the memtable has no IDLE; BOXFULL: the seal
 //  finds no house cell.  On an error nothing is stored.
 fun ok64 X(BOX, Put)(X(, csb) h, BOX_T const *rec) {
     BOX_T **rb = X(BOX, Mem)(h);
-    if (X(BOX, _isMax)(rec)) return BADARG;
-    if (rb[2] == rb[3]) return NOROOM;
+    if (X(BOX, _isMax)(rec)) return BOXBADARG;
+    if (rb[2] == rb[3]) return BOXNOROOM;
     X(, cs) **sb = (X(, cs) **)h;
     b8 seal = (size_t)(rb[2] + 1 - rb[1]) * sizeof(BOX_T) > ABC_BOX_SEG;
-    if (seal && sb[2] == sb[3]) return FULL;
+    if (seal && sb[2] == sb[3]) return BOXFULL;
     //  an insertion-sort step (a backward memmove is slow on musl); an equal
     //  key, rare, folds and shifts the tail back
     BOX_T *p = rb[2];
@@ -173,13 +173,13 @@ fun ok64 X(BOX, PutBatch)(X(, csb) h, X(, csc) rows) {
     X(, cs) **sb = (X(, cs) **)h;
     size_t n = (size_t)$len(rows);
     if (n == 0) return OK;
-    $for(BOX_T const, r, rows) if (X(BOX, _isMax)(r)) return BADARG;
+    $for(BOX_T const, r, rows) if (X(BOX, _isMax)(r)) return BOXBADARG;
     if (rb[2] > rb[1]) {
         ok64 o = X(BOX, Sort)(h, NO);
         if (o != OK) return o;
     }
-    if ((size_t)(rb[3] - rb[2]) < n) return NOROOM;
-    if (sb[2] == sb[3]) return FULL;
+    if ((size_t)(rb[3] - rb[2]) < n) return BOXNOROOM;
+    if (sb[2] == sb[3]) return BOXFULL;
     BOX_T *lo = rb[2];
     memcpy(lo, rows[0], n * sizeof(BOX_T));
     X(, s) batch = {lo, lo + n};
@@ -224,10 +224,10 @@ fun b8 X(BOX, _getx)(BOX_T *out, X(, csb) h, BOX_T const *key, b8 hit) {
 #endif
 
 //  Point lookup: the house DATA runs plus the segment, newest wins (or the
-//  X(,Merge) fold in age order); PAST is not BOX's.  NONE: no such key.
+//  X(,Merge) fold in age order); PAST is not BOX's.  BOXNONE: no such key.
 fun ok64 X(BOX, Get)(BOX_T *out, X(, csb) h, BOX_T const *key) {
 #ifdef ABC_X_MERGE
-    return X(BOX, _getx)(out, h, key, NO) ? OK : NONE;
+    return X(BOX, _getx)(out, h, key, NO) ? OK : BOXNONE;
 #else
     BOX_T **rb = X(BOX, Mem)(h);
     X(, sc) seg = {rb[1], rb[2]};
@@ -237,7 +237,7 @@ fun ok64 X(BOX, Get)(BOX_T *out, X(, csb) h, BOX_T const *key) {
         X(, sc) rr = {(BOX_T *)r[-1][0], (BOX_T *)r[-1][1]};
         p = X(, sBinSearch)(key, rr);
     }
-    if (!p) return NONE;
+    if (!p) return BOXNONE;
     *out = *p;
     return OK;
 #endif
@@ -253,7 +253,7 @@ fun ok64 X(BOX, Range)(X(, css) into, X(, csb) h, BOX_T const *lo,
     //  PERF-26B0577XRz: no segment, no seal (the ladder held at the last one)
     ok64 o = rb[2] > rb[1] ? X(BOX, Sort)(h, NO) : OK;
     if (o != OK) return o;
-    if (h[2] - h[1] > into[1] - into[0]) return NOROOM;
+    if (h[2] - h[1] > into[1] - into[0]) return BOXNOROOM;
     X(, cs) *w = into[0];
     for (X(, cs) const *r = h[1]; r < h[2]; r++) {
         if (!X(, Z)((*r)[0], hi) || X(, Z)((*r)[1] - 1, lo)) continue;

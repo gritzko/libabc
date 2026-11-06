@@ -1,11 +1,17 @@
 #include "B.h"
 #include "01.h"
+
+#ifndef ABC_HEAP_CODES
+#define ABC_HEAP_CODES
+con ok64 HEAPBADARG = 0x44e2992ca34a6d0;
+con ok64 HEAPNONE = 0x44e2995d85ce;
+#endif
 #define T X(, )
 
 typedef T const X(, c);
 
 fun ok64 X(, sUpAtZ)(X(, sc) heap, size_t at, X(, z) z) {
-    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return MISS;
+    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return HEAPBADARG;
     while (at) {
         size_t b = (at - 1) / 2;  // parent
         if (z(*heap + b, *heap + at)) break;
@@ -26,7 +32,7 @@ fun ok64 X(, sUpZ)(X(, sc) heap, X(, z) z) {
 }
 
 fun ok64 X(, sDownAtZ)(X(, sc) heap, size_t at, X(, z) z) {
-    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return MISS;
+    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return HEAPBADARG;
     size_t n = $len(heap);
     size_t i = at;
     do {
@@ -54,7 +60,7 @@ fun ok64 X(, sDown)(X($c, ) heap) { return X(, sDownAt)(heap, 0); }
 
 fun ok64 X(HEAP, Pop)(T *v, X(, bp) buf) {
     T **data = X(, bData)(buf);
-    if ($empty(data)) return NODATA;
+    if ($empty(data)) return HEAPNONE;
     Ocopy(v, $head(data));  //  any T, also ABC_X_$ slices (no Mv)
     X(, Swap)($head(data), $last(data));
     --$term(data);
@@ -76,7 +82,7 @@ fun ok64 X(HEAP, Push1)(X(, bp) buf, T v) {
 
 fun ok64 X(HEAP, PopZ)(T *v, X(, bp) buf, X(, z) z) {
     T **data = X(, bData)(buf);
-    if ($empty(data)) return NODATA;
+    if ($empty(data)) return HEAPNONE;
     Ocopy(v, $head(data));  //  any T, also ABC_X_$ slices (no Mv)
     X(, Swap)($head(data), $last(data));
     --$term(data);
@@ -98,7 +104,7 @@ fun ok64 X(HEAP, Push1Z)(X(, bp) buf, T v, X(, z) z) {
 
 fun ok64 X(, sEjectAtZ)(X(, sp) heap, size_t at, X(, z) z) {
     size_t len = $len(heap);
-    if (at >= len) return MISS;
+    if (at >= len) return HEAPBADARG;
     X(, Swap)(*heap + at, $last(heap));
     --$term(heap);
     if ((i64)at < $len(heap)) {
@@ -116,7 +122,7 @@ fun ok64 X(, sTopsZ)(X(, sc) heap, X(, sp) eqs, X(, z) z) {
     size_t l = $len(heap);
     // ABC-015: an empty heap has no tops; fabricating a 1-element slice
     // over nothing sent consumers out of bounds (DOG-027: HITTops returns 0)
-    if (l == 0) return MISS;
+    if (l == 0) return HEAPNONE;
     size_t eqlen = 1;
     size_t lim = 2;
     for (size_t i = 1; i < l && i <= lim; ++i) {

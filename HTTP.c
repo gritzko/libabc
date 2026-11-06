@@ -23,10 +23,10 @@ ok64 HTTPonFieldValue(u8cs tok, HTTPstate* state) {
     return u8cssFeed1(state->headers, tok);
 }
 ok64 HTTPonMessageHeader(u8cs tok, HTTPstate* state) { return OK; }
-// STD-26B068gn1w: END stops the lexer at the head's end, so the body
+// STD-26B068gn1w: HTTPEND stops the lexer at the head's end, so the body
 // and any pipelined bytes stay unparsed
-ok64 HTTPonRequestHead(u8cs tok, HTTPstate* state) { return END; }
-ok64 HTTPonResponseHead(u8cs tok, HTTPstate* state) { return END; }
+ok64 HTTPonRequestHead(u8cs tok, HTTPstate* state) { return HTTPEND; }
+ok64 HTTPonResponseHead(u8cs tok, HTTPstate* state) { return HTTPEND; }
 ok64 HTTPonBody(u8cs tok, HTTPstate* state) { return OK; }
 ok64 HTTPonRequest(u8cs tok, HTTPstate* state) { return OK; }
 ok64 HTTPonStatusCode(u8cs tok, HTTPstate* state) {
@@ -45,7 +45,7 @@ ok64 HTTPonRoot(u8cs tok, HTTPstate* state) { return OK; }
 ok64 HTTPutf8Drain(u8cs from, HTTPstate* http) {
     u8csMv(http->data, from);
     ok64 o = HTTPLexer(http);
-    if (o == END) o = OK;
+    if (o == HTTPEND) o = OK;
     // ABC-011: consume the parsed head; STD-26B068gn1w: only the head
     if (o == OK) u8csMv(from, http->data);
     return o;

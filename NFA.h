@@ -30,7 +30,8 @@ enum {
 #define NFA_CLASS_BYTES 32
 
 con ok64 NFANOROOM = 0x173ca5d86d8616;
-con ok64 NFABADSYN = 0x173ca2ca35c897;
+con ok64 NFABAD = 0x5cf28b28d;
+con ok64 NFAFULL = 0x173ca3de555;
 
 // --- Instantiate NFAx.h for u8 ---
 // ABC-015: save/restore the includer's X — NFAx.h includes NFA.h, so a
@@ -105,7 +106,7 @@ fun u8 NFAu8REsc(u8cs data, u8 esc) {
 fun void NFAu8ClsSet(u8 *bmp, u8 ch) { bmp[ch >> 3] |= (1 << (ch & 7)); }
 
 fun ok64 NFAu8Class(nfa8cc *c, nfau8f *f) {
-    if (c->ncls >= NFA_CLASS_MAX) return NFANOROOM;
+    if (c->ncls >= NFA_CLASS_MAX) return NFAFULL;
     u8 ci = c->ncls++;
     u8 *bmp = c->cls[ci];
     memset(bmp, 0, NFA_CLASS_BYTES);
@@ -175,7 +176,7 @@ fun ok64 NFAu8Class(nfa8cc *c, nfau8f *f) {
             NFAu8ClsSet(bmp, lo);
         }
     }
-    if (u8csEmpty(c->data)) return NFABADSYN;
+    if (u8csEmpty(c->data)) return NFABAD;
     u8csUsed1(c->data);
 
     if (neg)
@@ -191,25 +192,25 @@ fun ok64 NFAu8Class(nfa8cc *c, nfau8f *f) {
 static ok64 NFAu8RAlt(nfa8cc *c, nfau8f *f);
 
 fun ok64 NFAu8RAtom(nfa8cc *c, nfau8f *f) {
-    if (u8csEmpty(c->data)) return NFABADSYN;
+    if (u8csEmpty(c->data)) return NFABAD;
     u8 ch = *c->data[0];
 
     if (ch == '(') {
         u8csUsed1(c->data);
         ok64 o = NFAu8RAlt(c, f);
         if (o != OK) return o;
-        if (u8csEmpty(c->data) || *c->data[0] != ')') return NFABADSYN;
+        if (u8csEmpty(c->data) || *c->data[0] != ')') return NFABAD;
         u8csUsed1(c->data);
         return OK;
     }
     if (ch == '[') return NFAu8Class(c, f);
     if (ch == '\\') {
         u8csUsed1(c->data);
-        if (u8csEmpty(c->data)) return NFABADSYN;
+        if (u8csEmpty(c->data)) return NFABAD;
         u8 esc = *c->data[0]++;
         if (esc == 'd' || esc == 'D' || esc == 'w' || esc == 'W' ||
             esc == 's' || esc == 'S') {
-            if (c->ncls >= NFA_CLASS_MAX) return NFANOROOM;
+            if (c->ncls >= NFA_CLASS_MAX) return NFAFULL;
             u8 ci = c->ncls++;
             u8 *bmp = c->cls[ci];
             memset(bmp, 0, NFA_CLASS_BYTES);
@@ -258,7 +259,7 @@ fun ok64 NFAu8RAtom(nfa8cc *c, nfau8f *f) {
         return NFAu8CCFrag1(c, f, sid, sid, 0);
     }
     if (ch == '|' || ch == ')' || ch == '*' || ch == '+' || ch == '?')
-        return NFABADSYN;
+        return NFABAD;
 
     u8csUsed1(c->data);
     u16 sid = NFAu8CCEmit(c, NFA_LIT, ch, NFA_NONE, NFA_NONE);
@@ -277,41 +278,41 @@ fun ok64 NFAu8RCounted(nfa8cc *c, u16 *nmin, u16 *nmax) {
     b8 has_nmin = NO;
     while (!u8csEmpty(c->data) && *c->data[0] >= '0' && *c->data[0] <= '9') {
         u32 n = *nmin * 10u + (*c->data[0]++ - '0');
-        if (n >= NFA_NONE) return NFABADSYN;  // STD-26B068h31R: no wrap
+        if (n >= NFA_NONE) return NFABAD;  // STD-26B068h31R: no wrap
         *nmin = (u16)n;
         has_nmin = YES;
     }
     while (!u8csEmpty(c->data) && *c->data[0] == ' ') u8csUsed1(c->data);
-    if (u8csEmpty(c->data)) { u8csMv(c->data, save); return NFABADSYN; }
+    if (u8csEmpty(c->data)) { u8csMv(c->data, save); return NFABAD; }
     if (*c->data[0] == '}') {
-        if (!has_nmin) { u8csMv(c->data, save); return NFABADSYN; }
+        if (!has_nmin) { u8csMv(c->data, save); return NFABAD; }
         u8csUsed1(c->data);
         *nmax = *nmin;
         return OK;
     }
-    if (*c->data[0] != ',') { u8csMv(c->data, save); return NFABADSYN; }
+    if (*c->data[0] != ',') { u8csMv(c->data, save); return NFABAD; }
     u8csUsed1(c->data);
     while (!u8csEmpty(c->data) && *c->data[0] == ' ') u8csUsed1(c->data);
     b8 has_nmax = NO;
     if (!u8csEmpty(c->data) && *c->data[0] == '}') {
-        if (!has_nmin) { u8csMv(c->data, save); return NFABADSYN; }
+        if (!has_nmin) { u8csMv(c->data, save); return NFABAD; }
         u8csUsed1(c->data);
         *nmax = 0xFFFF;
         return OK;
     }
     while (!u8csEmpty(c->data) && *c->data[0] >= '0' && *c->data[0] <= '9') {
         u32 n = *nmax * 10u + (*c->data[0]++ - '0');
-        if (n >= NFA_NONE) return NFABADSYN;
+        if (n >= NFA_NONE) return NFABAD;
         *nmax = (u16)n;
         has_nmax = YES;
     }
     while (!u8csEmpty(c->data) && *c->data[0] == ' ') u8csUsed1(c->data);
     if (u8csEmpty(c->data) || *c->data[0] != '}') {
         u8csMv(c->data, save);
-        return NFABADSYN;
+        return NFABAD;
     }
     u8csUsed1(c->data);
-    if (!has_nmin && !has_nmax) { u8csMv(c->data, save); return NFABADSYN; }
+    if (!has_nmin && !has_nmax) { u8csMv(c->data, save); return NFABAD; }
     if (!has_nmin) *nmin = 0;
     if (!has_nmax) *nmax = 0xFFFF;
     return OK;
@@ -355,7 +356,7 @@ fun ok64 NFAu8RRep(nfa8cc *c, nfau8f *f) {
         u16 nmin, nmax;
         o = NFAu8RCounted(c, &nmin, &nmax);
         if (o != OK) return c->data[0] == atom_end ? OK : o;
-        if (nmax != 0xFFFF && nmax < nmin) return NFABADSYN;
+        if (nmax != 0xFFFF && nmax < nmin) return NFABAD;
         u8c *brace_end = c->data[0];
 
         if (nmin == 0 && nmax == 0) {
@@ -465,7 +466,7 @@ fun b8 NFAu8RIsAtom(u8 ch) {
 
 fun ok64 NFAu8RSeq(nfa8cc *c, nfau8f *f) {
     if (u8csEmpty(c->data) || !NFAu8RIsAtom(*c->data[0]))
-        return NFABADSYN;
+        return NFABAD;
 
     ok64 o = NFAu8RRep(c, f);
     if (o != OK) return o;
@@ -512,7 +513,7 @@ fun ok64 NFAu8Compile(nfau8g prog, u8cs pat, u32 *ws[2]) {
     nfau8f f;
     ok64 o = NFAu8RAlt(&c, &f);
     if (o != OK) return o;
-    if (!u8csEmpty(c.data)) return NFABADSYN;
+    if (!u8csEmpty(c.data)) return NFABAD;
 
     u16 n = (u16)(c.prog[1] - c.prog[0]);
     u16 mid = NFAu8Emit(c.prog, c.patch, NFA_MATCH, 0, NFA_NONE, NFA_NONE);

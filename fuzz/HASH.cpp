@@ -1,7 +1,7 @@
 //  FUZZ-26B04IZDFD: HASHx diffed against std::unordered_map.  A byte program
 //  of Put/PutGrow/Del/Get/At/erase-while-iterating/Grow/Move over u16 keys
 //  (0 included) runs on a growable table.  Every return code must match the
-//  model's prediction (FULL: the key's line holds LINE keys; NOROOM: no IDLE
+//  model's prediction (HASHFULL: the key's line holds LINE keys; HASHNOROOM: no IDLE
 //  to double into), a failed write must leave the table byte-equal to a
 //  snapshot, and table and model are compared in full once, at the end.
 //  Lanes: kv32 at the default line; sum32 at line 16 with ABC_HASH_MERGE.
@@ -103,7 +103,7 @@ struct Lane {
 
     void put(u16 k, u32 v) {
         R r = {k, v};
-        ok64 w = full(k) ? FULL : OK;
+        ok64 w = full(k) ? HASHFULL : OK;
         if (w != OK) save();
         CHECK(w == Put(D(), &r));
         if (w != OK) {
@@ -116,7 +116,7 @@ struct Lane {
         R r = {k, v};
         ok64 w = OK;
         while (w == OK && full(k)) {
-            if (2 * len > CAP) w = NOROOM;
+            if (2 * len > CAP) w = HASHNOROOM;
             else len *= 2, relines();
         }
         CHECK(w == PutGrow(tab, &r) && len == size_t(tab[2] - tab[1]));
@@ -124,7 +124,7 @@ struct Lane {
     }
     void del(u16 k) {
         R r = {k, 0};
-        ok64 w = ref.count(k) ? OK : NONE;
+        ok64 w = ref.count(k) ? OK : HASHNONE;
         if (w != OK) save();
         CHECK(w == Del(D(), &r));
         if (w != OK) {
@@ -138,7 +138,7 @@ struct Lane {
         R r = {k, 0};
         auto it = ref.find(k);
         ok64 o = Get(&r, D());
-        CHECK(o == (it == ref.end() ? NONE : OK));
+        CHECK(o == (it == ref.end() ? HASHNONE : OK));
         if (o == OK) CHECK(r.key == k && r.val == it->second);
     }
     void at(u16 k) {
@@ -146,7 +146,7 @@ struct Lane {
         R const *s = NULL;
         auto it = ref.find(k);
         ok64 o = At(&s, D(), &r);
-        CHECK(o == (it == ref.end() ? NONE : OK));
+        CHECK(o == (it == ref.end() ? HASHNONE : OK));
         if (o == OK) CHECK(s->key == k && s->val == it->second);
     }
     // HASH.md "Delete while iterating": erase the keys matching m on bits
@@ -173,13 +173,13 @@ struct Lane {
             }
             ok64 o = DelAt(d, i);
             ++got;
-            CHECK(o == (IsZero(s) ? NONE : OK));
+            CHECK(o == (IsZero(s) ? HASHNONE : OK));
             if (o != OK) ++i;
         }
         CHECK(got == want);
     }
     void grow() {
-        ok64 w = 2 * len <= CAP ? OK : NOROOM;
+        ok64 w = 2 * len <= CAP ? OK : HASHNOROOM;
         if (w != OK) save();
         CHECK(w == Grow(tab));
         if (w != OK) {
@@ -189,7 +189,7 @@ struct Lane {
         len *= 2;
         relines();
     }
-    // Move into an empty table of n slots: FULL at the first entry (in tab's
+    // Move into an empty table of n slots: HASHFULL at the first entry (in tab's
     // slot order) whose line is full, the entries before it moved, tab intact
     void move(size_t n) {
         reset(aux, n);
@@ -201,7 +201,7 @@ struct Lane {
             if (c == LINE) break;
             ++c;
         }
-        ok64 w = i < len ? FULL : OK;
+        ok64 w = i < len ? HASHFULL : OK;
         save();
         CHECK(w == Move(aux, tab) && same());
         if (w == OK) {

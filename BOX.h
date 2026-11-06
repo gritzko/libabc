@@ -3,8 +3,13 @@
 #include "HIT.h"
 #include "OK.h"
 
+con ok64 BOXBADARG = 0xb6212ca34a6d0;
+con ok64 BOXFULL = 0xb6213de555;
+con ok64 BOXNONE = 0xb6215d85ce;
+con ok64 BOXNOROOM = 0xb6215d86d8616;
+
 //  ABC-26B02JHe_k: BOXx returns the shared codes (wiki/Containers.mkd):
-//  OK, NONE, NOROOM, FULL, BADARG; see BOX.md.
+//  OK, BOXNONE, BOXNOROOM, BOXFULL, BOXBADARG; see BOX.md.
 
 //  PUPS-26B045Ffpb: the house, one X(,csb) of ABC_HIT_MAX_RUNS run cells; its
 //  term is cell 62, so cells 62..63 are the memtable X(,b) (BOX.md "Layout").

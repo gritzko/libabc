@@ -151,7 +151,7 @@ ok64 BSDtestShrink() {
 // wrap on signed i64 overflow, so the patch passes every bound and
 // drives an attacker-controlled memcpy OOB write into `neu`
 // (ASan-reproduced). A hardened BSDPatch must reject it with
-// BSDCORRUPT instead.
+// BSDBAD instead.
 
 // little-endian signed-magnitude i64, matching BSDofftout()
 static void BSDtestPutOff(i64 x, u8 *buf) {
@@ -187,7 +187,7 @@ ok64 BSDtestOverflowPatch() {
     // Must reject, not crash. (Old code: ASan OOB write in memcpy.)
     // Call directly (not via try/call) so `__` stays OK for `done`.
     ok64 o = BSDPatch(neu, old, patch);
-    same(o, BSDCORRUPT);
+    same(o, BSDBAD);
 
     done;
 }
@@ -231,7 +231,7 @@ ok64 BSDtestShortPatch() {
     u8 result[16];
     u8s neu = {result, result + sizeof(result)};
     ok64 o = BSDPatch(neu, old, patch);
-    same(o, BSDCORRUPT);
+    same(o, BSDBAD);
     done;
 }
 
@@ -250,7 +250,7 @@ ok64 BSDtestBadSeek() {
     u8 result[1];
     u8s neu = {result, result};
     ok64 o = BSDPatch(neu, old, patch);
-    same(o, BSDCORRUPT);
+    same(o, BSDBAD);
     BSDtestPutOff(-5, pbuf + 8);
     u8csc hdr = {pbuf, pbuf + 24};
     testeqv((long long)BSDPatchNewSize(hdr), 0LL, "%lld");

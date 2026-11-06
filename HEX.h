@@ -5,7 +5,6 @@
 #include "OK.h"
 
 con ok64 HEXNOROOM = 0x113a15d86d8616;
-con ok64 HEXNODATA = 0x113a15d834a74a;
 con ok64 HEXBAD = 0x44e84b28d;
 
 static $u8 BASE16 = $u8str("0123456789abcdef");

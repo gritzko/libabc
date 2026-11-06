@@ -13,10 +13,10 @@
 #include "INT.h"
 #include "URI.h"
 
-con ok64 NETBADADDR = 0x5ce74b28d28d35b;
-con ok64 NETNOSPACE = 0x5ce75761c64a30e;
-con ok64 NETNONE = 0x1739d5d85ce;
 con ok64 NETAGAIN = 0x5ce74a40a497;
+con ok64 NETBAD = 0x5ce74b28d;
+con ok64 NETBADARG = 0x1739d2ca34a6d0;
+con ok64 NETNOROOM = 0x1739d5d86d8616;
 
 typedef Bu8 NETaddr;
 #define NEThost(a) u8bPast(a)
@@ -51,12 +51,12 @@ fun ok64 NETInfo(NETaddr text, NETaddr raw) {
     int s = getnameinfo((struct sockaddr*)addr[0], $len(addr), host, NETmaxhost,
                         service, NETmaxserv, NI_NUMERICHOST | NI_NUMERICSERV);
     if (s != 0) {
-        return NETBADADDR;
+        return NETBAD;
     }
     u64 hl = strlen(host);
     u64 sl = strlen(service);
     range64 range = {hl + 1, hl + sl + 2};
-    if (Bu8rewind(text, range) != OK) return NETNOSPACE;
+    if (Bu8rewind(text, range) != OK) return NETNOROOM;
     // ABC-012: rewind only moves boundaries; copy the resolved text in
     memcpy(text[0], host, hl + 1);
     memcpy(text[1], service, sl + 1);
@@ -87,7 +87,7 @@ fun int NETSocket(int family, int type, int proto) {
 }
 
 fun ok64 NETFreeAddress(struct addrinfo** addr) {
-    if (*addr == NULL) return NETNONE;
+    if (*addr == NULL) return NETBADARG;
     freeaddrinfo(*addr);
     *addr = NULL;
     return OK;

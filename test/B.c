@@ -172,7 +172,7 @@ ok64 u8sPop_test() {
     // underflow must stay NODATA
     u8 out3[4];
     u8s into3 = {out3, out3 + 4};
-    want(NODATA == u8sPop(s, into3));
+    want(SNODATA == u8sPop(s, into3));
     done;
 }
 
@@ -211,11 +211,11 @@ ok64 gFed_test() {
     // report OK; must be a plain NOROOM with the gauge untouched
     u8 pad[8];
     u8g g = {pad, pad, pad + 8};
-    want(NOROOM == u8gFed(g, (size_t)-1));
+    want(SNOROOM == u8gFed(g, (size_t)-1));
     want(g[1] == pad);
     call(u8gFed, g, 8);
     want(g[1] == pad + 8);
-    want(NOROOM == u8gFed1(g));
+    want(SNOROOM == u8gFed1(g));
     done;
 }
 
@@ -293,10 +293,10 @@ ok64 Boverflow_test() {
     call(u8bUnMap, arena);
     Bu64 hbuf = {};
     o = u64bAllocate(hbuf, huge);
-    testeqv((long long)(o), (long long)(BALLOCFAIL), "%llx");
+    testeqv((long long)(o), (long long)(BNOMEM), "%llx");
     Bu64 mbuf = {};
     o = u64bMap(mbuf, huge);
-    testeqv((long long)(o), (long long)(MMAPFAIL), "%llx");
+    testeqv((long long)(o), (long long)(BNOMEM), "%llx");
     done;
 }
 

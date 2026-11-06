@@ -77,7 +77,7 @@ ok64 SWISS0() {
     call(kv64bMap, t, 1024);
     call(SWISSkv64Init, t, 16);
     kv64 z = {}, q = {};
-    want(NONE == SWISSkv64Get(&q, t));
+    want(SWISNONE == SWISSkv64Get(&q, t));
     call(SWISSkv64Put, t, &z);
     call(SWISSkv64Get, &q, t);
     for (u64 i = 1; i < 14; ++i) {
@@ -85,19 +85,19 @@ ok64 SWISS0() {
         call(SWISSkv64Put, t, &r);
     }
     kv64 x = {99, 1};
-    want(FULL == SWISSkv64Put(t, &x));  // 14 = 7/8 of 16
-    want(NONE == SWISSkv64Get(&x, t));
+    want(SWISFULL == SWISSkv64Put(t, &x));  // 14 = 7/8 of 16
+    want(SWISNONE == SWISSkv64Get(&x, t));
     kv64 o = {5, 77};
     call(SWISSkv64Put, t, &o);  // overwrite fits
     o.val = 0;
     call(SWISSkv64Get, &o, t);
     want(o.val == 77);
     call(SWISSkv64Del, t, &z);
-    want(NONE == SWISSkv64Del(t, &z));
-    want(NONE == SWISSkv64Get(&z, t));
+    want(SWISNONE == SWISSkv64Del(t, &z));
+    want(SWISNONE == SWISSkv64Get(&z, t));
     call(SWISSkv64Put, t, &x);  // the freed room
-    want(BADARG == SWISSkv64Init(t, 24));
-    want(NOROOM == SWISSkv64Init(t, 1024));
+    want(SWISBADARG == SWISSkv64Init(t, 24));
+    want(SWISNOROOM == SWISSkv64Init(t, 1024));
     call(kv64bUnMap, t);
     done;
 }
@@ -117,9 +117,9 @@ ok64 SWISSnoinit() {
     want(FAILSANITY == SWISSkv64Get(&r, t));
     want(FAILSANITY == SWISSkv64At(&c, t, &r));
     want(FAILSANITY == SWISSkv64Del(t, &r));
-    want(NONE == SWISSkv64DelAt(t, 0));
-    want(NONE == SWISSkv64Next(&i, t));
-    want(BADARG == SWISSkv64Grow(t));
+    want(SWISNONE == SWISSkv64DelAt(t, 0));
+    want(SWISNONE == SWISSkv64Next(&i, t));
+    want(SWISBADARG == SWISSkv64Grow(t));
     call(kv64bUnMap, t);
     done;
 }
@@ -150,7 +150,7 @@ ok64 SWISSgrow() {
     for (u64 i = 0; i < N; ++i) {
         kv128 r = {.key = {._64 = {i, ~i}}};
         ok64 o = SWISSkv128Get(&r, t);
-        want(o == (i & 1 ? OK : NONE));
+        want(o == (i & 1 ? OK : SWISNONE));
         if (o == OK) want(r.val._64[0] == i);
     }
     size_t live = 0;
@@ -169,7 +169,7 @@ ok64 SWISSprobe() {
     for (u64 i = 1; i <= 1000; ++i) {
         big64 r = {.key = i};
         big64 *s = NULL;
-        want(NONE == SWISSbig64ProbeGrow(&s, t, &r));
+        want(SWISNONE == SWISSbig64ProbeGrow(&s, t, &r));
         want(s->key == 0 && s->pad[3] == 0);
         if (i % 3) {
             *s = r;
@@ -183,18 +183,18 @@ ok64 SWISSprobe() {
         big64 const *s = NULL;
         big64 *p = NULL;
         ok64 o = SWISSbig64At(&s, t, &r);
-        want(o == (i % 3 ? OK : NONE));
+        want(o == (i % 3 ? OK : SWISNONE));
         if (o != OK) continue;
         want(s->pad[0] == i);
         want(OK == SWISSbig64Probe(&p, t, &r) && p == s);
     }
     call(SWISSbig64Grow, t);
-    want(NOROOM == SWISSbig64Grow(t));  // 4096 records map < 4096 slots
+    want(SWISNOROOM == SWISSbig64Grow(t));  // 4096 records map < 4096 slots
     call(big64bUnMap, t);
     done;
 }
 
-//  erase while iterating, SWISS.md: nothing moves, DelAt says NONE
+//  erase while iterating, SWISS.md: nothing moves, DelAt says SWISNONE
 ok64 SWISSdelat() {
     sane(1);
     Bkv64 t = {};
@@ -205,7 +205,7 @@ ok64 SWISSdelat() {
         call(SWISSkv64PutGrow, t, &r);
     }
     for (size_t i = 0; OK == SWISSkv64Next(&i, t); ++i)
-        if (!(t[1][i].key % 3)) want(NONE == SWISSkv64DelAt(t, i));
+        if (!(t[1][i].key % 3)) want(SWISNONE == SWISSkv64DelAt(t, i));
     size_t live = 0;
     for (size_t i = 0; OK == SWISSkv64Next(&i, t); ++i, ++live)
         want(t[1][i].key % 3);
@@ -213,7 +213,7 @@ ok64 SWISSdelat() {
     done;
 }
 
-//  Move into bigger and smaller tables; FULL keeps the prefix; Merge
+//  Move into bigger and smaller tables; SWISFULL keeps the prefix; Merge
 ok64 SWISSmove() {
     sane(1);
     Bkv64 a = {}, b = {}, c = {};
@@ -233,11 +233,11 @@ ok64 SWISSmove() {
         want(r.val == i);
     }
     call(SWISSkv64Init, c, 256);  // 224 fit
-    want(FULL == SWISSkv64Move(c, a));
+    want(SWISFULL == SWISSkv64Move(c, a));
     size_t live = 0;
     for (size_t i = 0; OK == SWISSkv64Next(&i, c); ++i) ++live;
     want(live == 224);
-    want(BADARG == SWISSkv64Move(a, a));
+    want(SWISBADARG == SWISSkv64Move(a, a));
     Bsum128 s = {};
     call(sum128bMap, s, 64);
     call(SWISSsum128Init, s, 16);

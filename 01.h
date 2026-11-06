@@ -113,15 +113,15 @@ con ok64 NOROOM = 0x5d86d8616;
 con ok64 NONE = 0x5d85ce;
 con ok64 FULL = 0x3de555;  //  a structural limit: a full line, page, run slot
 con ok64 NOEQ = 0x5d839a;
-con ok64 NOTIMPLYET = 0x5d875259956239d;
 con ok64 BADARG = 0x2ca34a6d0;
 con ok64 BADPOS = 0x2ca35961c;
-con ok64 FAILMISS = 0x3ca49559271c;
-con ok64 BADRANGE = 0x2ca35b29740e;
-con ok64 BADSTAT = 0xb28d71d29d;
-con ok64 MISS = 0x59271c;
+#define BADRANGE SBADARG  // CODE-26B068XgTv: one-release alias
 
 con ok64 SNOROOM = 0x1c5d86d8616;
+con ok64 SBADARG = 0x1c2ca34a6d0;
+con ok64 INTBAD = 0x49774b28d;
+con ok64 SNODATA = 0x1c5d834a74a;
+con ok64 SNONE = 0x1c5d85ce;
 
 #define WORDS(k)        \
     union {             \
@@ -421,7 +421,7 @@ fun ok64 utf8sFeed10(u8 **dec, u64 x) {
 }
 
 fun ok64 u64decdrain(u64 *x, u8c **dec) {
-    if (*dec >= dec[1] || **dec < '0' || **dec > '9') return BADARG;
+    if (*dec >= dec[1] || **dec < '0' || **dec > '9') return INTBAD;
     u64 a = **dec - '0';
     ++*dec;
     while (*dec < dec[1]) {

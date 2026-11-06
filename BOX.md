@@ -38,7 +38,7 @@ The key view of the depot's wiki/Containers.mkd: `X(,Z)` the key order,
 `X(,KeyEq)` key equality, `X(,Max)` the greatest key under Z (all-ones
 unsigned, INT_MAX signed, +INF float; NaN keys are banned).  A row with
 the Max key is the tombstone: no real record carries that key, Put
-refuses it (`BADARG`), tested by key via Z, never by memcmp.  Bx, QSORTx
+refuses it (`BOXBADARG`), tested by key via Z, never by memcmp.  Bx, QSORTx
 are instantiated for T first; BOXx.h includes its own HITx.h.
 
 ##  API
@@ -47,19 +47,19 @@ Codes are the shared ones (01.h).  A failed write stores nothing.
 
   - `Put(h, &rec)`: insert into the sorted segment, an equal key folded
     in place; past `ABC_BOX_SEG` bytes the segment becomes a run
-    (`Sort`).  `BADARG` a Max-key row, `NOROOM`
+    (`Sort`).  `BOXBADARG` a Max-key row, `BOXNOROOM`
     the memtable has no IDLE (the owner commits, grows or moves it),
-    `FULL` the seal finds no free cell.
+    `BOXFULL` the seal finds no free cell.
   - `PutBatch(h, rows)`: seal the segment, then the `X(,csc)` batch is
     ONE run (qsort, equal keys folded in no particular order); codes as Put.
   - `Sort(h, all)`: seal the segment into a run, collapse the tailing
-    runs the 1/8 ladder selects, or all of them with `all`.  `FULL` as
+    runs the 1/8 ladder selects, or all of them with `all`.  `BOXFULL` as
     Put, checked before anything changes.
   - `Get(&out, h, &key)`: point lookup over the DATA runs and the
-    segment, the youngest row wins (or the `X(,Merge)` fold); `NONE`.
+    segment, the youngest row wins (or the `X(,Merge)` fold); `BOXNONE`.
   - `Range(into, h, &lo, &hi)`: seal, then fill `into` (a slice of run
     slices) with every DATA run trimmed to `[lo, hi)`, a HITx input as it
-    is; `NOROOM` if `into` is shorter than the run count.
+    is; `BOXNOROOM` if `into` is shorter than the run count.
   - `Mem(h)`: the memtable buffer, for the owner's `bMap`/`bUnMap`.
 
 Equal keys: the younger row wins, unless `ABC_X_MERGE` is defined; then

@@ -7,6 +7,7 @@
 
 con ok64 ZINTNOROOM = 0x8d25dd5d86d8616;
 con ok64 ZINTBAD = 0x2349774b28d;
+con ok64 ZINTBADARG = 0x8d25dd2ca34a6d0;
 
 con u64 B1 = 0xff;
 con u64 B2 = 0xffff;
@@ -90,7 +91,7 @@ fun ok64 ZINTu128drain(u128* a, u8cs from) {
 }
 
 fun ok64 ZINTu128feed($u8 into, u128c* a) {
-    if (!$ok(into)) return ZINTNOROOM;  // Feed128 checks the exact room
+    if (!$ok(into)) return ZINTBADARG;  // Feed128 checks the exact room
     u64 big = a->_64[0];
     u64 lil = a->_64[1];
     return ZINTu8sFeed128(into, big, lil);

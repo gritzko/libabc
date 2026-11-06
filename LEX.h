@@ -3,8 +3,9 @@
 
 #include "BUF.h"
 
-con ok64 LEXFAIL = 0x153a13ca495;
-con ok64 LEXNOROOM = 0x153a15d86d8616;
+con ok64 LEXBADARG = 0x153a12ca34a6d0;
+con ok64 LEXFULL = 0x153a13de555;
+con ok64 LEXBAD = 0x54e84b28d;
 
 #define LEXenum 0
 

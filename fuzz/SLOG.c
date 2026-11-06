@@ -125,9 +125,9 @@ FUZZ(u64, SLOGfuzz) {
 
         // Seek
         o = SLOGSeek(stkdi, stream, numStrLess, tgt);
-        if (o == SLOGMISS) {
+        if (o == SLOGNONE) {
             // Should find at least the value itself
-            must(0, "SLOGSeek MISS for existing value");
+            must(0, "SLOGSeek NONE for existing value");
         }
         must(o == OK, "SLOGSeek failed");
 

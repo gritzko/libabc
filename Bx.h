@@ -95,7 +95,7 @@ fun size_t X(, bIdx)(X(, b) buf, X(, cp) p) {
 fun T X(, bAt)(X(, b) buf, size_t ndx) { return *X(, bAtP)(buf, ndx); }
 
 fun ok64 X(, bFedP)(X(, b) b, X(, p) * p) {
-    if (b[2] >= b[3]) return NOROOM;
+    if (b[2] >= b[3]) return BNOROOM;
     *p = ((T **)b)[2]++;
     return OK;
 }
@@ -161,13 +161,13 @@ fun T *X(, bLast)(X(, b) buf) {
 
 fun ok64 X(, bAllocate)(X(, bp) buf, size_t len) {
     // ABC-006: refuse len*sizeof(T) wraparound instead of allocating a sliver
-    if (len > SIZE_MAX / sizeof(T)) return BALLOCFAIL;
+    if (len > SIZE_MAX / sizeof(T)) return BNOMEM;
     size_t sz = len * sizeof(T);
     // JAB-032: publish the block through the buffer's OWN type; Balloc's
     // u8 ** laundering let strict aliasing zero a stale (NULL) head.
     if (!BNULL(buf)) return BNOTNULL;
     T *p = (T *)malloc(sz);
-    if (p == NULL) return BALLOCFAIL;
+    if (p == NULL) return BNOMEM;
     T **b = (T **)buf;
     b[0] = b[1] = b[2] = p;
     b[3] = p + len;
@@ -190,14 +190,14 @@ fun ok64 X(, bPush)(X(, bp) buf, X(, cp) one) {
 #ifndef ABC_X_$
 fun ok64 X(, bPushed)(X(, bp) buf, X(, pp) pp) {
     T **idle = X(, bIdle)(buf);
-    if (!$len(idle)) return NOROOM;
+    if (!$len(idle)) return BNOROOM;
     *pp = *idle;
     ++*idle;
     return OK;
 }
 fun ok64 X(, bTop)(X(, bp) buf, X(, pp) pp) {
     T **data = X(, bData)(buf);
-    if ($empty(data)) return NODATA;
+    if ($empty(data)) return BNODATA;
     *pp = data[1] - 1;
     return OK;
 }
@@ -273,7 +273,7 @@ fun void X(, bHandOver)(X(, b) dst, X(, b) src) {
 
 fun ok64 X(B, rewind)(X(B, ) buf, range64 range) {
     size_t len = Blen(buf);
-    if (range.till < range.from || range.till > len) return BADRANGE;
+    if (range.till < range.from || range.till > len) return BBADARG;
     T **b = (T **)buf;
     b[1] = b[0] + range.from;
     b[2] = b[0] + range.till;
@@ -281,7 +281,7 @@ fun ok64 X(B, rewind)(X(B, ) buf, range64 range) {
 }
 
 fun ok64 X(, bPop)(X(, b) buf) {
-    if (buf[2] <= buf[1]) return NODATA;
+    if (buf[2] <= buf[1]) return BNODATA;
     T const **b = (T const **)buf;
     --b[2];
     return OK;
@@ -294,11 +294,11 @@ fun ok64 X(, bPop)(X(, b) buf) {
 
 fun ok64 X(, bMap)(X(, b) buf, size_t len) {
     // ABC-006: refuse len*sizeof(T) wraparound instead of mapping a sliver
-    if (len > SIZE_MAX / sizeof(T)) return MMAPFAIL;
+    if (len > SIZE_MAX / sizeof(T)) return BNOMEM;
     size_t size = len * sizeof(T);
     T *map = (T *)mmap(NULL, size, PROT_READ | PROT_WRITE,
                        MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-    if (map == MAP_FAILED) return MMAPFAIL;
+    if (map == MAP_FAILED) return BNOMEM;
     T **b = (T **)buf;
     b[0] = b[1] = b[2] = b[3] = map;
     b[3] += len;
@@ -306,22 +306,22 @@ fun ok64 X(, bMap)(X(, b) buf, size_t len) {
 }
 
 fun ok64 X(, bReMap)(X(, bp) buf, size_t new_len) {
-    if (BNULL(buf) || new_len == 0) return BADARG;
+    if (BNULL(buf) || new_len == 0) return BBADARG;
     size_t old_size = X(, bSize)(buf);
     size_t new_size = new_len * sizeof(T);
 #ifdef MREMAP_MAYMOVE
     u8 *new_mem =
         (u8 *)mremap((void *)buf[0], old_size, new_size, MREMAP_MAYMOVE);
-    if (new_mem == MAP_FAILED) return MMAPFAIL;
+    if (new_mem == MAP_FAILED) return BNOMEM;
 #else
     void *new_mem = mmap(NULL, new_size, PROT_READ | PROT_WRITE,
                          MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-    if (new_mem == MAP_FAILED) return MMAPFAIL;
+    if (new_mem == MAP_FAILED) return BNOMEM;
     // ABC-006: on shrink copy only what fits — old_size overran the new map
     memmove(new_mem, (void *)buf[0],
             old_size < new_size ? old_size : new_size);
     int rc = munmap((void *)buf[0], old_size);
-    if (rc != 0) return MMAPFAIL;
+    if (rc != 0) return BFAIL;
 #endif
     T **b = (T **)buf;
     size_t l1 = b[1] - b[0];
@@ -337,7 +337,7 @@ fun ok64 X(, bReMap)(X(, bp) buf, size_t new_len) {
 
 fun ok64 X(, bUnMap)(X(, b) buf) {
     if (unlikely(buf == NULL || *buf == NULL)) return FAILSANITY;
-    if (-1 == munmap((void *)buf[0], Bsize(buf))) return MMAPFAIL;
+    if (-1 == munmap((void *)buf[0], Bsize(buf))) return BFAIL;
     void **b = (void **)buf;
     b[0] = b[1] = b[2] = b[3] = NULL;
     return OK;
@@ -351,7 +351,7 @@ fun ok64 X(, bShift)(X(, b) buf, size_t pastlen) {
         Breset(buf);
         return OK;
     }
-    if (unlikely((i64)(pastlen + datalen) > Blen(buf))) return NOROOM;
+    if (unlikely((i64)(pastlen + datalen) > Blen(buf))) return BNOROOM;
     T *to = buf[0] + pastlen;
     memmove((void *)(to), (void *)(buf[1]), BDataSize(buf));
     ((T **)buf)[1] = to;
@@ -363,7 +363,7 @@ fun ok64 X(, bSplice)(X(, bp) buf, size_t off, size_t cut, X(, csc) paste) {
     if (!Bok(buf) || !X(, csOK)(paste)) return FAILSANITY;
     if (X(, bDataLen)(buf) < off + cut ||
         X(, bIdleLen)(buf) + cut < X(, csLen)(paste))
-        return BADRANGE;
+        return BBADARG;
     // ABC-006: off/cut/paste are ELEMENT counts — move T-scaled, not bytes
     T *b = ((T **)buf)[1];
     memmove((void *)(b + off + $len(paste)), (void *)(b + off + cut),

@@ -16,7 +16,7 @@ ok64 PAGEInit(u32 maxpages) {
     sane(maxpages > 0);
 
     PAGE_REGISTRY = calloc(maxpages, sizeof(page));
-    test(PAGE_REGISTRY != NULL, PAGENOROOM);
+    test(PAGE_REGISTRY != NULL, PAGENOMEM);
     PAGE_REGISTRY_LEN = maxpages;
 
     done;
@@ -33,7 +33,7 @@ ok64 PAGECreate(pagep *newpage, u64 maxlen, pagef ensure, void *ctx) {
             break;
         }
     }
-    test(p != NULL, PAGENOROOM);
+    test(p != NULL, PAGENOMEM);
 
     // Round up to page boundary
     u64 npages = (maxlen + PAGESIZE - 1) / PAGESIZE;
@@ -48,7 +48,7 @@ ok64 PAGECreate(pagep *newpage, u64 maxlen, pagef ensure, void *ctx) {
     u64 *idx = calloc(npages + 1, sizeof(u64));
     if (idx == NULL) {
         munmap(buf, buflen);
-        fail(PAGENOROOM);
+        fail(PAGENOMEM);
     }
 
     // Init struct (cast to assign to const pointers)
@@ -254,7 +254,7 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) fail(FILEAGAIN);
                 fail(FILEErr(FILEFAIL));
             }
-            if (n == 0) return END;
+            if (n == 0) return PAGEEND;
             *idle += n;
         }
     }

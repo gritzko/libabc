@@ -13,8 +13,8 @@
 #include "HASHx.h"
 #undef X
 
-// HASH-26B034Benh: a presence model predicts every code (FULL: 16 live, one
-// line); a FULL Put makes the layout order-dependent, so *full skips the diff
+// HASH-26B034Benh: a presence model predicts every code (HASHFULL: 16 live, one
+// line); a HASHFULL Put makes the layout order-dependent, so *full skips the diff
 fun ok64 Play($u32 dict, u8 const *ins, size_t Size, b8 *full) {
     sane(1);
     b8 has[128] = {};
@@ -24,12 +24,12 @@ fun ok64 Play($u32 dict, u8 const *ins, size_t Size, b8 *full) {
         if (ins[i] == 0 || ins[i] == 128) break;
         u32 rec = ins[i] & 127;
         if (ins[i] < 128) {
-            ok64 w = has[rec] || live < 16 ? OK : FULL;
+            ok64 w = has[rec] || live < 16 ? OK : HASHFULL;
             test(w == HASHu32Put(dict, &rec), TESTFAIL);
-            if (w == FULL) *full = YES;
+            if (w == HASHFULL) *full = YES;
             else if (!has[rec]) has[rec] = YES, ++live;
         } else {
-            test((has[rec] ? OK : NONE) == HASHu32Del(dict, &rec), TESTFAIL);
+            test((has[rec] ? OK : HASHNONE) == HASHu32Del(dict, &rec), TESTFAIL);
             if (has[rec]) has[rec] = NO, --live;
         }
     }

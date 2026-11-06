@@ -209,7 +209,7 @@ ok64 CURLGet(const char *url, CURLcb cb, void *userdata) {
 }
 
 ok64 CURLGetTimed(const char *url, u32 connect_ms, CURLcb cb, void *userdata) {
-    if (!curl_multi) return CURLBAD;
+    if (!curl_multi) return CURLBADARG;
 
     CURLreq *req = (CURLreq *)calloc(1, sizeof(CURLreq));
     if (!req) return CURLFAIL;
@@ -232,7 +232,7 @@ ok64 CURLGetTimed(const char *url, u32 connect_ms, CURLcb cb, void *userdata) {
 
 ok64 CURLPost(const char *url, u8cs body, const char *content_type,
               CURLcb cb, void *userdata) {
-    if (!curl_multi) return CURLBAD;
+    if (!curl_multi) return CURLBADARG;
 
     CURLreq *req = (CURLreq *)calloc(1, sizeof(CURLreq));
     if (!req) return CURLFAIL;

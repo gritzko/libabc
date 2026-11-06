@@ -73,10 +73,10 @@ fun void X(HIT, Eject)(X(, csps) heap, size_t at) {
 }
 
 // --- Load: compact `runs` IN PLACE, build the pointer heap over it ---
-// DOG-027: empties drop out of `runs`, runs[1] moves back; past the cap: FULL.
+// DOG-027: empties drop out of `runs`, runs[1] moves back; past the cap: HITFULL.
 
 fun ok64 X(HIT, Load)(X(, cspb) heap, X(, css) runs) {
-    if ($len(runs) > heap[3] - heap[0]) return FULL;
+    if ($len(runs) > heap[3] - heap[0]) return HITFULL;
     heap[1] = heap[2] = heap[0];
     HIT_E *w = runs[0];
     for (HIT_E *r = runs[0]; r < runs[1]; r++) {
@@ -141,7 +141,7 @@ fun void X(HIT, AdvanceTops)(X(, csps) heap, size_t ntops) {
 }
 
 // --- MergeBag: drain heap into `into` (destination first, ABC-26B02JHe_k) ---
-// ABC-015: sorted, duplicates kept, head advances; NOROOM when `into` fills.
+// ABC-015: sorted, duplicates kept, head advances; HITNOROOM when `into` fills.
 
 fun ok64 X(HIT, MergeBag)(X(, s) into, X(, css) runs) {
     a_pad(X(, csp), slots, ABC_HIT_MAX_RUNS);
@@ -149,7 +149,7 @@ fun ok64 X(HIT, MergeBag)(X(, s) into, X(, css) runs) {
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while (!$empty(heap)) {
-        if ($empty(into)) return NOROOM;
+        if ($empty(into)) return HITNOROOM;
         *into[0]++ = *(*heap[0])[0];
         X(HIT, Step)(heap);
     }
@@ -179,7 +179,7 @@ fun void X(HIT, _fold)(HIT_T *acc, X(, csps) heap, size_t ntops) {
 #endif
 
 //  PERF-26B057RaB9: the last two runs, `a` the older, merged with no branch
-//  on distinct keys; one run left is copied.  NOROOM when `into` fills.
+//  on distinct keys; one run left is copied.  HITNOROOM when `into` fills.
 fun ok64 X(HIT, _two)(X(, s) into, X(, csp) a, X(, csp) b) {
     HIT_T const *p = a[0], *pe = a[1], *q = b[0], *qe = b[1];
     if (a == b) q = qe;
@@ -206,7 +206,7 @@ fun ok64 X(HIT, _two)(X(, s) into, X(, csp) a, X(, csp) b) {
     memcpy(o, h, n * sizeof(HIT_T));
     into[0] = o + n;
     r[0] = h + n;
-    return r[0] == r[1] ? OK : NOROOM;
+    return r[0] == r[1] ? OK : HITNOROOM;
 }
 
 fun ok64 X(HIT, Merge)(X(, s) into, X(, css) runs) {
@@ -215,7 +215,7 @@ fun ok64 X(HIT, Merge)(X(, s) into, X(, css) runs) {
     ok64 lo = X(HIT, Load)(slots, runs);
     if (lo != OK) return lo;
     while ($len(heap) > 2) {
-        if ($empty(into)) return NOROOM;
+        if ($empty(into)) return HITNOROOM;
         //  PERF-26B057RaB9: the top's rows below both children's heads have
         //  no equals, a streak out with one compare per row
         X(, csp) t = heap[0][0], c = heap[0][1];
@@ -258,7 +258,7 @@ fun ok64 X(HIT, Intersect)(X(, s) into, X(, css) runs, size_t nruns) {
         size_t ntops = X(HIT, Tops)(heap);
         HIT_T val = *(*heap[0])[0];
         if (ntops >= nruns) {
-            if ($empty(into)) return NOROOM;
+            if ($empty(into)) return HITNOROOM;
             *into[0]++ = val;
         }
         X(HIT, AdvanceTops)(heap, ntops);
@@ -286,14 +286,14 @@ fun ok64 X(HIT, Seek)(X(, css) runs, X(, cp) key) {
         }
         X(HIT, Down)(heap, 0);
     }
-    return $empty(heap) ? NONE : OK;  // DOG-027: the heap is the live set
+    return $empty(heap) ? HITNONE : OK;  // DOG-027: the heap is the live set
 }
 
 // --- SeekRange: trim all entries to [lo, hi), eject empty; a drain (Load +
 // Step) then emits them in order with no prefix checks ---
 
 fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
-    if ($len(heap) > ABC_HIT_MAX_RUNS) return FULL;  // DOG-027: uniform cap
+    if ($len(heap) > ABC_HIT_MAX_RUNS) return HITFULL;  // DOG-027: uniform cap
     HIT_E *w = heap[0];
     for (HIT_E *r = heap[0]; r < heap[1]; r++) {
         if ($empty(*r)) continue;
@@ -306,7 +306,7 @@ fun ok64 X(HIT, SeekRange)(X(, css) heap, X(, cp) lo, X(, cp) hi) {
         }
     }
     heap[1] = w;
-    if ($empty(heap)) return NONE;
+    if ($empty(heap)) return HITNONE;
     return OK;
 }
 
@@ -411,7 +411,7 @@ fun ok64 X(HIT, sIntersectMerge)(X(, s) into, X(, csss) oheap) {
         HIT_T val = *X(HIT, _cssTop)($atp(oheap, 0));
 
         if (ntops >= nruns) {
-            if ($empty(into)) return NOROOM;
+            if ($empty(into)) return HITNOROOM;
             *into[0]++ = val;
         }
 
@@ -452,12 +452,12 @@ fun size_t X(HIT, CompactRuns)(X(, css) stack) {
 
 fun ok64 X(HIT, Compact)(X(, css) stack, X(, s) into) {
     size_t n = $len(stack);
-    if (n > ABC_HIT_MAX_RUNS) return FULL;  // DOG-027: uniform cap
+    if (n > ABC_HIT_MAX_RUNS) return HITFULL;  // DOG-027: uniform cap
     size_t m = X(HIT, CompactRuns)(stack);
     if (m < 2) return OK;
     size_t total = 0;
     for (size_t i = n - m; i < n; i++) total += (size_t)$len(stack[0][i]);
-    if ($len(into) < (i64)total) return NOROOM;
+    if ($len(into) < (i64)total) return HITNOROOM;
     HIT_T *base = *into;
     X(, css) sub = {stack[0] + (n - m), stack[0] + n};
     ok64 o = X(HIT, Merge)(into, sub);

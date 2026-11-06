@@ -112,7 +112,7 @@ static ok64 JSONfmtLiteral(u8cs tok, void *ctx) {
 static ok64 JSONfmtOpenObject(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
-    test(f->depth < JSON_MAX_NEST, JSONBAD);
+    test(f->depth < JSON_MAX_NEST, JSONFULL);
     call(JSONfmtPre, f);
     call(u8sFeed1, f->out, '{');
     ++f->depth;
@@ -136,7 +136,7 @@ static ok64 JSONfmtCloseObject(u8cs tok, void *ctx) {
 static ok64 JSONfmtOpenArray(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
-    test(f->depth < JSON_MAX_NEST, JSONBAD);
+    test(f->depth < JSON_MAX_NEST, JSONFULL);
     call(JSONfmtPre, f);
     call(u8sFeed1, f->out, '[');
     ++f->depth;
@@ -254,7 +254,7 @@ fun ok64 JSONu16Drain(u64 *cp, u8cs txt) {
 // RFC 8259 §7: a surrogate pair is one 12-byte escape of one code point;
 // lone or mis-ordered surrogates are refused (JSON-26B065isnm)
 ok64 JSONUnEscape(u8s tlv, u8cs txt) {
-    if ($empty(tlv)) return NOROOM;
+    if ($empty(tlv)) return JSONNOROOM;
     if ($empty(txt)) return JSONBAD;
     if (**txt != '\\') {
         **tlv = **txt;
@@ -317,6 +317,6 @@ ok64 JSONUnEscapeAll(u8s tlv, u8cs txt) {
         ok64 o = JSONUnEscape(tlv, txt);
         if (o != OK) return o;
     }
-    if (!$empty(txt)) return NOROOM;
+    if (!$empty(txt)) return JSONNOROOM;
     return OK;
 }

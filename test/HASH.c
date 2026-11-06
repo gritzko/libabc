@@ -63,8 +63,8 @@ ok64 HASH0() {
     call(HASHu32Put, pad_idle, &one);
     call(HASHu32Get, &one, pad_idle);
     call(HASHu32Del, pad_idle, &one);
-    want(NONE == HASHu32Get(&one, pad_idle));
-    want(NONE == HASHu32Del(pad_idle, &one));
+    want(HASHNONE == HASHu32Get(&one, pad_idle));
+    want(HASHNONE == HASHu32Del(pad_idle, &one));
     done;
 }
 
@@ -78,7 +78,7 @@ ok64 HASH1() {
     for (u32 i = 2; i < 1000; i += 2) {
         u32 n = i;
         ok64 o = HASHu32Get(&n, pad_idle);
-        want(NONE == o);
+        want(HASHNONE == o);
     }
     for (u32 i = 1; i < 1000; i += 2) {
         u32 v = i;
@@ -91,7 +91,7 @@ ok64 HASH1() {
     }
     for (u32 i = 1; i < 1000; i += 4) {
         u32 n = i;
-        want(NONE == HASHu32Get(&n, pad_idle));
+        want(HASHNONE == HASHu32Get(&n, pad_idle));
     }
     for (u32 i = 3; i < 1000; i += 4) {
         u32 v = i;
@@ -124,7 +124,7 @@ ok64 HASH3() {
     a.val = 0;
     call(HASHkv32Get, &a, dict);
     testeqv((long long)(a.val), (long long)(2), "%lld");
-    mute(HASHkv32Get(&b, dict), NONE);
+    mute(HASHkv32Get(&b, dict), HASHNONE);
 
     kv32bFree(dictbuf);
     done;
@@ -261,8 +261,8 @@ ok64 HASHgrow() {
     call(u32bFed, buf, 16);
     u32 grows = 0;
     for (u32 i = 1; i <= 5000; ++i) {
-        // HASH-26B02GiUYZ: a NOROOM Put loses nothing, Grow and retry
-        while (FULL == HASHu32Put(u32bData(buf), &i)) {
+        // HASH-26B02GiUYZ: a HASHNOROOM Put loses nothing, Grow and retry
+        while (HASHFULL == HASHu32Put(u32bData(buf), &i)) {
             size_t was = u32bDataLen(buf);
             call(HASHu32Grow, buf);
             want(u32bDataLen(buf) > was);
@@ -277,12 +277,12 @@ ok64 HASHgrow() {
         want(v == i);
     }
     u32 n = 5001;
-    want(NONE == HASHu32Get(&n, u32bData(buf)));
+    want(HASHNONE == HASHu32Get(&n, u32bData(buf)));
     for (u32 i = 1; i <= 5000; i += 2) call(HASHu32Del, u32bData(buf), &i);
     call(HASHu32Grow, buf);  // deleted entries must not come back
     for (u32 i = 1; i <= 5000; ++i) {
         u32 v = i;
-        want((i & 1 ? NONE : OK) == HASHu32Get(&v, u32bData(buf)));
+        want((i & 1 ? HASHNONE : OK) == HASHu32Get(&v, u32bData(buf)));
     }
     call(u32bUnMap, buf);
     done;
@@ -312,14 +312,14 @@ ok64 HASHputgrow() {
     done;
 }
 
-// HASH-26A274tV3C: Probe hit/miss/fill on kv64; a full line is NOROOM
+// HASH-26A274tV3C: Probe hit/miss/fill on kv64; a full line is HASHNOROOM
 ok64 HASHprobe() {
     sane(1);
     a_pad(kv64, pad, 64);
     zerob(pad);
     kv64 *slot = NULL;
     kv64 r = {.key = 5, .val = 50};
-    want(NONE == HASHkv64Probe(&slot, pad_idle, &r));
+    want(HASHNONE == HASHkv64Probe(&slot, pad_idle, &r));
     want(slot != NULL && slot->key == 0 && slot->val == 0);
     *slot = r;
     kv64 q = {.key = 5, .val = 99};
@@ -333,12 +333,12 @@ ok64 HASHprobe() {
     kv64 p = {.key = 6, .val = 60};
     call(HASHkv64Put, pad_idle, &p);
     want(OK == HASHkv64Probe(&hit, pad_idle, &p) && hit->val == 60);
-    // one line (16 slots): 16 keys fit, the 17th is NOROOM, slot untouched
+    // one line (16 slots): 16 keys fit, the 17th is HASHNOROOM, slot untouched
     a_pad(kv64, line, 16);
     zerob(line);
     for (u64 k = 1; k <= 16; ++k) {
         kv64 x = {.key = k, .val = k * 3};
-        want(NONE == HASHkv64Probe(&slot, line_idle, &x));
+        want(HASHNONE == HASHkv64Probe(&slot, line_idle, &x));
         *slot = x;
     }
     for (u64 k = 1; k <= 16; ++k) {
@@ -347,7 +347,7 @@ ok64 HASHprobe() {
     }
     kv64 full = {.key = 17, .val = 1};
     slot = NULL;
-    want(FULL == HASHkv64Probe(&slot, line_idle, &full));
+    want(HASHFULL == HASHkv64Probe(&slot, line_idle, &full));
     want(slot == NULL);
     done;
 }
@@ -367,9 +367,9 @@ ok64 HASHat() {
         want(OK == HASHkv64At(&at, line_idle, &x) && at->val == k * 3);
         want(at >= line_idle[0] && at < line_idle[1]);
     }
-    kv64 no = {.key = 17};  // full line: NONE, not NOROOM
+    kv64 no = {.key = 17};  // full line: HASHNONE, not HASHNOROOM
     at = NULL;
-    want(NONE == HASHkv64At(&at, line_idle, &no) && at == NULL);
+    want(HASHNONE == HASHkv64At(&at, line_idle, &no) && at == NULL);
     a_pad(u64, cv, 256);
     zerob(cv);
     for (u64 k = 1; k <= 192; ++k) call(HASHu64Put, cv_idle, &k);
@@ -379,7 +379,7 @@ ok64 HASHat() {
     u64 const *a = NULL;
     for (u64 k = 1; k <= 384; ++k) {
         ok64 o = HASHu64At(&a, cv_idle, &k);
-        want(k <= 192 ? (o == OK && *a == k) : o == NONE);
+        want(k <= 192 ? (o == OK && *a == k) : o == HASHNONE);
     }
     want(0 == memcmp(cp_idle[0], cv_idle[0], 256 * sizeof(u64)));
     done;
@@ -395,8 +395,8 @@ ok64 HASHprobegrow() {
         for (u64 k = 1; k <= 3000; ++k) {
             kv64 r = {.key = k * 0x10001, .val = k * 7}, *slot = NULL;
             ok64 o = HASHkv64ProbeGrow(&slot, buf, &r);
-            want(o == (pass ? OK : NONE));
-            if (o == NONE) *slot = r;
+            want(o == (pass ? OK : HASHNONE));
+            if (o == HASHNONE) *slot = r;
             want(slot->key == r.key && slot->val == k * 7);
         }
     want(kv64bDataLen(buf) > 3000);
@@ -418,8 +418,8 @@ ok64 HASHprobegrow() {
             k96v32 r = {.k0 = k % 50, .k1 = k / 50, .val = k}, *slot = NULL;
             r.val += pass;  // the value never takes part in the match
             ok64 o = HASHk96v32ProbeGrow(&slot, kb, &r);
-            want(o == (pass ? OK : NONE));
-            if (o == NONE) *slot = r;
+            want(o == (pass ? OK : HASHNONE));
+            if (o == HASHNONE) *slot = r;
             want(slot->k0 == r.k0 && slot->k1 == r.k1 && slot->val == k);
         }
     live = 0;
@@ -441,7 +441,7 @@ ok64 HASHprobeconv() {
         x = x * 6364136223846793005ULL + 1442695040888963407ULL;
         u64 v = (x >> 20) | 1, *slot = NULL;
         ok64 o = HASHu64Probe(&slot, prb_idle, &v);
-        if (o == NONE) *slot = v;
+        if (o == HASHNONE) *slot = v;
         else want(o == OK && *slot == v);
         call(HASHu64Put, put_idle, &v);
     }
@@ -456,7 +456,7 @@ ok64 HASHprobeconv() {
     call(u64bFed, buf, 16);
     for (u64 k = 1; k <= 3000; ++k) {
         u64 *slot = NULL;
-        want(NONE == HASHu64ProbeGrow(&slot, buf, &k));
+        want(HASHNONE == HASHu64ProbeGrow(&slot, buf, &k));
         *slot = k;
     }
     for (u64 k = 1; k <= 3000; ++k) {
@@ -479,11 +479,11 @@ ok64 HASHunprobe() {
         x = x * 6364136223846793005ULL + 1442695040888963407ULL;
         u64 v = (x >> 20) | 1, *slot = NULL;
         ok64 o = HASHu64Probe(&slot, prb_idle, &v);
-        if (o == FULL) continue;
-        if (o == NONE) {  // undo, then the real insert
+        if (o == HASHFULL) continue;
+        if (o == HASHNONE) {  // undo, then the real insert
             call(HASHu64Unprobe, prb_idle, slot);
             want(0 == memcmp(put[0], prb[0], sizeof(u64) << 10));
-            want(NONE == HASHu64Probe(&slot, prb_idle, &v));
+            want(HASHNONE == HASHu64Probe(&slot, prb_idle, &v));
             *slot = v;
             call(HASHu64Put, put_idle, &v);
         }
@@ -497,7 +497,7 @@ ok64 HASHunprobe() {
     done;
 }
 
-// HASH-26B02GiUYZ: CONVERGE Put into a full line is NOROOM, keeps
+// HASH-26B02GiUYZ: CONVERGE Put into a full line is HASHNOROOM, keeps
 // every resident and leaves the table byte-identical
 ok64 HASHputfull() {
     sane(1);
@@ -510,9 +510,9 @@ ok64 HASHputfull() {
     memcpy(g[0], f[0], sizeof(u64) * 16);
     for (u64 j = 1; !extra; ++j) {
         u64 v = j;
-        if (NONE == HASHu64Get(&v, f_idle)) extra = j;
+        if (HASHNONE == HASHu64Get(&v, f_idle)) extra = j;
     }
-    want(FULL == HASHu64Put(f_idle, &extra));
+    want(HASHFULL == HASHu64Put(f_idle, &extra));
     want(0 == memcmp(g[0], f[0], sizeof(u64) * 16));
     for (u64 const *p = g[0]; p < g[0] + 16; ++p) {
         u64 v = *p;
@@ -559,14 +559,14 @@ ok64 HASHzero() {
     zerob(t);
     u64 z = 0;
     size_t ndx = 0;
-    want(NONE == HASHu64_find(&ndx, t_idle, &z));
-    want(NONE == HASHu64Get(&z, t_idle));
+    want(HASHNONE == HASHu64_find(&ndx, t_idle, &z));
+    want(HASHNONE == HASHu64Get(&z, t_idle));
     u64 home = u64Hash(&z) & 15;
     u64 k = 1;
     while ((u64Hash(&k) & 15) != home) ++k;
     call(HASHu64Put, t_idle, &k);
-    want(NONE == HASHu64_find(&ndx, t_idle, &z));
-    want(NONE == HASHu64Get(&z, t_idle));
+    want(HASHNONE == HASHu64_find(&ndx, t_idle, &z));
+    want(HASHNONE == HASHu64Get(&z, t_idle));
     a_pad(kv64, kt, 16);
     zerob(kt);
     kv64 z7 = {.key = 0, .val = 7}, q = {};
@@ -574,7 +574,7 @@ ok64 HASHzero() {
     call(HASHkv64Get, &q, kt_idle);
     want(q.val == 7);
     call(HASHkv64Del, kt_idle, &q);
-    want(NONE == HASHkv64Get(&q, kt_idle));
+    want(HASHNONE == HASHkv64Get(&q, kt_idle));
     done;
 }
 
@@ -591,8 +591,8 @@ ok64 HASHdelat() {
         size_t ndx = 0;
         u64 x = k;
         kv64 y = {.key = k, .val = k};
-        if (FULL == HASHu64_find(&ndx, u_idle, &x) ||
-            FULL == HASHkv64_find(&ndx, v_idle, &y))
+        if (HASHFULL == HASHu64_find(&ndx, u_idle, &x) ||
+            HASHFULL == HASHkv64_find(&ndx, v_idle, &y))
             continue;
         call(HASHu64Put, u_idle, &x);
         call(HASHkv64Put, v_idle, &y);
@@ -603,7 +603,7 @@ ok64 HASHdelat() {
         if (u[0][i] & 1) {
             ok64 o = HASHu64DelAt(u_idle, i);
             if (o == OK) ++refill;
-            else if (o == NONE) ++i;
+            else if (o == HASHNONE) ++i;
             else fail(o);
         } else ++i;
     }
@@ -611,7 +611,7 @@ ok64 HASHdelat() {
         if (v[0][i].key & 1) {
             ok64 o = HASHkv64DelAt(v_idle, i);
             if (o == OK) ++refill;
-            else if (o == NONE) ++i;
+            else if (o == HASHNONE) ++i;
             else fail(o);
         } else ++i;
     }
@@ -652,10 +652,10 @@ ok64 HASHcodes() {
     u64 h[16] = {};
     u64s hs = {h, h + 16};
     u64 k = 5;
-    want(HASHu64Get(&k, hs) == NONE);
+    want(HASHu64Get(&k, hs) == HASHNONE);
     for (u64 i = 1; i <= 16; i++) call(HASHu64Put, hs, &i);
     k = 77;
-    want(HASHu64Put(hs, &k) == FULL);
+    want(HASHu64Put(hs, &k) == HASHFULL);
     //  Next visits every live slot once
     u64 sum = 0, n = 0;
     for (size_t i = 0; OK == HASHu64Next(&i, hs); ++i) sum += h[i], ++n;
@@ -669,16 +669,16 @@ ok64 HASHcodes() {
         ++n;
     }
     want(n == 8);
-    //  Grow out of IDLE is NOROOM, a bad length BADARG
+    //  Grow out of IDLE is HASHNOROOM, a bad length HASHBADARG
     Bu64 g = {};
     call(u64bMap, g, 32);
     call(u64bFed, g, 16);
     call(HASHu64Grow, g);
-    want(HASHu64Grow(g) == NOROOM);
+    want(HASHu64Grow(g) == HASHNOROOM);
     u64bUnMap(g);
     u64 hb[24] = {};
     u64b bad = {hb, hb, hb + 24, hb + 24};
-    want(HASHu64Grow(bad) == BADARG);
+    want(HASHu64Grow(bad) == HASHBADARG);
     //  ABC_HASH_MERGE: Put folds an equal key
     sum32 t[16] = {};
     sum32s ts = {t, t + 16};

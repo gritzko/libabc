@@ -40,7 +40,7 @@ ok64 nfagrep() {
     sane(1);
     if ($arglen < 2) {
         fprintf(stderr, "usage: nfagrep PATTERN [FILE ...]\n");
-        fail(NFABADSYN);
+        fail(NFABAD);
     }
 
     a$rg(pat, 1);

@@ -17,7 +17,6 @@
 #define a_i64cs(n, arr) i64c *n[2] = {(arr), (arr) + sizeof(arr)/sizeof(arr[0])}
 #define a_i32cs(n, arr) i32c *n[2] = {(arr), (arr) + sizeof(arr)/sizeof(arr[0])}
 
-con ok64 INTBAD = 0x49774b28d;
 
 #define I64_MAX INT64_MAX
 #define I64_MIN INT64_MIN
@@ -104,9 +103,9 @@ fun ok64 u64bBury(u64bp buf) {
 
 // Digup: discard current data, restore buried data from past.
 fun ok64 u64bDigup(u64bp buf) {
-    if (u64bPastLen(buf) < 1) return NODATA;
+    if (u64bPastLen(buf) < 1) return BNODATA;
     u64 dl = *(buf[1] - 1);
-    if (u64bPastLen(buf) < dl + 1) return NODATA;
+    if (u64bPastLen(buf) < dl + 1) return BNODATA;
     ((u64 **)buf)[1] -= dl + 1;
     ((u64 **)buf)[2] = buf[1] + dl;
     return OK;
@@ -140,10 +139,13 @@ fun ok64 u64bDigup(u64bp buf) {
 
 #define X(M, name) M##u256##name
 #include "Bx.h"
+
+con ok64 INTNODATA = 0x125dd5d834a74a;
+con ok64 INTNOROOM = 0x125dd5d86d8616;
 #undef X
 
 fun ok64 put32(u8s into, u32 x) {
-    if ($len(into) < 4) return BNOROOM;
+    if ($len(into) < 4) return INTNOROOM;
     **into = x;
     ++*into;
     **into = x >> 8;
@@ -161,14 +163,14 @@ fun u128 u128xor(u128 a, u128 b) {
 }
 
 fun ok64 u8sDrain8(u8cs from, u8 *into) {
-    if ($empty(from)) return NODATA;
+    if ($empty(from)) return INTNODATA;
     *into = **from;
     *from += sizeof(u8);
     return OK;
 }
 
 fun ok64 u8sFeed8(u8s into, u8 const *what) {
-    if ($empty(into)) return NOROOM;
+    if ($empty(into)) return INTNOROOM;
     **into = *what;
     *into += sizeof(u8);
     return OK;
@@ -177,37 +179,37 @@ fun ok64 u8sFeed8(u8s into, u8 const *what) {
 // ABC-017: dead ABC_ALIGN drain/feed branch deleted (never compiled:
 // u8sfrom token, C++ casts, flipped args, missing Feed twins)
 fun ok64 u8sDrain16(u8cs from, u16 *into) {
-    if ($len(from) < (i64)sizeof(u16)) return NODATA;
+    if ($len(from) < (i64)sizeof(u16)) return INTNODATA;
     memcpy(into, *from, sizeof(u16));
     *from += sizeof(u16);
     return OK;
 }
 fun ok64 u8sFeed16(u8s into, u16 const *what) {
-    if ($len(into) < (i64)sizeof(u16)) return NOROOM;
+    if ($len(into) < (i64)sizeof(u16)) return INTNOROOM;
     memcpy(*into, what, 2);
     *into += sizeof(u16);
     return OK;
 }
 fun ok64 u8sDrain32(u8cs from, u32p into) {
-    if ($len(from) < (i64)sizeof(u32)) return NODATA;
+    if ($len(from) < (i64)sizeof(u32)) return INTNODATA;
     memcpy(into, *from, sizeof(u32));
     *from += sizeof(u32);
     return OK;
 }
 fun ok64 u8sFeed32(u8s into, u32 const *what) {
-    if ($len(into) < (i64)sizeof(u32)) return NOROOM;
+    if ($len(into) < (i64)sizeof(u32)) return INTNOROOM;
     memcpy(*into, what, 4);
     *into += sizeof(u32);
     return OK;
 }
 fun ok64 u8sDrain64(u8cs from, u64p into) {
-    if ($len(from) < (i64)sizeof(u64)) return NODATA;
+    if ($len(from) < (i64)sizeof(u64)) return INTNODATA;
     memcpy(into, *from, sizeof(u64));
     *from += sizeof(u64);
     return OK;
 }
 fun ok64 u8sFeed64(u8s into, u64 const *what) {
-    if ($len(into) < (i64)sizeof(u64)) return NOROOM;
+    if ($len(into) < (i64)sizeof(u64)) return INTNOROOM;
     memcpy(*into, what, 8);
     *into += sizeof(u64);
     return OK;

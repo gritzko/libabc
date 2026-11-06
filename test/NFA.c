@@ -345,7 +345,7 @@ ok64 test_big_counts() {
     for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
         u8cs pat = {(u8c *)bad[i], (u8c *)bad[i] + strlen(bad[i])};
         u8cs txt = {(u8c *)"a", (u8c *)"a" + 1};
-        want(nfa_big(pat, txt, &m) == NFABADSYN);
+        want(nfa_big(pat, txt, &m) == NFABAD);
     }
     // STD-26B068h31R: {n,} stays unbounded, {n,m} bounded
     u8cs p1 = $u8str("a{2,}");

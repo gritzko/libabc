@@ -39,7 +39,7 @@ ok64 RONutf8sFeed(u8** into, ron60 val) {
         val >>= 6;
     } while (val);
     size_t l = e - t;
-    if ($len(into) < (i64)l) return SNOROOM;
+    if ($len(into) < (i64)l) return RONNOROOM;
     memcpy(*into, t, l);
     *into += l;
     return OK;
@@ -47,11 +47,11 @@ ok64 RONutf8sFeed(u8** into, ron60 val) {
 
 ok64 RONutf8sDrain(ron60* o, u8c* const* from) {
     // ABC-008: cap at 11 digits / 64 bits, mirroring the feed side
-    if ($len(from) > 10) return OKBADTEXT;
+    if ($len(from) > 10) return RONBAD;
     ron60 res = 0;
     for (u8c* p = from[0]; p < from[1]; ++p) {
         u64 v = RON64_REV[*p];
-        if (v == 0xff) return OKBADTEXT;
+        if (v == 0xff) return RONBAD;
         // ABC-008: reject values over 64 bits instead of shifting out
         res = (res << 6) | v;
     }
@@ -68,15 +68,15 @@ ok64 RONutf8sDrain(ron60* o, u8c* const* from) {
 //   [2]    second (0-59)
 //   [1][0] milliseconds, packed: ms = [1]*64 + [0]  (0-999)
 ok64 RONOfTime(ron60* r, struct tm* t, u32 ms) {
-    if (!r || !t) return BADARG;
+    if (!r || !t) return RONBADARG;
     u64 y = t->tm_year - 100;
-    if (y >= 100) return BADARG;
-    if (t->tm_mon < 0 || t->tm_mon >= 12) return BADARG;
-    if (t->tm_mday < 1 || t->tm_mday > 31) return BADARG;
-    if (t->tm_hour < 0 || t->tm_hour >= 24) return BADARG;
-    if (t->tm_min < 0 || t->tm_min >= 60) return BADARG;
-    if (t->tm_sec < 0 || t->tm_sec >= 60) return BADARG;
-    if (ms >= 1000) return BADARG;
+    if (y >= 100) return RONBADARG;
+    if (t->tm_mon < 0 || t->tm_mon >= 12) return RONBADARG;
+    if (t->tm_mday < 1 || t->tm_mday > 31) return RONBADARG;
+    if (t->tm_hour < 0 || t->tm_hour >= 24) return RONBADARG;
+    if (t->tm_min < 0 || t->tm_min >= 60) return RONBADARG;
+    if (t->tm_sec < 0 || t->tm_sec >= 60) return RONBADARG;
+    if (ms >= 1000) return RONBADARG;
     *r = 0;
     *r |= ((y / 10) << (9 * 6));
     *r |= ((y % 10) << (8 * 6));
@@ -92,7 +92,7 @@ ok64 RONOfTime(ron60* r, struct tm* t, u32 ms) {
 }
 
 ok64 RONToTime(ron60 r, struct tm* t, u32 *ms) {
-    if (!t) return BADARG;
+    if (!t) return RONBADARG;
     u64 y1   = (r >> (9 * 6)) & 63;
     u64 y0   = (r >> (8 * 6)) & 63;
     u64 mon  = (r >> (7 * 6)) & 63;
@@ -136,9 +136,9 @@ ok64 RONVerify(u8c** txt) {
 }
 
 ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width) {
-    if ($len(into) < width) return SNOROOM;
+    if ($len(into) < width) return RONNOROOM;
     // ABC-008: validate before writing (all-or-nothing Feed contract)
-    if (width <= 10 && (val >> (6 * width)) != 0) return BADARG;
+    if (width <= 10 && (val >> (6 * width)) != 0) return RONBADARG;
     u8p p = into[0] + width;
     for (u8 i = 0; i < width; i++) {
         *--p = RON64_CHARS[val & 63];
@@ -150,7 +150,7 @@ ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width) {
 }
 
 ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n) {
-    if (n == 0 || prob == 0) return BADARG;
+    if (n == 0 || prob == 0) return RONBADARG;
     // ABC-008: saturate need instead of wrapping 2*prob*n
     u64 need = (n > UINT64_MAX / 2 / prob) ? UINT64_MAX : 2 * prob * n;
     u8 w = 1;
@@ -161,7 +161,7 @@ ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n) {
     }
     *width = w;
     // ABC-008: n >= space would make avail 0 (division by zero below)
-    if (n >= space) return BADARG;
+    if (n >= space) return RONBADARG;
     u64 avail = space - n;
     *base = rand % avail;
     return OK;
@@ -203,7 +203,7 @@ ok64 RONNow() {
 }
 
 ok64 RONu8sFeed64(u8** into, u64 val) {
-    if ($len(into) < RON64_WORD_LEN) return SNOROOM;
+    if ($len(into) < RON64_WORD_LEN) return RONNOROOM;
     u8p p = into[0] + RON64_WORD_LEN;
     for (u8 i = 0; i < RON64_WORD_LEN; i++) {
         *--p = RON64_CHARS[val & 63];
@@ -214,14 +214,14 @@ ok64 RONu8sFeed64(u8** into, u64 val) {
 }
 
 ok64 RONu8sDrain64(u64* o, u8c* const* from) {
-    if ($len(from) != RON64_WORD_LEN) return OKBADTEXT;
+    if ($len(from) != RON64_WORD_LEN) return RONBAD;
     u64 res = 0;
     for (u8c* p = from[0]; p < from[1]; ++p) {
         u64 v = RON64_REV[*p];
-        if (v == 0xff) return OKBADTEXT;
+        if (v == 0xff) return RONBAD;
         res = (res << 6) | v;
     }
-    if (RON64_REV[*from[0]] > 15) return OKBADTEXT;
+    if (RON64_REV[*from[0]] > 15) return RONBAD;
     *o = res;
     return OK;
 }

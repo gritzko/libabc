@@ -9,8 +9,7 @@
 con ok64 PACKFAIL = 0x64a3143ca495;
 con ok64 PACKNOROOM = 0x64a3145d86d8616;
 con ok64 PACKBADARG = 0x64a3142ca34a6d0;
-con ok64 PACKNODATA = 0x64a3145d834a74a;
-con ok64 PACKCORRUPT = 0x928c50c61b6de65d;
+con ok64 PACKBAD = 0x1928c50b28d;
 
 // Index block: 32 bytes, 12 pages
 // u64[0]: file offset of first page in block

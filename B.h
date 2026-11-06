@@ -10,12 +10,14 @@
 #include "OK.h"
 #include "S.h"
 
-con ok64 MMAPFAIL = 0x5962993ca495;
-con ok64 BMAPFAIL = 0x2d62993ca495;
+#define MMAPFAIL BNOMEM  // CODE-26B068XgTv: one-release alias
 con ok64 BNOTNULL = 0x2d761d5de555;
 con ok64 BISNULL = 0xb49c5de555;
-con ok64 BALLOCFAIL = 0x2ca55560c3ca495;
 con ok64 BNOROOM = 0xb5d86d8616;
+con ok64 BBADARG = 0xb2ca34a6d0;
+con ok64 BFAIL = 0xb3ca495;
+con ok64 BNODATA = 0xb5d834a74a;
+con ok64 BNOMEM = 0x2d7616396;
 
 #define B_MAX_LEN_BITS 48
 #define B_MAX_LEN (1ULL << B_MAX_LEN_BITS)
@@ -157,7 +159,7 @@ fun void _Brebase(Bvoid buf, void *newhead, size_t newlen) {
 fun ok64 Balloc(Bvoid b, size_t sz) {
     if (!BNULL(b)) return BNOTNULL;
     u8 *p = (u8 *)malloc(sz);
-    if (p == NULL) return BALLOCFAIL;
+    if (p == NULL) return BNOMEM;
     u8 **buf = (u8 **)b;
     buf[0] = buf[1] = buf[2] = p;
     buf[3] = p + sz;
@@ -166,7 +168,7 @@ fun ok64 Balloc(Bvoid b, size_t sz) {
 
 fun ok64 Brealloc(Bvoid b, size_t sz) {
     void *m = realloc(b[0], sz);
-    if (m == NULL) return NOROOM;
+    if (m == NULL) return BNOMEM;
     _Brebase(b, m, sz);
     return OK;
 }

@@ -58,7 +58,7 @@ when the arena pops past it (see "Arenas" below).
 These are the buffer API (CODE-26B065tb4L): the unchecked `Bpush`/`Bpop`/
 `Btop`/`Bump`/`Brewind` macros and the lowercase `X(B, verb)` functions
 (`Bu8eat`, `Bu8empty`, ...) are gone; `Bu8mark`/`Bu8rewind` remain for
-outside callers.  `u8bPop` on empty DATA returns `NODATA`.
+outside callers.  `u8bPop` on empty DATA returns `BNODATA`.
 
 ##  Arenas
 

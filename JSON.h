@@ -6,7 +6,8 @@
 #include "HEX.h"
 
 con ok64 JSONBAD = 0x137185cb28d;
-con ok64 JSONFAIL = 0x4dc6173ca495;
+con ok64 JSONFULL = 0x4dc6173de555;
+con ok64 JSONNOROOM = 0x4dc6175d86d8616;
 
 #define JSON_MAX_NEST 255  // container nesting cap (JSONfmt's u8 depth)
 

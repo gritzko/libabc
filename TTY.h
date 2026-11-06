@@ -3,6 +3,8 @@
 
 #include "UTF8.h"
 
+con ok64 TTYNOROOM = 0x1d7625d86d8616;
+
 // Terminal type (term field)
 #define TTY_TERM_NONE 0
 #define TTY_TERM_OLD 1

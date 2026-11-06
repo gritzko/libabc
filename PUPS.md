@@ -16,7 +16,7 @@ and uses only abc's own pieces (`BOX`, `HIT`, `QSORTx`, `RON`, `FILE`).
  -  **Memtable.** `PUP<T>Put` is a BOX put (`BOXx.h`) into an anonymous
     buffer the owner maps: sorted runs plus an unsorted segment that becomes
     a run past 512 bytes. It is no file and holds no fd; unsealed puts die
-    with the handle. A full memtable says `NOROOM`: the owner commits.
+    with the handle. A full memtable says `BOXNOROOM`: the owner commits.
  -  **Commit.** `PUP<T>Commit` sorts the memtable into one run, writes it
     straight into a temp file (`O_EXCL`), adds the ToC and links it to
     `<seqno><ext>`. The link is atomic and never overwrites: a crash leaves a
@@ -57,7 +57,7 @@ file keys, a `u64b` index-parallel to the house's PAST:
     T-aligned); `PUP<T>Split` cuts it into rows and ToC.
  -  DATA: BOX's sorted memory runs; the last two cells are the memtable
     (`BOX.md`). At most 62 runs live. Create and Commit refuse a new run
-    at 60 housed (`ABC_PUP_MAX_RUNS`, `PUPNOROOM`); there Ladder and Commit
+    at 60 housed (`ABC_PUP_MAX_RUNS`, `PUPFULL`); there Ladder and Commit
     merge the youngest runs, in proportion or not, until under it.
  -  Keys go only to the calls that change the run set: Open, Close,
     Commit, Ladder, Create, Map, Forget, Drop. A struct owner keeps the cells and the
@@ -141,7 +141,7 @@ The core has no delete; a row says "this key is gone" through a tombstone the
 record type defines. Define `PUPx_DEAD(row)` (a macro over `T const *`) before
 including `PUPx.h`. Then:
 
- -  `Get` says `NONE` and `Read` skips a dead row; a `Range` drain drops it.
+ -  `Get` says `PUPNONE` and `Read` skips a dead row; a `Range` drain drops it.
  -  A ladder merge that takes every run (`bottom`) drops dead rows and, by
     keep-last, the rows they shadowed. A partial merge keeps them: an older
     run may still hold the key. A merge that leaves nothing writes no run,
@@ -154,9 +154,9 @@ as neoclear's, reports through it).
 
 Every `PUP*` call returns `OK`, a BOX code from the memtable, or a `PUP*` code
 (PUPS-26B03JQWPP): `PUPBADARG` an index past the stack; `PUPTAKEN` a run already
-holds the caller's key; `PUPNOROOM` the house, its keys or `dead` is out
+holds the caller's key; `PUPFULL` the run cap; `PUPNOROOM` the house, its keys or `dead` is out
 of room; `PUPEMPTY`/`PUPNOMAP`/`PUPGONE` a run of 0 bytes, unmappable, or
-unlinked since listed; `PUPSTAT`/`PUPNOOPEN`/`PUPLCKFULL` `PUPLock` could not
+unlinked since listed; `PUPSTAT`/`PUPNOOPEN`/`PUPFULL` `PUPLock` could not
 stat the directory, open `.lock`, or its held-lock table is full.
 
 ### Build and test

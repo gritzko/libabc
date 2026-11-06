@@ -11,8 +11,12 @@
 #include "INT.h"
 #include "OK.h"
 
+con ok64 HITFULL = 0x1149d3de555;
+con ok64 HITNONE = 0x1149d5d85ce;
+con ok64 HITNOROOM = 0x1149d5d86d8616;
+
 // DOG-027: ONE run cap and ONE ladder ratio for every entry point and both
-// JS leaves.  Past the cap the stack is damaged: FULL, the caller re-derives.
+// JS leaves.  Past the cap the stack is damaged: HITFULL, the caller re-derives.
 #define ABC_HIT_MAX_RUNS 64
 // PUPS-26B05AeY1d: a pup house refuses new runs at this many housed, so the
 // memtable's 2 cells and 2 spare ones leave room to seal and to compact.

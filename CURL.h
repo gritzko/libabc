@@ -6,8 +6,8 @@
 #include "OK.h"
 #include "BUF.h"
 
-con ok64 CURLBAD = 0xc79b54b28d;
 con ok64 CURLFAIL = 0x31e6d53ca495;
+con ok64 CURLBADARG = 0x31e6d52ca34a6d0;
 
 // Callback when request completes: (request, http_status, response_body)
 typedef struct CURLreq CURLreq;

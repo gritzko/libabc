@@ -196,7 +196,7 @@ ok64 PACKOpen(packp p, const char *path) {
 
     // Get file size
     off_t fsize = lseek(p->fd, 0, SEEK_END);
-    testsafe(fsize > 16, PACKCORRUPT, __ = PACKAbort(p, __));  // trailer size
+    testsafe(fsize > 16, PACKBAD, __ = PACKAbort(p, __));  // trailer size
 
     // Read trailer: uncompressed length (u64) + index size (u64)
     u64 trailer[2];
@@ -212,13 +212,13 @@ ok64 PACKOpen(packp p, const char *path) {
     // ABC-014: bound untrusted datalen before the ceil-div can wrap and
     // mint a tiny npages / wild DATA terminator.  Each stored page holds
     // >=1 compressed byte, so npages <= on-disk data area (fsize-16-idxsize).
-    testsafe(p->datalen <= UINT64_MAX - (PAGESIZE - 1), PACKCORRUPT,
+    testsafe(p->datalen <= UINT64_MAX - (PAGESIZE - 1), PACKBAD,
              __ = PACKAbort(p, __));
     u64 npages = (p->datalen + PAGESIZE - 1) / PAGESIZE;
-    testsafe(idxsize == PACKIdxSize(npages), PACKCORRUPT,
+    testsafe(idxsize == PACKIdxSize(npages), PACKBAD,
              __ = PACKAbort(p, __));
-    testsafe((u64)fsize >= 16 + idxsize, PACKCORRUPT, __ = PACKAbort(p, __));
-    testsafe(npages <= (u64)fsize - 16 - idxsize, PACKCORRUPT,
+    testsafe((u64)fsize >= 16 + idxsize, PACKBAD, __ = PACKAbort(p, __));
+    testsafe(npages <= (u64)fsize - 16 - idxsize, PACKBAD,
              __ = PACKAbort(p, __));
 
     // Map index buffer
@@ -273,7 +273,7 @@ ok64 PACKEnsure(pagep pg, b8 rw, u64 pos, size_t len) {
         u64 off = PACKIdxOffset(p->idx[0], pg);
         u16 clen = PACKIdxPageLen(p->idx[0], pg);
 
-        test(clen > 0 && clen <= PACK_MAX_COMPRESSED, PACKCORRUPT);
+        test(clen > 0 && clen <= PACK_MAX_COMPRESSED, PACKBAD);
 
         // Read compressed data.  ABC-013: EINTR-retry.
         test(lseek(p->fd, off, SEEK_SET) >= 0, PACKFAIL);
@@ -286,7 +286,7 @@ ok64 PACKEnsure(pagep pg, b8 rw, u64 pos, size_t len) {
         u8p dst = p->pg->buf[0] + pg * PAGESIZE;
         int dlen = LZ4_decompress_safe((const char *)compressed, (char *)dst,
                                        clen, PAGESIZE);
-        test(dlen > 0, PACKCORRUPT);
+        test(dlen > 0, PACKBAD);
 
         // Mark page as loaded
         PAGEIdxSetRead(p->pg, pg, PAGE_LOADED);

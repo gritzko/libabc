@@ -166,7 +166,7 @@ ok64 run_pcre2_tests(u8cs filename) {
     FILE *fp = fopen(fname, "r");
     if (!fp) {
         printf("cannot open %s: %s\n", fname, strerror(errno));
-        fail(NFABADSYN);
+        fail(NFABAD);
     }
 
     char line[4096];
