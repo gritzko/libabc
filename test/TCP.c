@@ -239,6 +239,25 @@ ok64 TCPtestNoDelay() {
     done;
 }
 
+// STD-26B068Ngez: listen, connect and accept fds are close-on-exec
+ok64 TCPtestCloexec() {
+    sane(1);
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "tcp://127.0.0.1:%d", NETRandomPort() + 23);
+    int fd = -1, cfd = -1, sfd = -1;
+    call(TCPListen, &fd, addr_datac);
+    call(TCPConnect, &cfd, addr_datac, 0);
+    aNETraw(caddr);
+    call(TCPAccept, &sfd, caddr, fd);
+    want(fcntl(fd, F_GETFD) & FD_CLOEXEC);
+    want(fcntl(cfd, F_GETFD) & FD_CLOEXEC);
+    want(fcntl(sfd, F_GETFD) & FD_CLOEXEC);
+    call(TCPClose, sfd);
+    call(TCPClose, cfd);
+    call(TCPClose, fd);
+    done;
+}
+
 ok64 TCPtest() {
     sane(1);
     call(TCPtest1);
@@ -248,6 +267,7 @@ ok64 TCPtest() {
     call(TCPtestBindWalk);
     call(TCPtestReuseAddr);
     call(TCPtestNoDelay);
+    call(TCPtestCloexec);
     done;
 }
 

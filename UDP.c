@@ -13,7 +13,7 @@ ok64 UDPBind(int *fd, u8cs addr) {
     call(NETResolve, &result, &uri, NO);
 
     for (rp = result; rp != NULL; rp = rp->ai_next) {
-        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        sfd = NETSocket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (sfd == -1) continue;
 
         if (bind(sfd, rp->ai_addr, rp->ai_addrlen) == 0) break;
@@ -41,7 +41,7 @@ ok64 UDPConnect(int *fd, u8cs addr) {
     call(NETResolve, &result, &uri, NO);
 
     for (rp = result; rp != NULL; rp = rp->ai_next) {
-        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        sfd = NETSocket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (sfd == -1) continue;
 
         if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1)

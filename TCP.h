@@ -25,7 +25,12 @@ fun ok64 TCPAccept(int *cfd, NETaddr addr, int sfd) {
     int rc;
     do {  // ABC-012: EINTR retries in place, EAGAIN is a soft NETAGAIN
         len = (socklen_t)Blen(addr);
+#ifdef SOCK_CLOEXEC  // STD-26B068Ngez, cf. NETSocket
+        rc = accept4(sfd, (struct sockaddr *)*addr, &len, SOCK_CLOEXEC);
+#else
         rc = accept(sfd, (struct sockaddr *)*addr, &len);
+        if (rc != -1) fcntl(rc, F_SETFD, FD_CLOEXEC);
+#endif
     } while (rc == -1 && errno == EINTR);
     if (rc == -1)
         return errno == EAGAIN || errno == EWOULDBLOCK ? NETAGAIN : TCPFAIL;

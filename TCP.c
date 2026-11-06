@@ -18,7 +18,7 @@ ok64 TCPConnect(int *fd, u8csc address, b8 nonblocking) {
     call(NETResolve, &result, &uri, YES);
 
     for (rp = result; rp != NULL; rp = rp->ai_next) {
-        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        sfd = NETSocket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (sfd == -1) continue;
         TCPNoDelay(sfd, rp->ai_family);  // NET-26A24GSaPD
         // ABC-012: honor nonblocking; EINPROGRESS is a connect in progress
@@ -49,7 +49,7 @@ ok64 TCPListen(int *fd, u8cs addr) {
     call(NETResolve, &result, &uri, YES);
 
     for (rp = result; rp != NULL; rp = rp->ai_next) {
-        sfd = socket(rp->ai_family, rp->ai_socktype, 0);
+        sfd = NETSocket(rp->ai_family, rp->ai_socktype, 0);
         if (sfd == -1) continue;
         // ABC-012: allow instant restart while old sockets sit in TIME_WAIT
         int yes = 1;

@@ -1,5 +1,6 @@
 #ifndef ABC_NET_H
 #define ABC_NET_H
+#include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +73,18 @@ fun int NETRandomPort() {
 //  Resolve host:port from URIstate to addrinfo
 //  Example: parse "tcp://1.2.3.4:8080" with URIutf8Drain first, then call this
 ok64 NETResolve(struct addrinfo** result, URIstate const* uri, b8 stream);
+
+//  STD-26B068Ngez: sockets are close-on-exec like FILE.c fds (ABC-013), so
+//  FILESpawn children inherit none; macOS lacks SOCK_CLOEXEC, fcntl there.
+fun int NETSocket(int family, int type, int proto) {
+#ifdef SOCK_CLOEXEC
+    return socket(family, type | SOCK_CLOEXEC, proto);
+#else
+    int fd = socket(family, type, proto);
+    if (fd != -1) fcntl(fd, F_SETFD, FD_CLOEXEC);
+    return fd;
+#endif
+}
 
 fun ok64 NETFreeAddress(struct addrinfo** addr) {
     if (*addr == NULL) return NETNONE;

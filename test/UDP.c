@@ -160,6 +160,21 @@ ok64 UDPtestBindWalk() {
     done;
 }
 
+// STD-26B068Ngez: bound and connected UDP fds are close-on-exec
+ok64 UDPtestCloexec() {
+    sane(1);
+    a_pad(u8, addr, 64);
+    call(u8sPrintf, addr_idle, "udp://127.0.0.1:%d", NETRandomPort() + 23);
+    int fd = -1, cfd = -1;
+    call(UDPBind, &fd, addr_datac);
+    call(UDPConnect, &cfd, addr_datac);
+    test(fcntl(fd, F_GETFD) & FD_CLOEXEC, UDPFAIL);
+    test(fcntl(cfd, F_GETFD) & FD_CLOEXEC, UDPFAIL);
+    call(UDPClose, cfd);
+    call(UDPClose, fd);
+    done;
+}
+
 ok64 UDPtest() {
     sane(1);
     call(UDPtest1);
@@ -167,6 +182,7 @@ ok64 UDPtest() {
     call(UDPtestTrunc);
     call(UDPtestAgain);
     call(UDPtestBindWalk);
+    call(UDPtestCloexec);
     done;
 }
 
