@@ -8,6 +8,8 @@
 #include "TLV.h"
 #define T X(, )
 #define SKIP_BLK_HI (sizeof(T) * 8)
+// CODE-26B065T8Mr: a u64 offset makes blk/pos shift by 64 (UB)
+static_assert(sizeof(T) < 8, "SKIPx.h: offsets of u8/u16/u32 only");
 // ABC-015: 1UL << 64 is UB for a u64 instantiation; mask the shift count
 #define SKIP_BLK_MASK \
     (SKIP_BLK_HI >= 64 ? ~(size_t)0 : (((size_t)1 << (SKIP_BLK_HI & 63)) - 1))

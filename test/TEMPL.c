@@ -60,6 +60,11 @@ fun b8 tent128Z(tent128 const *a, tent128 const *b) {
 #include "LISTx.h"
 #undef X
 
+// CODE-26B065T8Mr: HEXx.h (via SHA.h) left T defined; keep it last
+#define X(M, name) M##u32##name
+#include "HEXx.h"
+#undef X
+
 #ifdef T
 #error "a template leaked the T macro"
 #endif
