@@ -481,13 +481,14 @@ ok64 ROCKSnapshotRelease(ROCKdbp db) {
     done;
 }
 
-ok64 ROCKGetPath(ROCKdbp db, path8g out) {
+//  CODE-26B065bwvG: a path8b, as PATHu8bTerm reads the idle end out[3]
+ok64 ROCKGetPath(ROCKdbp db, path8b out) {
     sane(db != NULL && db->db != NULL && out != NULL);
     char *path = rocksdb_property_value(db->db, "rocksdb.dbname");
     if (path == NULL) fail(ROCKFAIL);
     size_t plen = strlen(path);
     u8cs pcs = {(u8cp)path, (u8cp)path + plen};
-    ok64 o = u8sFeed(out + 1, pcs);
+    ok64 o = u8bFeed(out, pcs);
     free(path);
     if (o != OK) return o;
     call(PATHu8bTerm, out);

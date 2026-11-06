@@ -89,6 +89,18 @@ ok64 BITSminmax() {
     done;
 }
 
+// CODE-26B065bwvG: i64Zig must not overflow (UB) for |i| >= 2^62
+ok64 BITSzig() {
+    sane(1);
+    volatile i64 edge[] = {INT64_MAX, INT64_MIN, (i64)1 << 62, -((i64)1 << 62), 0, -1};
+    same(i64Zig(edge[0]), u64max - 1);
+    same(i64Zig(edge[1]), u64max);
+    same(i64Zig(edge[2]), (u64)1 << 63);
+    same(i64Zig(edge[3]), ((u64)1 << 63) - 1);
+    for (int i = 0; i < 6; i++) same(u64Zag(i64Zig(edge[i])), edge[i]);
+    done;
+}
+
 ok64 BITStest() {
     sane(1);
     call(BITStest1);
@@ -96,6 +108,7 @@ ok64 BITStest() {
     call(BITSstr);
     call(BITSpow2);
     call(BITSminmax);
+    call(BITSzig);
     done;
 }
 

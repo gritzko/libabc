@@ -228,7 +228,9 @@ ok64 POLIgnoreTime() {
 ok64 POLSleep(u64 ns) {
     struct timespec duration = {.tv_sec = ns / POLNanosPerSec,
                                 .tv_nsec = ns % POLNanosPerSec};
-    nanosleep(&duration, NULL);
+    //  CODE-26B065bwvG: a signal resumes the sleep for the remainder
+    while (nanosleep(&duration, &duration) != 0)
+        if (errno != EINTR) return POLFAIL;
     return OK;
 }
 
@@ -239,6 +241,7 @@ ok64 POLLoop(u64 timens) {
     // Local poll vector - exactly POL_MAXFD entries
     struct pollfd* vec = calloc(POL_MAXFD, sizeof(struct pollfd));
     if (!vec) return NOROOM;
+    ok64 ret = OK;
 
     while (now < till && !pollerbEmpty(POL_QUEUE) && !POL_STOP) {
         now = POLNow();
@@ -307,7 +310,8 @@ ok64 POLLoop(u64 timens) {
             // No file descriptors, just timers
             u64 sleep = next_timeout - now;
             if (sleep > POLNanosPerMonth) break;
-            POLSleep(sleep);
+            ret = POLSleep(sleep);
+            if (ret != OK) break;
             continue;
         }
 
@@ -317,7 +321,12 @@ ok64 POLLoop(u64 timens) {
         int pollms = waitns > 60000UL * POLNanosPerMSec
                          ? 60000
                          : (int)(waitns / POLNanosPerMSec);
-        poll(vec, pollscount, pollms);
+        //  CODE-26B065bwvG: EINTR is a wakeup, any other failure ends the run
+        if (poll(vec, pollscount, pollms) < 0) {
+            if (errno == EINTR) continue;
+            ret = POLFAIL;
+            break;
+        }
 
         // Process poll results
         for (int i = 0; i < pollscount; i++) {
@@ -350,6 +359,6 @@ ok64 POLLoop(u64 timens) {
     }
     free(vec);
     POL_STOP = NO;  // CODE-26B05AvcPS: a stop ends this run only
-    return OK;
+    return ret;
 }
 

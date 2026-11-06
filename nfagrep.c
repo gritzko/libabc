@@ -11,22 +11,26 @@
 
 #define NFA_CAP 4096
 
-ok64 grep_stream(nfau8cs nfa, u32 *ws[2], FILE *fp, u8c *fname) {
+//  CODE-26B065bwvG: stdin is drained into a reserved map, files are mapped:
+//  an fgets buffer split lines over 8 KB in two.
+#define NFA_STDIN_MAX (1UL << 36)
+
+ok64 grep_text(nfau8cs nfa, u32 *ws[2], u8cs text, u8c *fname) {
     sane(1);
-    char line[8192];
     u64 lineno = 0;
-    while (fgets(line, sizeof(line), fp)) {
+    u8cs rest = {text[0], text[1]};
+    while (!$empty(rest)) {
+        u8cs eol = {rest[0], rest[1]};
+        u8csFind(eol, '\n');
+        u8cs line = {rest[0], eol[0]};
+        rest[0] = $empty(eol) ? eol[0] : eol[0] + 1;
         lineno++;
-        u64 len = strlen(line);
-        if (len > 0 && line[len - 1] == '\n') len--;
-        u8cs text = {(u8 *)line, (u8 *)line + len};
-        if (NFAu8Search(nfa, text, ws)) {
-            if (fname)
-                printf("%s:%" PRIu64 ":%.*s\n", fname, lineno, (int)len,
-                       line);
-            else
-                printf("%.*s\n", (int)len, line);
-        }
+        if (!NFAu8Search(nfa, line, ws)) continue;
+        int len = (int)$len(line);
+        if (fname)
+            printf("%s:%" PRIu64 ":%.*s\n", fname, lineno, len, line[0]);
+        else
+            printf("%.*s\n", len, line[0]);
     }
     done;
 }
@@ -57,21 +61,26 @@ ok64 nfagrep() {
     u32 *ws[2] = {wbuf, wbuf + NFA_CAP * 3};
 
     if ($arglen <= 2) {
-        call(grep_stream, nfa, ws, stdin, NULL);
+        u8b in = {};
+        call(u8bMap, in, NFA_STDIN_MAX);
+        try(FILEdrainall, u8bIdle(in), STDIN_FILENO);
+        then try(grep_text, nfa, ws, u8bDataC(in), NULL);
+        u8bUnMap(in);
+        nedo return __;
     } else {
         for (int i = 2; i < $arglen; i++) {
             a$rg(fn, i);
             // ABC-017: argv slices are NUL-terminated (PRO.h) — use them
             // directly; the 256-byte snprintf copy truncated long paths
             const char *fname = (const char *)fn[0];
-            FILE *fp = fopen(fname, "r");
-            if (!fp) {
-                fprintf(stderr, "nfagrep: %s: %s\n", fname, strerror(errno));
+            u8b map = {};
+            ok64 mo = FILEMapOnce(map, fn);
+            if (mo != OK) {
+                fprintf(stderr, "nfagrep: %s: %s\n", fname, ok64str(mo));
                 continue;
             }
-            // ABC-017: close fp before propagating a grep_stream error
-            try(grep_stream, nfa, ws, fp, (u8c *)fname);
-            fclose(fp);
+            try(grep_text, nfa, ws, u8bDataC(map), (u8c *)fname);
+            FILEUnMapOnce(map);
             nedo return __;
         }
     }

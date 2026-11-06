@@ -98,6 +98,6 @@ ok64 ROCKSnapshotCreate(ROCKdbp db);
 ok64 ROCKSnapshotRelease(ROCKdbp db);
 
 // Get DB directory path (null-terminated) into buffer
-ok64 ROCKGetPath(ROCKdbp db, path8g out);
+ok64 ROCKGetPath(ROCKdbp db, path8b out);
 
 #endif  // ABC_ROCK_H

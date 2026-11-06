@@ -385,6 +385,7 @@ target_link_options(NFAtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(NFAtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(NFAtest abc)
 add_test(NAME NFAtest COMMAND NFAtest)
+add_test(NAME nfagreptest COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/nfagrep.sh $<TARGET_FILE:nfagrep>)
 
 #add_executable(NFApcre2test NFApcre2.c)
 #target_link_options(NFApcre2test PRIVATE ${TEST_LDD_FLAGS})

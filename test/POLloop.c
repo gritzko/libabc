@@ -1,6 +1,9 @@
 #include "POL.h"
 
 #include <fcntl.h>
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "FILE.h"
@@ -271,12 +274,57 @@ ok64 POLloop_stop_once() {
     done;
 }
 
+// CODE-26B065bwvG: a poll() failure is an error, not a busy wakeup;
+// nfds over RLIMIT_NOFILE makes poll() fail with EINVAL.
+ok64 POLloop_poll_fail() {
+    sane(1);
+    call(POLInit, 16);
+    pipe2fd pp = {-1, -1};
+    call(pipe_make, &pp);
+    poller f = {.callback = f_never, .events = POLLIN};
+    f.tofd = pp.rd;
+    call(POLTrackEvents, pp.rd, f);
+    f.tofd = pp.wr;
+    call(POLTrackEvents, pp.wr, f);
+    struct rlimit rl, low;
+    testc(0 == getrlimit(RLIMIT_NOFILE, &rl), FAILSANITY);
+    low = rl;
+    low.rlim_cur = 1;
+    testc(0 == setrlimit(RLIMIT_NOFILE, &low), FAILSANITY);
+    ok64 o = POLLoop(50 * POLNanosPerMSec);
+    setrlimit(RLIMIT_NOFILE, &rl);
+    want(o != OK);
+    pipe_close(&pp);
+    call(POLFree);
+    done;
+}
+
+static void s_alarm(int sig) { (void)sig; }
+
+// CODE-26B065bwvG: a signal must not cut POLSleep short.
+ok64 POLloop_sleep_eintr() {
+    sane(1);
+    struct sigaction sa = {.sa_handler = s_alarm}, old;
+    testc(0 == sigaction(SIGALRM, &sa, &old), FAILSANITY);
+    struct itimerval it = {.it_value = {.tv_usec = 10000}};
+    testc(0 == setitimer(ITIMER_REAL, &it, NULL), FAILSANITY);
+    u64 t0 = POLNow();
+    ok64 o = POLSleep(60 * POLNanosPerMSec);
+    u64 dt = POLNow() - t0;
+    sigaction(SIGALRM, &old, NULL);
+    same(o, OK);
+    want(dt >= 60 * POLNanosPerMSec);
+    done;
+}
+
 ok64 POLlooptest() {
     sane(1);
     call(POLloop_reentrant);
     call(POLloop_timer_reentrant);
     call(POLloop_far_timer);
     call(POLloop_stop_once);
+    call(POLloop_poll_fail);
+    call(POLloop_sleep_eintr);
     done;
 }
 

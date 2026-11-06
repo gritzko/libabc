@@ -479,7 +479,8 @@ con i64 i64Max = INT64_MAX;
 con f32 f32Max = __builtin_inff();
 con f64 f64Max = __builtin_inf();
 
-fun u64 i64Zig(i64 i) { return (u64)(i * 2) ^ (u64)(i >> 63); }
+//  CODE-26B065bwvG: shift unsigned, `i * 2` overflowed (UB) at |i| >= 2^62
+fun u64 i64Zig(i64 i) { return ((u64)i << 1) ^ (u64)(i >> 63); }
 
 fun int64_t u64Zag(u64 u) {
     u64 half = u >> 1;
