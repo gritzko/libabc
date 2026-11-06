@@ -160,9 +160,49 @@ ok64 JSONNestTest() {
     done;
 }
 
+// JSON-26B065isnm: surrogate pairs decode to one 4-byte code point,
+// lone or mis-ordered surrogates and the non-JSON `\0` are refused
+ok64 JSONUnEscapeTest() {
+    sane(1);
+    typedef struct {
+        const char *escaped;
+        const char *unescaped;
+        ok64 ret;
+    } UnEscCase;
+    UnEscCase cases[] = {
+        {"a\\tb", "a\tb", OK},
+        {"\\u00e9", "\xc3\xa9", OK},
+        {"\\u0000", "", OK},
+        {"\\uD83D\\uDE00", "\xf0\x9f\x98\x80", OK},
+        {"x\\udbff\\udfffy", "x\xf4\x8f\xbf\xbfy", OK},
+        {"\\uD83D", "", JSONBAD},
+        {"\\uDEAD", "", JSONBAD},
+        {"\\uDE00\\uD83D", "", JSONBAD},
+        {"\\uD83D\\u0041", "", JSONBAD},
+        {"\\uD83D\\uD83D", "", JSONBAD},
+        {"\\uD83Dx", "", JSONBAD},
+        {"\\uD83D\\uDE0", "", JSONBAD},
+        {"\\0", "", JSONBAD},
+    };
+    int ncases = sizeof(cases) / sizeof(cases[0]);
+    for (int i = 0; i < ncases; ++i) {
+        a_pad(u8, buf, 64);
+        u8cs from = u8scstr(cases[i].escaped);
+        ok64 o = JSONUnEscapeAll(buf_idle, from);
+        want(o == cases[i].ret);
+        if (o != OK) continue;
+        u8cs result = {buf[1], buf_idle[0]};
+        u8cs expect = u8scstr(cases[i].unescaped);
+        if (i == 2) expect[1] = expect[0] + 1;  // the NUL byte
+        want(u8csEq(result, expect));
+    }
+    done;
+}
+
 ok64 JSONtest() {
     sane(1);
     call(JSONEscapeTest);
+    call(JSONUnEscapeTest);
     call(JSONCompactTest);
     call(JSONPrettyTest);
     call(JSONNestTest);

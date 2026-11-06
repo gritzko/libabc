@@ -241,6 +241,18 @@ ok64 JSONEscape(u8s txt, u8cs val) {
     done;
 }
 
+// One \uXXXX quad; JSONBAD unless the 4 bytes are hex
+fun ok64 JSONu16Drain(u64 *cp, u8cs txt) {
+    if ($len(txt) < 6 || txt[0][0] != '\\' || txt[0][1] != 'u')
+        return JSONBAD;
+    u8cs hex = {*txt + 2, *txt + 6};
+    if (u64hexdrain(cp, hex) != OK) return JSONBAD;
+    *txt += 6;
+    return OK;
+}
+
+// RFC 8259 §7: a surrogate pair is one 12-byte escape of one code point;
+// lone or mis-ordered surrogates are refused (JSON-26B065isnm)
 ok64 JSONUnEscape(u8s tlv, u8cs txt) {
     if ($empty(tlv)) return NOROOM;
     if ($empty(txt)) return JSONBAD;
@@ -250,35 +262,38 @@ ok64 JSONUnEscape(u8s tlv, u8cs txt) {
         ++*txt;
         return OK;
     }
-    ++*txt;
-    if ($empty(txt)) return JSONBAD;
-    switch (**txt) {
-        case 't': **tlv = '\t'; break;
-        case 'r': **tlv = '\r'; break;
-        case 'n': **tlv = '\n'; break;
-        case 'b': **tlv = '\b'; break;
-        case 'f': **tlv = '\f'; break;
-        case '0': **tlv = 0; break;
-        case '\\': **tlv = '\\'; break;
-        case '/': **tlv = '/'; break;
-        case '"': **tlv = '"'; break;
+    if ($len(txt) < 2) return JSONBAD;
+    u8 c = 0;
+    switch ((*txt)[1]) {
+        case 't': c = '\t'; break;
+        case 'r': c = '\r'; break;
+        case 'n': c = '\n'; break;
+        case 'b': c = '\b'; break;
+        case 'f': c = '\f'; break;
+        case '\\': c = '\\'; break;
+        case '/': c = '/'; break;
+        case '"': c = '"'; break;
         case 'u': {
-            if ($len(txt) < 5) return HEXNODATA;
-            u8cs hex = {*txt + 1, *txt + 5};
-            *txt += 4;
-            u64 cp = 0;
-            ok64 o = u64hexdrain(&cp, hex);
+            u8cs t = {txt[0], txt[1]};
+            u64 cp = 0, lo = 0;
+            if (JSONu16Drain(&cp, t) != OK) return JSONBAD;
+            if (cp >= 0xdc00 && cp <= 0xdfff) return JSONBAD;
+            if (cp >= 0xd800 && cp <= 0xdbff) {
+                if (JSONu16Drain(&lo, t) != OK) return JSONBAD;
+                if (lo < 0xdc00 || lo > 0xdfff) return JSONBAD;
+                cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
+            }
+            ok64 o = utf8sFeed32(tlv, cp);
             if (o != OK) return o;
-            o = utf8sFeed32(tlv, cp);
-            if (o != OK) return o;
-            --*tlv;
-            break;
+            *txt = t[0];
+            return OK;
         }
         default:
             return JSONBAD;
     }
+    **tlv = c;
     ++*tlv;
-    ++*txt;
+    *txt += 2;
     return OK;
 }
 
@@ -299,7 +314,8 @@ ok64 JSONUnEscapeAll(u8s tlv, u8cs txt) {
             ++*txt;
             continue;
         }
-        call(JSONUnEscape, tlv, txt);
+        ok64 o = JSONUnEscape(tlv, txt);
+        if (o != OK) return o;
     }
     if (!$empty(txt)) return NOROOM;
     return OK;
