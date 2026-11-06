@@ -346,8 +346,10 @@ ok64 POLLoop(u64 timens) {
             if (idx < 0) continue;  // callback already removed us
             data = pollerbData(POL_QUEUE);
             at = *data + idx;
-            // Remove if callback cleared itself or no events requested
-            if (at->callback == NULL || (at->tofd >= 0 && events == 0)) {
+            // Remove if callback cleared itself or no events requested;
+            // STD-26B068_boC: POLLNVAL means the fd is closed, re-polling spins
+            if (at->callback == NULL || (at->tofd >= 0 && events == 0) ||
+                (vec[i].revents & POLLNVAL)) {
                 HEAPpollerEjectAtZ(POL_QUEUE, idx, pollerZ);
             } else {
                 at->events = events;

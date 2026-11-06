@@ -317,6 +317,30 @@ ok64 POLloop_sleep_eintr() {
     done;
 }
 
+static int n_fired = 0;
+static short n_spin(int fd, poller* p) {
+    (void)fd;
+    (void)p;
+    n_fired++;
+    return POLLIN;
+}
+
+// STD-26B068_boC: a closed fd (POLLNVAL) is ejected, not re-polled.
+ok64 POLloop_nval() {
+    sane(1);
+    call(POLInit, 16);
+    n_fired = 0;
+    pipe2fd pp = {-1, -1};
+    call(pipe_make, &pp);
+    poller f = {.callback = n_spin, .tofd = pp.rd, .events = POLLIN};
+    call(POLTrackEvents, pp.rd, f);
+    pipe_close(&pp);
+    call(POLLoop, 20 * POLNanosPerMSec);
+    want(n_fired == 1);
+    call(POLFree);
+    done;
+}
+
 ok64 POLlooptest() {
     sane(1);
     call(POLloop_reentrant);
@@ -325,6 +349,7 @@ ok64 POLlooptest() {
     call(POLloop_stop_once);
     call(POLloop_poll_fail);
     call(POLloop_sleep_eintr);
+    call(POLloop_nval);
     done;
 }
 
