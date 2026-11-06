@@ -80,11 +80,21 @@ ok64 FILERmDir(path8s path, bool recursive) {
         a_pad(u8, work, FILE_PATH_MAX_LEN);
         call(PATHu8bFeed, work, path);
 
-        // Open directory and delete contents
-        DIR *dir = opendir((char const *)*path);
-        if (dir == NULL) {
+        //  STD-26B068lwbj: never follow a symlink, unlink it like rm(1).
+        int dfd = open((char const *)*path,
+                       O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        struct stat lsb = {};
+        if (dfd < 0 && errno != ENOENT &&
+            lstat((char const *)*path, &lsb) == 0 && S_ISLNK(lsb.st_mode))
+            return FILEUnLink(path);
+        if (dfd < 0) {
             testc(errno == ENOENT, FILEFAIL);  // OK if doesn't exist
             done;
+        }
+        DIR *dir = fdopendir(dfd);
+        if (dir == NULL) {
+            close(dfd);
+            fail(FILEFAIL);
         }
 
         struct dirent *entry = 0;
@@ -102,15 +112,14 @@ ok64 FILERmDir(path8s path, bool recursive) {
             o = PATHu8bPush(work, fn);
             if (o != OK) break;
 
-            // d_type can be DT_UNKNOWN on some filesystems, so use stat()
+            // d_type can be DT_UNKNOWN on some filesystems; a link is no dir
             b8 is_dir = NO;
             if (entry->d_type == DT_DIR) {
                 is_dir = YES;
             } else if (entry->d_type == DT_UNKNOWN) {
                 struct stat sb = {};
-                if (stat((char const *)u8bDataHead(work), &sb) == 0) {
+                if (fstatat(dfd, entry->d_name, &sb, AT_SYMLINK_NOFOLLOW) == 0)
                     is_dir = S_ISDIR(sb.st_mode);
-                }
             }
 
             if (is_dir) {

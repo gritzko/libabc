@@ -292,6 +292,46 @@ ok64 FILEtest8b() {
     done;
 }
 
+// STD-26B068lwbj: rm -r unlinks symlinks (top level or inside), never
+// descends into their targets.
+ok64 FILERmDirSymlinkTest() {
+    sane(1);
+    a_path(out, $cstr("/tmp"));
+    a_cstr(t1, "FILErmout_XXXXXX");
+    call(PATHu8bAddTmp, out, t1);
+    call(FILEMakeDir, $path(out));
+    a_path(file, $path(out));
+    a_cstr(fn, "keep.txt");
+    call(PATHu8bPush, file, fn);
+    int fd;
+    call(FILECreate, &fd, $path(file));
+    call(FILEClose, &fd);
+
+    a_path(base, $cstr("/tmp"));
+    a_cstr(t2, "FILErmbase_XXXXXX");
+    call(PATHu8bAddTmp, base, t2);
+    call(FILEMakeDir, $path(base));
+    a_path(in, $path(base));
+    a_cstr(ln, "link");
+    call(PATHu8bPush, in, ln);
+    call(FILESymLink, $path(out), $path(in));
+    a_path(top, $path(base));
+    a_cstr(tl, "-top");
+    call(u8bFeed, top, tl);
+    call(PATHu8bTerm, top);
+    call(FILESymLink, $path(out), $path(top));
+
+    filestat s = {};
+    call(FILERmDir, $path(top), true);
+    test(OK != FILELStat(&s, $path(top)), FILEFAIL);
+    test(OK == FILEStat(&s, $path(file)), FILEFAIL);
+    call(FILERmDir, $path(base), true);
+    test(OK != FILEStat(&s, $path(base)), FILEFAIL);
+    test(OK == FILEStat(&s, $path(file)), FILEFAIL);
+    call(FILERmDir, $path(out), true);
+    done;
+}
+
 // Test FILEErr errno translation
 ok64 FILEtest9() {
     sane(1);
@@ -1058,6 +1098,7 @@ ok64 FILEtest() {
     call(FILEtest7);
     call(FILEtest8);
     call(FILEtest8b);
+    call(FILERmDirSymlinkTest);
     call(FILEtest9);
     call(FILEIterTest);
     call(FILEIterSortedTest);
