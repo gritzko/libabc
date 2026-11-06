@@ -11,7 +11,10 @@ ok64 NETResolve(struct addrinfo **result, URIstate const *uri, b8 tcp) {
     // Extract host and port from URIstate
     a_pad(u8, host, NETmaxhost);  // ABC-012: the old 64 pad broke names
     a_pad(u8, port, 16);
-    call(u8sFeed, host_idle, uri->host);
+    // STD-26B068Nujy: RFC 3986 3.2.2 brackets delimit an IP-literal, not a host
+    u8cs h = {uri->host[0], uri->host[1]};
+    if ($len(h) >= 2 && *h[0] == '[' && *(h[1] - 1) == ']') ++h[0], --h[1];
+    call(u8sFeed, host_idle, h);
     if ($len(uri->port)) {
         call(u8sFeed, port_idle, uri->port);
     } else if ($len(uri->scheme)) {
@@ -29,7 +32,9 @@ ok64 NETResolve(struct addrinfo **result, URIstate const *uri, b8 tcp) {
     hints.ai_socktype = tcp ? SOCK_STREAM : SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;  // For wildcard IP address
 
-    int s = getaddrinfo((char *)*host_data, (char *)*port_data, &hints, result);
+    // an empty host is NULL: getaddrinfo(3) takes "" for no name, not wildcard
+    char const *node = $len(h) ? (char *)*host_data : NULL;
+    int s = getaddrinfo(node, (char *)*port_data, &hints, result);
     if (s != 0) {
         trace("getaddrinfo: %s\n", gai_strerror(s));
         return NETBADADDR;
