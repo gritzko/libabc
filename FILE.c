@@ -194,6 +194,19 @@ void FILEGetEnv(char const *name, u8cs out) {
 // time and acquired from ABC_BASS — no fixed cap.  Both buffers die
 // at the caller's `call()` boundary along with the rest of BASS.
 
+//  STD-26B068WzUj: pipe ends stay out of other children; macOS lacks pipe2,
+//  its fcntl fallback is racy against a concurrent fork in another thread.
+fun int FILEpipeCloexec(int fds[2]) {
+#ifdef __APPLE__
+    if (pipe(fds) != 0) return -1;
+    (void)fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    (void)fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+    return 0;
+#else
+    return pipe2(fds, O_CLOEXEC);
+#endif
+}
+
 ok64 FILESpawn(path8sc path, u8css argv,
                int *stdin_w, int *stdout_r, pid_t *pid_out) {
     sane($ok(path) && pid_out != NULL);
@@ -225,8 +238,8 @@ ok64 FILESpawn(path8sc path, u8css argv,
     // parent gets the opposite ends.
     int in_pipe[2]  = {-1, -1};
     int out_pipe[2] = {-1, -1};
-    if (stdin_w  && pipe(in_pipe)  != 0) failc(FILESPAWN);
-    if (stdout_r && pipe(out_pipe) != 0) {
+    if (stdin_w  && FILEpipeCloexec(in_pipe)  != 0) failc(FILESPAWN);
+    if (stdout_r && FILEpipeCloexec(out_pipe) != 0) {
         if (in_pipe[0] >= 0) { close(in_pipe[0]); close(in_pipe[1]); }
         failc(FILESPAWN);
     }

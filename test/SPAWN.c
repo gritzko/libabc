@@ -1,6 +1,7 @@
 #include "FILE.h"
 
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>
@@ -206,6 +207,36 @@ ok64 SPAWNTestSignalDeath() {
     done;
 }
 
+//  STD-26B068WzUj: a later child must not inherit the parent's pipe ends,
+//  or `cat` never sees EOF on stdin while `sleep` holds the write end.
+ok64 SPAWNTestPipesCloexec() {
+    sane(1);
+    a_cstr(cat_path, "cat");
+    ARGV(cat_args, u8slit("cat"));
+    pid_t cat_pid = 0;
+    int wfd = -1, rfd = -1;
+    call(FILESpawn, cat_path, cat_args, &wfd, &rfd, &cat_pid);
+    test((fcntl(wfd, F_GETFD) & FD_CLOEXEC) != 0, FAIL);
+    test((fcntl(rfd, F_GETFD) & FD_CLOEXEC) != 0, FAIL);
+    a_cstr(sl_path, "sleep");
+    ARGV(sl_args, u8slit("sleep"), u8slit("10"));
+    pid_t sl_pid = 0;
+    call(FILESpawn, sl_path, sl_args, NULL, NULL, &sl_pid);
+    close(wfd);
+    struct pollfd pf = {rfd, POLLIN, 0};
+    int n = poll(&pf, 1, 2000);
+    char c = 0;
+    ssize_t r = n > 0 ? read(rfd, &c, 1) : -1;
+    close(rfd);
+    kill(sl_pid, SIGTERM);
+    int rc = -1;
+    (void)FILEReap(sl_pid, &rc);
+    kill(cat_pid, SIGTERM);
+    (void)FILEReap(cat_pid, &rc);
+    test(r == 0, FAIL);  // EOF, not a poll timeout
+    done;
+}
+
 //  Print the sub-test name before running so the last line in
 //  stderr names the failing case when a testeqv triggers FAILEQ
 //  (the harness only reports `main:<line>` of TEST() itself).
@@ -222,6 +253,7 @@ ok64 SPAWNtest() {
     RUN(SPAWNTestFdsPipeline);
     RUN(SPAWNTestFdsInherit);
     RUN(SPAWNTestSignalDeath);
+    RUN(SPAWNTestPipesCloexec);
     done;
 }
 
