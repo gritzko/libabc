@@ -33,8 +33,10 @@ typedef X(nfa, ) *X(nfa, g)[3];
 
 // --- Compile-time fragment ---
 
+// STD-26B0680CDX: patch offsets are u32, the patch list outgrows 64K
 typedef struct {
-    u16 start, poff, plen;
+    u16 start;
+    u32 poff, plen;
 } X(nfa, f);
 
 fun u64 X(NFA, WorkSize)(u64 nstates) { return 3 * nstates; }
@@ -54,7 +56,7 @@ fun u16 X(NFA, Emit)(X(nfa, g) prog, u32g patch,
 }
 
 fun void X(NFA, Patch)(X(nfa, ) *s, u32 *pb, X(nfa, f) f, u16 target) {
-    for (u16 i = 0; i < f.plen; i++) {
+    for (u32 i = 0; i < f.plen; i++) {
         u32 e = pb[f.poff + i];
         u16 sid = e >> 1;
         if (e & 1)
@@ -68,7 +70,7 @@ fun ok64 X(NFA, Frag1)(u32g patch, X(nfa, f) *f,
                         u16 start, u16 sid, u8 which) {
     if (patch[1] >= patch[2]) return NFANOROOM;
     f->start = start;
-    f->poff = (u16)(patch[1] - patch[0]);
+    f->poff = (u32)(patch[1] - patch[0]);
     f->plen = 1;
     *patch[1]++ = ((u32)sid << 1) | which;
     return OK;
@@ -76,14 +78,14 @@ fun ok64 X(NFA, Frag1)(u32g patch, X(nfa, f) *f,
 
 fun ok64 X(NFA, PMerge)(u32g patch, X(nfa, f) *r,
                          u16 start, X(nfa, f) a, X(nfa, f) b) {
-    u16 total = a.plen + b.plen;
-    if (patch[1] + total > patch[2]) return NFANOROOM;
+    u32 total = a.plen + b.plen;
+    if (total > (u64)(patch[2] - patch[1])) return NFANOROOM;
     r->start = start;
-    r->poff = (u16)(patch[1] - patch[0]);
+    r->poff = (u32)(patch[1] - patch[0]);
     r->plen = total;
-    for (u16 i = 0; i < a.plen; i++)
+    for (u32 i = 0; i < a.plen; i++)
         *patch[1]++ = patch[0][a.poff + i];
-    for (u16 i = 0; i < b.plen; i++)
+    for (u32 i = 0; i < b.plen; i++)
         *patch[1]++ = patch[0][b.poff + i];
     return OK;
 }

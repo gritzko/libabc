@@ -3,7 +3,7 @@
 //
 // NFAx.h provides the generic simulation template.
 // NFA.h instantiates it for u8 and adds regex string compilation
-// with character classes, anchors, \d \w \s escapes, {n,m}.
+// with character classes, anchors, \d \w \s and C escapes, {n,m}.
 //
 
 #ifndef ABC_NFA_H
@@ -72,6 +72,34 @@ fun ok64 NFAu8CCPMerge(nfa8cc *c, nfau8f *r, u16 start, nfau8f a, nfau8f b) {
     return NFAu8PMerge(c->patch, r, start, a, b);
 }
 
+// Decode the byte escape after a backslash, same in and out of [...]:
+// \n \t \r \f \v \a \e, \xHH, octal \ooo; others are literal [STD-26B068DyLt]
+fun u8 NFAu8REsc(u8cs data, u8 esc) {
+    char const *from = "ntrfvae", *to = "\n\t\r\f\v\a\x1b";
+    for (int i = 0; from[i]; i++)
+        if (esc == from[i]) return (u8)to[i];
+    u8 v = 0, base = 8, lim = 2, d;
+    if (esc == 'x') {
+        base = 16;
+    } else if (esc >= '0' && esc <= '7') {
+        v = esc - '0';
+    } else {
+        return esc;
+    }
+    for (; lim > 0 && !u8csEmpty(data); lim--, data[0]++) {
+        u8 h = *data[0], l = h | 0x20;
+        if (h >= '0' && h <= '9')
+            d = h - '0';
+        else if (base == 16 && l >= 'a' && l <= 'f')
+            d = l - 'a' + 10;
+        else
+            break;
+        if (d >= base) break;
+        v = v * base + d;
+    }
+    return v;
+}
+
 // --- Character class compilation ---
 
 fun void NFAu8ClsSet(u8 *bmp, u8 ch) { bmp[ch >> 3] |= (1 << (ch & 7)); }
@@ -130,30 +158,8 @@ fun ok64 NFAu8Class(nfa8cc *c, nfau8f *f) {
                         ch != '\r' && ch != '\f' && ch != '\v')
                         NFAu8ClsSet(bmp, (u8)ch);
                 continue;
-            } else if (esc == 'n') {
-                lo = '\n';
-            } else if (esc == 't') {
-                lo = '\t';
-            } else if (esc == 'r') {
-                lo = '\r';
-            } else if (esc == 'f') {
-                lo = '\f';
-            } else if (esc == 'a') {
-                lo = '\a';
-            } else if (esc == 'e') {
-                lo = 0x1b;
-            } else if (esc == 'b') {
-                lo = '\b';
-            } else if (esc >= '0' && esc <= '7') {
-                lo = esc - '0';
-                if (!u8csEmpty(c->data) && *c->data[0] >= '0' &&
-                    *c->data[0] <= '7')
-                    lo = lo * 8 + (*c->data[0]++ - '0');
-                if (!u8csEmpty(c->data) && *c->data[0] >= '0' &&
-                    *c->data[0] <= '7')
-                    lo = lo * 8 + (*c->data[0]++ - '0');
             } else {
-                lo = esc;
+                lo = esc == 'b' ? '\b' : NFAu8REsc(c->data, esc);
             }
         }
         if (u8csLen(c->data) > 1 && c->data[0][0] == '-' &&
@@ -162,23 +168,7 @@ fun ok64 NFAu8Class(nfa8cc *c, nfau8f *f) {
             u8 hi = *c->data[0]++;
             if (hi == '\\' && !u8csEmpty(c->data)) {
                 u8 esc = *c->data[0]++;
-                if (esc == 'n')
-                    hi = '\n';
-                else if (esc == 't')
-                    hi = '\t';
-                else if (esc == 'r')
-                    hi = '\r';
-                else if (esc >= '0' && esc <= '7') {
-                    hi = esc - '0';
-                    if (!u8csEmpty(c->data) && *c->data[0] >= '0' &&
-                        *c->data[0] <= '7')
-                        hi = hi * 8 + (*c->data[0]++ - '0');
-                    if (!u8csEmpty(c->data) && *c->data[0] >= '0' &&
-                        *c->data[0] <= '7')
-                        hi = hi * 8 + (*c->data[0]++ - '0');
-                } else {
-                    hi = esc;
-                }
+                hi = esc == 'b' ? '\b' : NFAu8REsc(c->data, esc);
             }
             for (u16 ch = lo; ch <= hi; ch++) NFAu8ClsSet(bmp, (u8)ch);
         } else {
@@ -244,7 +234,8 @@ fun ok64 NFAu8RAtom(nfa8cc *c, nfau8f *f) {
             if (sid == NFA_NONE) return NFANOROOM;
             return NFAu8CCFrag1(c, f, sid, sid, 0);
         }
-        u16 sid = NFAu8CCEmit(c, NFA_LIT, esc, NFA_NONE, NFA_NONE);
+        u8 lit = NFAu8REsc(c->data, esc);
+        u16 sid = NFAu8CCEmit(c, NFA_LIT, lit, NFA_NONE, NFA_NONE);
         if (sid == NFA_NONE) return NFANOROOM;
         return NFAu8CCFrag1(c, f, sid, sid, 0);
     }
@@ -275,7 +266,8 @@ fun ok64 NFAu8RAtom(nfa8cc *c, nfau8f *f) {
     return NFAu8CCFrag1(c, f, sid, sid, 0);
 }
 
-// Parse {n}, {n,}, {n,m}, {,m}
+// Parse {n}, {n,}, {n,m}, {,m}; a count past 0xFFFE (NFA_NONE means
+// unbounded) fails with the cursor left inside the braces, see NFAu8RRep
 fun ok64 NFAu8RCounted(nfa8cc *c, u16 *nmin, u16 *nmax) {
     a_dup(u8c, save, c->data);
     u8csUsed1(c->data);
@@ -284,7 +276,9 @@ fun ok64 NFAu8RCounted(nfa8cc *c, u16 *nmin, u16 *nmax) {
     *nmax = 0;
     b8 has_nmin = NO;
     while (!u8csEmpty(c->data) && *c->data[0] >= '0' && *c->data[0] <= '9') {
-        *nmin = *nmin * 10 + (*c->data[0]++ - '0');
+        u32 n = *nmin * 10u + (*c->data[0]++ - '0');
+        if (n >= NFA_NONE) return NFABADSYN;  // STD-26B068h31R: no wrap
+        *nmin = (u16)n;
         has_nmin = YES;
     }
     while (!u8csEmpty(c->data) && *c->data[0] == ' ') u8csUsed1(c->data);
@@ -306,7 +300,9 @@ fun ok64 NFAu8RCounted(nfa8cc *c, u16 *nmin, u16 *nmax) {
         return OK;
     }
     while (!u8csEmpty(c->data) && *c->data[0] >= '0' && *c->data[0] <= '9') {
-        *nmax = *nmax * 10 + (*c->data[0]++ - '0');
+        u32 n = *nmax * 10u + (*c->data[0]++ - '0');
+        if (n >= NFA_NONE) return NFABADSYN;
+        *nmax = (u16)n;
         has_nmax = YES;
     }
     while (!u8csEmpty(c->data) && *c->data[0] == ' ') u8csUsed1(c->data);
@@ -328,6 +324,7 @@ fun ok64 NFAu8RRep(nfa8cc *c, nfau8f *f) {
 
     if (u8csEmpty(c->data)) return OK;
 
+    u8c *atom_end = c->data[0];
     u8 ch = *c->data[0];
     if (ch == '*') {
         u8csUsed1(c->data);
@@ -341,7 +338,7 @@ fun ok64 NFAu8RRep(nfa8cc *c, nfau8f *f) {
         u16 sid = NFAu8CCEmit(c, NFA_SPLIT, 0, f->start, NFA_NONE);
         if (sid == NFA_NONE) return NFANOROOM;
         NFAu8CCPatch(c, *f, sid);
-        f->poff = (u16)(c->patch[1] - c->patch[0]);
+        f->poff = (u32)(c->patch[1] - c->patch[0]);
         f->plen = 0;
         return NFAu8CCFrag1(c, f, f->start, sid, 1);
     }
@@ -357,7 +354,7 @@ fun ok64 NFAu8RRep(nfa8cc *c, nfau8f *f) {
     if (ch == '{') {
         u16 nmin, nmax;
         o = NFAu8RCounted(c, &nmin, &nmax);
-        if (o != OK) return OK;
+        if (o != OK) return c->data[0] == atom_end ? OK : o;
         if (nmax != 0xFFFF && nmax < nmin) return NFABADSYN;
         u8c *brace_end = c->data[0];
 
@@ -404,7 +401,7 @@ fun ok64 NFAu8RRep(nfa8cc *c, nfau8f *f) {
                 if (sid == NFA_NONE) return NFANOROOM;
                 NFAu8CCPatch(c, fi, sid);
                 NFAu8CCPatch(c, result, sid);
-                result.poff = (u16)(c->patch[1] - c->patch[0]);
+                result.poff = (u32)(c->patch[1] - c->patch[0]);
                 result.plen = 0;
                 o = NFAu8CCFrag1(c, &result, result.start, sid, 1);
                 if (o != OK) return o;
@@ -435,7 +432,7 @@ fun ok64 NFAu8RRep(nfa8cc *c, nfau8f *f) {
             if (sid == NFA_NONE) return NFANOROOM;
             NFAu8CCPatch(c, fi, sid);
             NFAu8CCPatch(c, result, sid);
-            result.poff = (u16)(c->patch[1] - c->patch[0]);
+            result.poff = (u32)(c->patch[1] - c->patch[0]);
             result.plen = 0;
             o = NFAu8CCFrag1(c, &result, result.start, sid, 1);
             if (o != OK) return o;

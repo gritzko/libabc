@@ -200,6 +200,30 @@ ok64 test_escape() {
     done;
 }
 
+// --- STD-26B068DyLt: C escapes decode the same outside and inside [] ---
+
+ok64 test_ctrl_escapes() {
+    sane(1);
+    b8 m;
+    // pattern, text, expected
+    char const *rows[][3] = {
+        {"\\n", "\n", "y"},   {"\\n", "n", ""},     {"[\\n]", "\n", "y"},
+        {"\\t", "\t", "y"},   {"\\t", "t", ""},     {"\\r", "\r", "y"},
+        {"\\f", "\f", "y"},   {"\\v", "\v", "y"},   {"[\\v]", "\v", "y"},
+        {"[\\v]", "v", ""},   {"\\e", "\x1b", "y"}, {"\\x41", "A", "y"},
+        {"\\x41", "x41", ""}, {"[\\x41]", "A", "y"}, {"\\x4a", "J", "y"},
+        {"\\x4", "\x04", "y"}, {"\\101", "A", "y"}, {"[\\x00-\\x1f]", "\x1b", "y"},
+        {"a\\.b", "a.b", "y"},
+    };
+    for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+        u8cs pat = {(u8c *)rows[i][0], (u8c *)rows[i][0] + strlen(rows[i][0])};
+        u8cs txt = {(u8c *)rows[i][1], (u8c *)rows[i][1] + strlen(rows[i][1])};
+        call(nfa_match, pat, txt, &m);
+        want(m == (rows[i][2][0] == 'y'));
+    }
+    done;
+}
+
 // --- Unanchored search ---
 
 ok64 test_search() {
@@ -287,6 +311,59 @@ ok64 test_bad_patterns() {
     done;
 }
 
+// --- Oversized programs: refuse or compile right, never miswire ---
+
+// Compile + match with mapped buffers sized for the 64K state cap
+ok64 nfa_big(u8cs pat, u8cs text, b8 *result) {
+    sane(1);
+    Bu8 pb = {}, wb = {};
+    Bu32 patch = {};
+    call(u8bMap, pb, 0x10000 * sizeof(nfau8));
+    call(u32bMap, patch, 1 << 20);
+    call(u8bMap, wb, 3 * 0x10000 * sizeof(u32));
+    nfau8 *buf = (nfau8 *)pb[0];
+    nfau8g prog = {buf, buf + 0xFFFF, buf};
+    u32 *pws[2] = {patch[0], patch[0] + (1 << 20)};
+    ok64 o = NFAu8Compile(prog, pat, pws);
+    if (o == OK) {
+        nfau8cs nfa = {prog[2], prog[0]};
+        u32 *ws[2] = {(u32 *)wb[0], (u32 *)wb[0] + 3 * 0x10000};
+        *result = NFAu8Match(nfa, text, ws);
+    }
+    u8bUnMap(pb);
+    u32bUnMap(patch);
+    u8bUnMap(wb);
+    return o;
+}
+
+ok64 test_big_counts() {
+    sane(1);
+    b8 m = NO;
+    // STD-26B068h31R: a u16 count used to wrap, a{65536} == a{0}
+    char const *bad[] = {"a{65536}", "a{65537}", "a{70000}", "a{1,65535}",
+                         "a{,65536}", "a{99999999999}"};
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        u8cs pat = {(u8c *)bad[i], (u8c *)bad[i] + strlen(bad[i])};
+        u8cs txt = {(u8c *)"a", (u8c *)"a" + 1};
+        want(nfa_big(pat, txt, &m) == NFABADSYN);
+    }
+    // STD-26B068h31R: {n,} stays unbounded, {n,m} bounded
+    u8cs p1 = $u8str("a{2,}");
+    u8cs t1 = $u8str("aaaaaaa");
+    call(nfa_big, p1, t1, &m);
+    want(m == YES);
+    u8cs p2 = $u8str("a{2,3}");
+    call(nfa_big, p2, t1, &m);
+    want(m == NO);
+    // STD-26B0680CDX: >64K patch entries used to wrap the u16 offsets
+    u8cs p3 = $u8str("(a?){16400}");
+    u8cs t3 = $u8str("aaa");
+    m = NO;
+    call(nfa_big, p3, t3, &m);
+    want(m == YES);
+    done;
+}
+
 // --- Dotstar ---
 
 ok64 test_dotstar() {
@@ -316,6 +393,8 @@ ok64 all_tests() {
     call(test_alt);
     call(test_group);
     call(test_escape);
+    call(test_ctrl_escapes);
+    call(test_big_counts);
     call(test_search);
     call(test_search_pattern);
     call(test_pathological);
