@@ -47,9 +47,10 @@ fun u64 BSDPatchNewSize(u8csc patch) {
     if ($len(patch) < 24) return 0;
     u8cp p = patch[0];
     if (memcmp(p, "BSDIFF01", 8) != 0) return 0;
-    i64 sz = 0;
-    memcpy(&sz, p + 8, 8);
-    return (u64)sz;
+    if (p[15] & 0x80) return 0;  // sign-magnitude, as BSDofftout
+    u64 sz = 0;
+    for (int k = 7; k >= 0; k--) sz = sz << 8 | p[8 + k];
+    return sz;
 }
 
 // Compute binary diff: old -> neu, write patch into output slice.

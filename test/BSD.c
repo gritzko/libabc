@@ -192,6 +192,71 @@ ok64 BSDtestOverflowPatch() {
     done;
 }
 
+// STD-26B068aXRP: random pairs over a small alphabet give multi-triple
+// patches with non-final extra bytes, which the old writer interleaved.
+ok64 BSDtestRandomRoundtrip() {
+    sane(1);
+    u64 seed = 0x9e3779b97f4a7c15ULL;
+    for (int t = 0; t < 2000; t++) {
+        seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        int ol = (int)((seed >> 33) % 700), nl = (int)((seed >> 13) % 700);
+        int al = 1 + (int)((seed >> 50) % 8);
+        u8 ob[ol + 1], nb[nl + 1];
+        for (int i = 0; i < ol; i++) {
+            seed = seed * 6364136223846793005ULL + 1;
+            ob[i] = 'a' + (seed >> 40) % al;
+        }
+        for (int i = 0; i < nl; i++) {
+            seed = seed * 6364136223846793005ULL + 1;
+            nb[i] = ol && (seed >> 41) & 7 ? ob[(seed >> 20) % ol]
+                                           : 'a' + (seed >> 44) % al;
+        }
+        u8csc old = {ob, ob + ol};
+        u8csc neu = {nb, nb + nl};
+        call(BSDroundtrip, old, neu);
+    }
+    done;
+}
+
+// STD-26B0682SmO: triples covering fewer than neusize bytes are corrupt.
+ok64 BSDtestShortPatch() {
+    sane(1);
+    u8 pbuf[24];
+    zero(pbuf);
+    memcpy(pbuf, "BSDIFF01", 8);
+    BSDtestPutOff(16, pbuf + 8);
+    BSDtestPutOff(0, pbuf + 16);
+    u8csc patch = {pbuf, pbuf + sizeof(pbuf)};
+    a$str(old, "0123456789abcdef");
+    u8 result[16];
+    u8s neu = {result, result + sizeof(result)};
+    ok64 o = BSDPatch(neu, old, patch);
+    same(o, BSDCORRUPT);
+    done;
+}
+
+// STD-26B068tST7: seeks outside old are corrupt; negative size reads as 0.
+ok64 BSDtestBadSeek() {
+    sane(1);
+    u8 pbuf[24 + 48];
+    zero(pbuf);
+    memcpy(pbuf, "BSDIFF01", 8);
+    BSDtestPutOff(0, pbuf + 8);
+    BSDtestPutOff(2, pbuf + 16);
+    BSDtestPutOff(0x7fffffffffffffffLL, pbuf + 24 + 16);
+    BSDtestPutOff(0x7fffffffffffffffLL, pbuf + 48 + 16);
+    u8csc patch = {pbuf, pbuf + sizeof(pbuf)};
+    a$str(old, "0123456789abcdef");
+    u8 result[1];
+    u8s neu = {result, result};
+    ok64 o = BSDPatch(neu, old, patch);
+    same(o, BSDCORRUPT);
+    BSDtestPutOff(-5, pbuf + 8);
+    u8csc hdr = {pbuf, pbuf + 24};
+    testeqv((long long)BSDPatchNewSize(hdr), 0LL, "%lld");
+    done;
+}
+
 typedef struct {
     char const *name;
     ok64 (*fn)();
@@ -213,6 +278,9 @@ ok64 BSDtest() {
         {"grow", BSDtestGrow},
         {"shrink", BSDtestShrink},
         {"overflow_patch", BSDtestOverflowPatch},
+        {"random_roundtrip", BSDtestRandomRoundtrip},
+        {"short_patch", BSDtestShortPatch},
+        {"bad_seek", BSDtestBadSeek},
     };
 
     i64 count = sizeof(cases) / sizeof(cases[0]);

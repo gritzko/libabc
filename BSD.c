@@ -336,43 +336,32 @@ ok64 BSDDiff(u8s patch, u8csc old, u8csc neu, i64s work) {
         }
     }
 
-    // Now emit diff block
-    lastscan = 0;
-    lastpos = 0;
-    lastoffset = 0;
-    scan = 0;
-    len = 0;
-
-    // Re-read ctrl triples to emit diff and extra
-    u8cp cp = ctrl_start;
-    for (i64 ci = 0; ci < ctrl_count; ci++) {
-        i64 diff_len = BSDofftin(cp);
-        cp += 8;
-        i64 extra_len = BSDofftin(cp);
-        cp += 8;
-        i64 seek_off = BSDofftin(cp);
-        cp += 8;
-
-        // diff bytes
-        test(outend - out >= diff_len, BSDNOROOM);
-        for (i64 i = 0; i < diff_len; i++) {
-            u8 ob_val =
-                (lastpos + i >= 0 && lastpos + i < oldsize) ? ob[lastpos + i] : 0;
-            out[i] = nb[lastscan + i] - ob_val;
+    // STD-26B068aXRP: all diff bytes, then all extra bytes, as BSDPatch
+    // reads them; pass 0 writes the diff block, pass 1 the extra block.
+    for (int pass = 0; pass < 2; pass++) {
+        u8cp cp = ctrl_start;
+        lastscan = 0;
+        lastpos = 0;
+        for (i64 ci = 0; ci < ctrl_count; ci++, cp += 24) {
+            i64 diff_len = BSDofftin(cp);
+            i64 extra_len = BSDofftin(cp + 8);
+            if (pass == 0) {
+                test(outend - out >= diff_len, BSDNOROOM);
+                for (i64 i = 0; i < diff_len; i++) {
+                    u8 ob_val = (lastpos + i >= 0 && lastpos + i < oldsize)
+                                    ? ob[lastpos + i]
+                                    : 0;
+                    out[i] = nb[lastscan + i] - ob_val;
+                }
+                out += diff_len;
+            } else {
+                test(outend - out >= extra_len, BSDNOROOM);
+                memcpy(out, nb + lastscan + diff_len, extra_len);
+                out += extra_len;
+            }
+            lastscan += diff_len + extra_len;
+            lastpos += diff_len + BSDofftin(cp + 16);
         }
-        out += diff_len;
-
-        lastscan += diff_len;
-        lastpos += diff_len;
-
-        // extra bytes
-        test(outend - out >= extra_len, BSDNOROOM);
-        memcpy(out, nb + lastscan, extra_len);
-        out += extra_len;
-
-        lastscan += extra_len;
-        lastpos += seek_off;
-        lastoffset = lastpos - lastscan;
     }
 
     // Write header
@@ -483,8 +472,11 @@ ok64 BSDPatch(u8s neu, u8csc old, u8csc patch) {
         memcpy(nb + newpos, ep, extra_len);
         ep += extra_len;
         newpos += extra_len;
+        // STD-26B068tST7: keep oldpos in [0, oldsize], no signed overflow.
+        test(seek_off >= -oldpos && seek_off <= oldsize - oldpos, BSDCORRUPT);
         oldpos += seek_off;
     }
+    test(newpos == neusize, BSDCORRUPT);  // STD-26B0682SmO
 
     // Advance output slice past written data
     neu[0] += neusize;
