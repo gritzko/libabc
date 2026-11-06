@@ -9,8 +9,7 @@ ok64 NETResolve(struct addrinfo **result, URIstate const *uri, b8 tcp) {
     sane(uri != NULL && result != NULL && *result == NULL);
 
     // Extract host and port from URIstate
-    // ABC-012: DNS allows 253-char names + NUL; the old 64 pad broke them
-    a_pad(u8, host, 254);
+    a_pad(u8, host, NETmaxhost);  // ABC-012: the old 64 pad broke names
     a_pad(u8, port, 16);
     call(u8sFeed, host_idle, uri->host);
     if ($len(uri->port)) {

@@ -22,7 +22,9 @@ typedef Bu8 NETaddr;
 #define NETraw(a) u8bData(a)
 #define NETport(a) u8bData(a)
 
-#define NETmaxhost (256 - 32 - 2)
+//  RFC 1035 2.3.4: a name is <= 255 octets on the wire, i.e. <= 253 chars
+//  as text (dots for length bytes, no root); +1 for a trailing dot or NUL.
+#define NETmaxhost (254)
 #define NETmaxserv (32)
 
 #define aNETraw(name) aBpad(u8, name, 128);
