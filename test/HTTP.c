@@ -276,6 +276,28 @@ ok64 HTTPtest7() {
     done;
 }
 
+// STD-26B068WrsM: RFC 9110 §5.1 field names are case-insensitive
+ok64 HTTPtest8() {
+    sane(1);
+    a$str(req,
+          "GET / HTTP/1.1\r\n"
+          "x-^: no\r\n"
+          "host: a\r\n"
+          "HOST: b\r\n\r\n");
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 8);
+    state.headers = hdrsidle;
+    call(HTTPutf8Drain, req, &state);
+    a$str(k, "Host");
+    a$str(v, "a");
+    u8cs host = {};
+    call(HTTPfind, &host, k, hdrsdata);
+    $testeq(host, v);
+    a$str(k2, "X-~");
+    want(HTTPfind(&host, k2, hdrsdata) == HTTPNONE);
+    done;
+}
+
 ok64 HTTPtest() {
     sane(1);
     call(HTTPtest1);
@@ -285,6 +307,7 @@ ok64 HTTPtest() {
     call(HTTPtest5);
     call(HTTPtest6);
     call(HTTPtest7);
+    call(HTTPtest8);
     done;
 }
 

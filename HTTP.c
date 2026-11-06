@@ -97,9 +97,21 @@ ok64 HTTPutf8Feed(u8s into, HTTPstate const* http) {
     return o;
 }
 
+// STD-26B068WrsM: RFC 9110 §5.1 names are ASCII case-insensitive
+static b8 HTTPnameEq(u8csc a, u8csc b) {
+    if ($len(a) != $len(b)) return NO;
+    for (u8c *p = a[0], *q = b[0]; p < a[1]; ++p, ++q) {
+        u8 x = *p, y = *q;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return NO;
+    }
+    return YES;
+}
+
 ok64 HTTPfind(u8cs *value, u8csc key, u8css headers) {
     for (i64 i = 0; i + 1 < $len(headers); i += 2) {
-        if ($eq($at(headers, i), key)) {
+        if (HTTPnameEq($at(headers, i), key)) {
             u8csMv(*value, $at(headers, i + 1));
             return OK;
         }

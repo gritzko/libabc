@@ -31,6 +31,8 @@ ok64 HTTPutf8Drain(u8cs from, HTTPstate *http);
 
 ok64 HTTPutf8Feed(u8s into, HTTPstate const *http);
 
+// The first header named `key` (case-insensitive); duplicates are kept
+// in order, never combined into a list (RFC 9110 §5.3).
 ok64 HTTPfind(u8cs *value, u8csc key, u8css headers);
 
 #endif
