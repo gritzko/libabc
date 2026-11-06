@@ -16,11 +16,6 @@
 
 #include "PUPb.h"
 
-uint8_t _pro_depth = 0;
-extern "C" {
-thread_local u8 *ABC_BASS[4] = {};  //  PRO.h's scratch arena, PUPS calls use it
-}
-
 #define BB_PROBES (1 << 16)
 #define BB_SCANS 1024
 #define BB_BATCH 1024
@@ -541,10 +536,17 @@ static void reg_cfg(char const *rec, size_t n, std::vector<Sub> const &subs,
         for (int op = 2; op < 8; op++) add(s, op);
 }
 
+//  Last: PRO.h macros (done, test, on...) clash with the members above
+extern "C" {
+#include "PRO.h"
+ABC_INIT  //  PUPS calls use the BASS scratch arena
+}
+
 static int bench_main(int argc, char **argv) {
-    if (u8bMap(ABC_BASS, 1 << 26) != OK) return 1;
+    if (ABCStart(argc, argv) != OK) return 1;
     benchmark::Initialize(&argc, argv);
     benchmark::RunSpecifiedBenchmarks();
     benchmark::Shutdown();
+    ABCStop();
     return 0;
 }

@@ -14,8 +14,7 @@
 #include "INT.h"
 #include "PRO.h"
 
-uint8_t _pro_depth = 0;
-thread_local u8 *ABC_BASS[4] = {};  // PRO.h scratch, as fuzz/HASH.cpp
+ABC_INIT
 
 template <int P>
 struct pay {

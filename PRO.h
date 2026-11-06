@@ -3,7 +3,7 @@
 
 // It is not recommended to include this header from
 // public .h files. It pollutes the namespace for non-ABC code.
-// PRO.h use implies use of MAIN(), TEST() or FUZZ() macros in executables.
+// PRO.h use implies MAIN(), TEST(), FUZZ() or ABC_INIT in executables.
 
 #include <errno.h>
 #include <stdint.h>
@@ -13,9 +13,6 @@
 #include "OK.h"
 
 extern uint8_t _pro_depth;
-
-// use this with every int main() {...}
-#define ABC_INIT uint8_t _pro_depth = 0;
 
 // ===== ABC_BASS: thread-local scratch arena =====
 //
@@ -394,23 +391,36 @@ fun ok64 PROStderrToFile(char const *name) {
 #define _PRO_TRACE_INIT(name)
 #endif
 
+// CODE-26B065z50Q: a program with its own main() puts ABC_INIT at
+// file scope (the PRO globals), brackets main with ABCStart/ABCStop.
+// Before ABCStart, BASS is empty: rentals fail with BNOROOM.
+#define ABC_INIT                     \
+    uint8_t _pro_depth = 0;          \
+    u8cs *STD_ARGS[4] = {};          \
+    thread_local u8 *ABC_BASS[4] = {};
+
+fun ok64 ABCStart(int argn, char **args) {
+    _PRO_TRACE_INIT(args[0]);
+    if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {
+        fprintf(stderr, "ABC_BASS u8bMap failed\n");
+        return FAILSANITY;
+    }
+    ok64 o = _parse_args(argn, args);
+    if (o != OK) {
+        fprintf(stderr, "STD_ARGS acquire failed\n");
+        u8bUnMap(ABC_BASS);
+    }
+    return o;
+}
+
+fun void ABCStop() { u8bUnMap(ABC_BASS); }
+
 #define MAIN(f)                                                          \
-    uint8_t _pro_depth = 0;                                              \
-    u8cs *STD_ARGS[4] = {};                                              \
-    thread_local u8 *ABC_BASS[4] = {};                                  \
+    ABC_INIT                                                             \
     int main(int argn, char **args) {                                    \
-        _PRO_TRACE_INIT(args[0]);                                        \
-        if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {                    \
-            fprintf(stderr, "ABC_BASS u8bMap failed\n");                 \
-            return 1;                                                    \
-        }                                                                \
-        if (_parse_args(argn, args) != OK) {                             \
-            fprintf(stderr, "STD_ARGS acquire failed\n");                \
-            u8bUnMap(ABC_BASS);                                          \
-            return 1;                                                    \
-        }                                                                \
+        if (ABCStart(argn, args) != OK) return 1;                        \
         ok64 ret = f();                                                  \
-        u8bUnMap(ABC_BASS);                                              \
+        ABCStop();                                                       \
         if (ret != OK) {                                                 \
             trace("%s<%s at %s:%i\n", PROindent, ok64str(ret), __func__, \
                   __LINE__);                                             \

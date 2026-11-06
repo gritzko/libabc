@@ -8,8 +8,9 @@
 #include <vector>
 
 #include "INT.h"
+#include "PRO.h"
 
-uint8_t _pro_depth = 0;
+ABC_INIT
 extern "C" ok64 hbMerge(u64 *out, size_t *len, u64cs *runs, size_t k);
 
 static u64 mix(u64 x) {

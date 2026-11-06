@@ -14,8 +14,7 @@
 #include "KV.h"
 #include "PRO.h"
 
-uint8_t _pro_depth = 0;
-thread_local u8 *ABC_BASS[4] = {};
+ABC_INIT
 
 #define X(M, name) M##kv64##name
 #include "SWISSx.h"

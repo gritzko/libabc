@@ -6,8 +6,9 @@
 #include <vector>
 
 #include "INT.h"
+#include "PRO.h"
 
-uint8_t _pro_depth = 0;
+ABC_INIT
 
 #define BB_MAX (1ULL << 28)  // u64 slots reserved, 2 GB of address space
 

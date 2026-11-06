@@ -9,7 +9,7 @@
 #include "INT.h"
 #include "PRO.h"
 
-uint8_t _pro_depth = 0;
+ABC_INIT
 
 extern "C" {
 #define X(M, name) M##u32##name

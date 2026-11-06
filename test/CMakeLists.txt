@@ -25,6 +25,11 @@ target_compile_options(ANSItest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(ANSItest abc-core)
 add_test(NAME ANSItest COMMAND ANSItest)
 
+# CODE-26B065z50Q: a plain main() links abc-core via ABC_INIT
+add_executable(NOMAINtest NOMAIN.c)
+target_link_libraries(NOMAINtest abc-core)
+add_test(NAME NOMAINtest COMMAND NOMAINtest)
+
 add_executable(SPAWNtest SPAWN.c)
 target_link_options(SPAWNtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(SPAWNtest PRIVATE ${TEST_CXX_FLAGS})

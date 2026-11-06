@@ -56,6 +56,7 @@ A buffer is four pointers splitting memory into PAST/DATA/IDLE; the verb that cr
  -  `ABC_BASS` — the thread-local LIFO scratch arena set up by the entry macros.
  -  `a_carve`/`a_cquire`/`a_rent`/`a_ren`/`a_lign` — BASS-implicit scratch acquisition (no explicit arena arg).
  -  `MAIN(f)`/`TEST(f)`/`FUZZ(f)` — entry-point macros that declare the `PRO.h` globals and initialise BASS.
+ -  `ABC_INIT` — the same globals for a program with its own `main()`, which brackets its body with `ABCStart(argn, args)`/`ABCStop()`.
  -  `TEST`/`want`/`same`/`testeq` (TEST.h) — table-driven test scaffolding.
  -  `SAN.h` — undefines the abc macros (`call`, `done`, `sane`, …) so a translation unit can hand the names back to non-abc.
 

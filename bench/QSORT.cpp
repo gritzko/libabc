@@ -7,8 +7,9 @@
 extern "C" {
 #include "INT.h"
 }
+#include "PRO.h"
 
-uint8_t _pro_depth = 0;
+ABC_INIT
 
 // Fill buffer with pseudo-random data
 static void fill_random(u64 *arr, size_t n, u64 seed) {
