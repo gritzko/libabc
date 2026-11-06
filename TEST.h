@@ -65,7 +65,10 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
     FUZZ_C int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) { \
         T const *p = (T const *)Data;                              \
         $##T##c data = {p, p + (Size / sizeof(T))};                \
+        a_dup(u8c, bass, u8bDataC(ABC_BASS));                      \
         ok64 o = n(data);                                          \
+        ((u8 **)ABC_BASS)[1] = (u8 *)bass[0];  /* rewind, as call() */ \
+        ((u8 **)ABC_BASS)[2] = (u8 *)bass[1];                      \
         if (o!=OK) __builtin_trap();                                           \
         return 0;                                                  \
     }                                                              \
