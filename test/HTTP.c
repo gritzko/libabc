@@ -317,6 +317,40 @@ ok64 HTTPtest9() {
     done;
 }
 
+// STD-26B068gn1w: Drain stops at the end of the header section,
+// the body and pipelined requests stay in `from`
+ok64 HTTPtest10() {
+    sane(1);
+    a$str(req,
+          "POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\n"
+          "helloGET /next HTTP/1.1\r\n\r\n");
+    a$str(rest, "helloGET /next HTTP/1.1\r\n\r\n");
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 8);
+    state.headers = hdrsidle;
+    call(HTTPutf8Drain, req, &state);
+    $testeq(req, rest);
+    a$str(two, "GET /a HTTP/1.1\r\n\r\nGET /b HTTP/1.1\r\n\r\n");
+    a$str(a, "/a");
+    a$str(b, "/b");
+    HTTPstate s1 = {};
+    s1.headers = hdrsidle;
+    call(HTTPutf8Drain, two, &s1);
+    $testeq(s1.uri, a);
+    HTTPstate s2 = {};
+    s2.headers = hdrsidle;
+    call(HTTPutf8Drain, two, &s2);
+    $testeq(s2.uri, b);
+    want(u8csEmpty(two));
+    a$str(res, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+    a$str(hi, "hi");
+    HTTPstate s3 = {};
+    s3.headers = hdrsidle;
+    call(HTTPutf8Drain, res, &s3);
+    $testeq(res, hi);
+    done;
+}
+
 ok64 HTTPtest() {
     sane(1);
     call(HTTPtest1);
@@ -328,6 +362,7 @@ ok64 HTTPtest() {
     call(HTTPtest7);
     call(HTTPtest8);
     call(HTTPtest9);
+    call(HTTPtest10);
     done;
 }
 

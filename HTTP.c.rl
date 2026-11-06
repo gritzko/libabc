@@ -18,9 +18,10 @@ enum {
 	HTTPStatusCode = HTTPenum+32,
 	HTTPReasonPhrase = HTTPenum+33,
 	HTTPStatusLine = HTTPenum+34,
-	HTTPResponse = HTTPenum+35,
-	HTTPMessage = HTTPenum+36,
-	HTTPRoot = HTTPenum+37,
+	HTTPResponseHead = HTTPenum+35,
+	HTTPResponse = HTTPenum+36,
+	HTTPMessage = HTTPenum+37,
+	HTTPRoot = HTTPenum+38,
 };
 
 // user functions (callbacks) for the parser
@@ -37,6 +38,7 @@ ok64 HTTPonRequest (u8cs tok, HTTPstate* state);
 ok64 HTTPonStatusCode (u8cs tok, HTTPstate* state);
 ok64 HTTPonReasonPhrase (u8cs tok, HTTPstate* state);
 ok64 HTTPonStatusLine (u8cs tok, HTTPstate* state);
+ok64 HTTPonResponseHead (u8cs tok, HTTPstate* state);
 ok64 HTTPonResponse (u8cs tok, HTTPstate* state);
 ok64 HTTPonMessage (u8cs tok, HTTPstate* state);
 ok64 HTTPonRoot (u8cs tok, HTTPstate* state);
@@ -167,6 +169,15 @@ action HTTPStatusLine1 {
         fhold; fbreak;
     }
 }
+action HTTPResponseHead0 { mark0[HTTPResponseHead] = p - data[0]; }
+action HTTPResponseHead1 {
+    tok[0] = data[0] + mark0[HTTPResponseHead];
+    tok[1] = p;
+    o = HTTPonResponseHead(tok, state); 
+    if (o!=OK) {
+        fhold; fbreak;
+    }
+}
 action HTTPResponse0 { mark0[HTTPResponse] = p - data[0]; }
 action HTTPResponse1 {
     tok[0] = data[0] + mark0[HTTPResponse];
@@ -230,7 +241,8 @@ HTTPRequest = (   HTTPlws*  HTTPRequestHead  HTTPBody )  >HTTPRequest0 %HTTPRequ
 HTTPStatusCode = (   HTTPdigit{3}   )  >HTTPStatusCode0 %HTTPStatusCode1;
 HTTPReasonPhrase = (   HTTPtext?   )  >HTTPReasonPhrase0 %HTTPReasonPhrase1;
 HTTPStatusLine = (   HTTPHTTPVersion  HTTPsp  HTTPStatusCode  HTTPsp  HTTPReasonPhrase  HTTPcrlf   )  >HTTPStatusLine0 %HTTPStatusLine1;
-HTTPResponse = (   HTTPlws*  HTTPStatusLine  HTTPMessageHeader*  HTTPcrlf  HTTPBody )  >HTTPResponse0 %HTTPResponse1;
+HTTPResponseHead = (   HTTPStatusLine  HTTPMessageHeader*  HTTPcrlf   )  >HTTPResponseHead0 %HTTPResponseHead1;
+HTTPResponse = (   HTTPlws*  HTTPResponseHead  HTTPBody )  >HTTPResponse0 %HTTPResponse1;
 HTTPMessage = (   HTTPRequest  |  HTTPResponse )  >HTTPMessage0 %HTTPMessage1;
 HTTPRoot = (   HTTPMessage )  >HTTPRoot0 %HTTPRoot1;
 

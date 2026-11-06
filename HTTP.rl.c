@@ -20,9 +20,10 @@ enum {
 	HTTPStatusCode = HTTPenum+32,
 	HTTPReasonPhrase = HTTPenum+33,
 	HTTPStatusLine = HTTPenum+34,
-	HTTPResponse = HTTPenum+35,
-	HTTPMessage = HTTPenum+36,
-	HTTPRoot = HTTPenum+37,
+	HTTPResponseHead = HTTPenum+35,
+	HTTPResponse = HTTPenum+36,
+	HTTPMessage = HTTPenum+37,
+	HTTPRoot = HTTPenum+38,
 };
 
 // user functions (callbacks) for the parser
@@ -39,6 +40,7 @@ ok64 HTTPonRequest (u8cs tok, HTTPstate* state);
 ok64 HTTPonStatusCode (u8cs tok, HTTPstate* state);
 ok64 HTTPonReasonPhrase (u8cs tok, HTTPstate* state);
 ok64 HTTPonStatusLine (u8cs tok, HTTPstate* state);
+ok64 HTTPonResponseHead (u8cs tok, HTTPstate* state);
 ok64 HTTPonResponse (u8cs tok, HTTPstate* state);
 ok64 HTTPonMessage (u8cs tok, HTTPstate* state);
 ok64 HTTPonRoot (u8cs tok, HTTPstate* state);
@@ -46,26 +48,27 @@ ok64 HTTPonRoot (u8cs tok, HTTPstate* state);
 
 
 
-#line 239 "HTTP.c.rl"
+#line 251 "HTTP.c.rl"
 
 
 
-#line 49 "HTTP.rl.c"
+#line 51 "HTTP.rl.c"
 static const char _HTTP_actions[] = {
 	0, 1, 1, 1, 2, 1, 3, 1, 
 	4, 1, 5, 1, 7, 1, 9, 1, 
-	10, 1, 11, 1, 13, 1, 16, 1, 
-	20, 1, 21, 1, 22, 1, 23, 1, 
-	25, 2, 10, 11, 2, 15, 16, 2, 
-	22, 23, 3, 7, 12, 8, 3, 13, 
-	12, 8, 3, 14, 6, 0, 3, 25, 
-	12, 8, 4, 17, 19, 29, 31, 4, 
-	17, 27, 29, 31, 4, 30, 28, 18, 
-	26, 5, 14, 6, 0, 24, 4, 5, 
-	16, 17, 27, 29, 31, 6, 15, 16, 
-	17, 19, 29, 31, 6, 30, 28, 18, 
-	14, 6, 0, 9, 30, 28, 18, 14, 
-	6, 0, 26, 24, 4
+	10, 1, 11, 1, 13, 1, 20, 1, 
+	21, 1, 22, 1, 23, 1, 25, 2, 
+	10, 11, 2, 15, 16, 2, 22, 23, 
+	2, 27, 16, 3, 7, 12, 8, 3, 
+	13, 12, 8, 3, 14, 6, 0, 3, 
+	25, 12, 8, 4, 17, 19, 31, 33, 
+	4, 17, 29, 31, 33, 4, 32, 30, 
+	18, 28, 6, 14, 6, 0, 26, 24, 
+	4, 6, 15, 16, 17, 19, 31, 33, 
+	6, 27, 16, 17, 29, 31, 33, 6, 
+	32, 30, 18, 14, 6, 0, 10, 32, 
+	30, 18, 14, 6, 0, 28, 26, 24, 
+	4
 };
 
 static const short _HTTP_key_offsets[] = {
@@ -195,15 +198,15 @@ static const char _HTTP_trans_targs[] = {
 };
 
 static const char _HTTP_trans_actions[] = {
-	68, 0, 92, 99, 0, 50, 73, 1, 
+	69, 0, 95, 102, 0, 51, 74, 1, 
 	0, 3, 0, 5, 7, 0, 0, 0, 
-	0, 0, 0, 0, 9, 0, 11, 42, 
-	0, 0, 13, 15, 33, 15, 0, 19, 
-	46, 0, 17, 0, 0, 0, 0, 0, 
-	0, 0, 9, 23, 0, 0, 25, 27, 
-	39, 0, 29, 0, 31, 54, 0, 0, 
-	13, 15, 33, 15, 0, 19, 46, 0, 
-	17, 36, 0, 21, 0
+	0, 0, 0, 0, 9, 0, 11, 43, 
+	0, 0, 13, 15, 31, 15, 0, 19, 
+	47, 0, 17, 0, 0, 0, 0, 0, 
+	0, 0, 9, 21, 0, 0, 23, 25, 
+	37, 0, 27, 0, 29, 55, 0, 0, 
+	13, 15, 31, 15, 0, 19, 47, 0, 
+	17, 34, 0, 40, 0
 };
 
 static const char _HTTP_eof_actions[] = {
@@ -212,8 +215,8 @@ static const char _HTTP_eof_actions[] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 85, 58, 79, 
-	63
+	0, 0, 0, 0, 0, 81, 59, 88, 
+	64
 };
 
 static const int HTTP_start = 1;
@@ -223,7 +226,7 @@ static const int HTTP_error = 0;
 static const int HTTP_en_main = 1;
 
 
-#line 242 "HTTP.c.rl"
+#line 254 "HTTP.c.rl"
 
 // the public API function
 ok64 HTTPLexer(HTTPstate* state) {
@@ -241,14 +244,14 @@ ok64 HTTPLexer(HTTPstate* state) {
     u8cs tok = {p, p};
 
     
-#line 236 "HTTP.rl.c"
+#line 239 "HTTP.rl.c"
 	{
 	cs = HTTP_start;
 	}
 
-#line 259 "HTTP.c.rl"
+#line 271 "HTTP.c.rl"
     
-#line 239 "HTTP.rl.c"
+#line 242 "HTTP.rl.c"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -323,11 +326,11 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 53 "HTTP.c.rl"
+#line 55 "HTTP.c.rl"
 	{ mark0[HTTPMethod] = p - data[0]; }
 	break;
 	case 1:
-#line 54 "HTTP.c.rl"
+#line 56 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPMethod];
     tok[1] = p;
@@ -338,11 +341,11 @@ _match:
 }
 	break;
 	case 2:
-#line 62 "HTTP.c.rl"
+#line 64 "HTTP.c.rl"
 	{ mark0[HTTPRequestURI] = p - data[0]; }
 	break;
 	case 3:
-#line 63 "HTTP.c.rl"
+#line 65 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPRequestURI];
     tok[1] = p;
@@ -353,11 +356,11 @@ _match:
 }
 	break;
 	case 4:
-#line 71 "HTTP.c.rl"
+#line 73 "HTTP.c.rl"
 	{ mark0[HTTPHTTPVersion] = p - data[0]; }
 	break;
 	case 5:
-#line 72 "HTTP.c.rl"
+#line 74 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPHTTPVersion];
     tok[1] = p;
@@ -368,11 +371,11 @@ _match:
 }
 	break;
 	case 6:
-#line 80 "HTTP.c.rl"
+#line 82 "HTTP.c.rl"
 	{ mark0[HTTPRequestLine] = p - data[0]; }
 	break;
 	case 7:
-#line 81 "HTTP.c.rl"
+#line 83 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPRequestLine];
     tok[1] = p;
@@ -383,11 +386,11 @@ _match:
 }
 	break;
 	case 8:
-#line 89 "HTTP.c.rl"
+#line 91 "HTTP.c.rl"
 	{ mark0[HTTPFieldName] = p - data[0]; }
 	break;
 	case 9:
-#line 90 "HTTP.c.rl"
+#line 92 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPFieldName];
     tok[1] = p;
@@ -398,11 +401,11 @@ _match:
 }
 	break;
 	case 10:
-#line 98 "HTTP.c.rl"
+#line 100 "HTTP.c.rl"
 	{ mark0[HTTPFieldValue] = p - data[0]; }
 	break;
 	case 11:
-#line 99 "HTTP.c.rl"
+#line 101 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPFieldValue];
     tok[1] = p;
@@ -413,11 +416,11 @@ _match:
 }
 	break;
 	case 12:
-#line 107 "HTTP.c.rl"
+#line 109 "HTTP.c.rl"
 	{ mark0[HTTPMessageHeader] = p - data[0]; }
 	break;
 	case 13:
-#line 108 "HTTP.c.rl"
+#line 110 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPMessageHeader];
     tok[1] = p;
@@ -428,11 +431,11 @@ _match:
 }
 	break;
 	case 14:
-#line 116 "HTTP.c.rl"
+#line 118 "HTTP.c.rl"
 	{ mark0[HTTPRequestHead] = p - data[0]; }
 	break;
 	case 15:
-#line 117 "HTTP.c.rl"
+#line 119 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPRequestHead];
     tok[1] = p;
@@ -443,19 +446,19 @@ _match:
 }
 	break;
 	case 16:
-#line 125 "HTTP.c.rl"
+#line 127 "HTTP.c.rl"
 	{ mark0[HTTPBody] = p - data[0]; }
 	break;
 	case 18:
-#line 134 "HTTP.c.rl"
+#line 136 "HTTP.c.rl"
 	{ mark0[HTTPRequest] = p - data[0]; }
 	break;
 	case 20:
-#line 143 "HTTP.c.rl"
+#line 145 "HTTP.c.rl"
 	{ mark0[HTTPStatusCode] = p - data[0]; }
 	break;
 	case 21:
-#line 144 "HTTP.c.rl"
+#line 146 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPStatusCode];
     tok[1] = p;
@@ -466,11 +469,11 @@ _match:
 }
 	break;
 	case 22:
-#line 152 "HTTP.c.rl"
+#line 154 "HTTP.c.rl"
 	{ mark0[HTTPReasonPhrase] = p - data[0]; }
 	break;
 	case 23:
-#line 153 "HTTP.c.rl"
+#line 155 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPReasonPhrase];
     tok[1] = p;
@@ -481,11 +484,11 @@ _match:
 }
 	break;
 	case 24:
-#line 161 "HTTP.c.rl"
+#line 163 "HTTP.c.rl"
 	{ mark0[HTTPStatusLine] = p - data[0]; }
 	break;
 	case 25:
-#line 162 "HTTP.c.rl"
+#line 164 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPStatusLine];
     tok[1] = p;
@@ -496,18 +499,33 @@ _match:
 }
 	break;
 	case 26:
-#line 170 "HTTP.c.rl"
-	{ mark0[HTTPResponse] = p - data[0]; }
+#line 172 "HTTP.c.rl"
+	{ mark0[HTTPResponseHead] = p - data[0]; }
+	break;
+	case 27:
+#line 173 "HTTP.c.rl"
+	{
+    tok[0] = data[0] + mark0[HTTPResponseHead];
+    tok[1] = p;
+    o = HTTPonResponseHead(tok, state); 
+    if (o!=OK) {
+        p--; {p++; goto _out; }
+    }
+}
 	break;
 	case 28:
-#line 179 "HTTP.c.rl"
-	{ mark0[HTTPMessage] = p - data[0]; }
+#line 181 "HTTP.c.rl"
+	{ mark0[HTTPResponse] = p - data[0]; }
 	break;
 	case 30:
-#line 188 "HTTP.c.rl"
+#line 190 "HTTP.c.rl"
+	{ mark0[HTTPMessage] = p - data[0]; }
+	break;
+	case 32:
+#line 199 "HTTP.c.rl"
 	{ mark0[HTTPRoot] = p - data[0]; }
 	break;
-#line 470 "HTTP.rl.c"
+#line 486 "HTTP.rl.c"
 		}
 	}
 
@@ -524,7 +542,7 @@ _again:
 	while ( __nacts-- > 0 ) {
 		switch ( *__acts++ ) {
 	case 15:
-#line 117 "HTTP.c.rl"
+#line 119 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPRequestHead];
     tok[1] = p;
@@ -535,11 +553,11 @@ _again:
 }
 	break;
 	case 16:
-#line 125 "HTTP.c.rl"
+#line 127 "HTTP.c.rl"
 	{ mark0[HTTPBody] = p - data[0]; }
 	break;
 	case 17:
-#line 126 "HTTP.c.rl"
+#line 128 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPBody];
     tok[1] = p;
@@ -550,7 +568,7 @@ _again:
 }
 	break;
 	case 19:
-#line 135 "HTTP.c.rl"
+#line 137 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPRequest];
     tok[1] = p;
@@ -561,7 +579,18 @@ _again:
 }
 	break;
 	case 27:
-#line 171 "HTTP.c.rl"
+#line 173 "HTTP.c.rl"
+	{
+    tok[0] = data[0] + mark0[HTTPResponseHead];
+    tok[1] = p;
+    o = HTTPonResponseHead(tok, state); 
+    if (o!=OK) {
+        p--; {p++; goto _out; }
+    }
+}
+	break;
+	case 29:
+#line 182 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPResponse];
     tok[1] = p;
@@ -571,8 +600,8 @@ _again:
     }
 }
 	break;
-	case 29:
-#line 180 "HTTP.c.rl"
+	case 31:
+#line 191 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPMessage];
     tok[1] = p;
@@ -582,8 +611,8 @@ _again:
     }
 }
 	break;
-	case 31:
-#line 189 "HTTP.c.rl"
+	case 33:
+#line 200 "HTTP.c.rl"
 	{
     tok[0] = data[0] + mark0[HTTPRoot];
     tok[1] = p;
@@ -593,7 +622,7 @@ _again:
     }
 }
 	break;
-#line 548 "HTTP.rl.c"
+#line 574 "HTTP.rl.c"
 		}
 	}
 	}
@@ -601,7 +630,7 @@ _again:
 	_out: {}
 	}
 
-#line 260 "HTTP.c.rl"
+#line 272 "HTTP.c.rl"
 
     state->data[0] = p;
     if (o==OK && cs < HTTP_first_final) 

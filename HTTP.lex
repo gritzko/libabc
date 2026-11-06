@@ -33,7 +33,8 @@ Request = lws* RequestHead Body;
 StatusCode = digit{3} ;
 ReasonPhrase = text? ;
 StatusLine = HTTPVersion sp StatusCode sp ReasonPhrase crlf ;
-Response = lws* StatusLine MessageHeader* crlf Body;
+ResponseHead = StatusLine MessageHeader* crlf ;
+Response = lws* ResponseHead Body;
 Message = Request | Response;
 
 Root = Message;
