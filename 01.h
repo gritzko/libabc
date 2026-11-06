@@ -121,10 +121,7 @@ con ok64 BADRANGE = 0x2ca35b29740e;
 con ok64 BADSTAT = 0xb28d71d29d;
 con ok64 MISS = 0x59271c;
 
-con ok64 SMISS = 0x1c59271c;
-con ok64 SNODATA = 0x1c5d834a74a;
 con ok64 SNOROOM = 0x1c5d86d8616;
-con ok64 SBADARG = 0x1c2ca34a6d0;
 
 #define WORDS(k)        \
     union {             \
@@ -424,7 +421,7 @@ fun ok64 utf8sFeed10(u8 **dec, u64 x) {
 }
 
 fun ok64 u64decdrain(u64 *x, u8c **dec) {
-    if (*dec >= dec[1] || **dec < '0' || **dec > '9') return SBADARG;
+    if (*dec >= dec[1] || **dec < '0' || **dec > '9') return BADARG;
     u64 a = **dec - '0';
     ++*dec;
     while (*dec < dec[1]) {

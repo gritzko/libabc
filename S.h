@@ -26,8 +26,6 @@
 #define $ok(s) (s != NULL && *s != NULL && s[1] >= s[0])
 //  $ok or the all-NULL empty slice
 #define $okz(s) (s != NULL && (*s != NULL ? s[1] >= s[0] : s[1] == NULL))
-#define $within(h, n) (n[0] >= h[0] && n[1] <= h[1])
-
 #define a$(T, n, a) T *n[2] = {(a), (a) + (sizeof(a) / sizeof(T))};
 
 // ABC-016: single-evaluation of o (may have side effects)
@@ -40,13 +38,6 @@
 #define a_dup(T, n, s) T *n[2] = {(s)[0], (s)[1]}
 #define $dup(s) {(s)[0], (s)[1]}
 #define zero$(s) s[0] = s[1] = NULL;
-
-#define gauged(s) {(s)[0], (s)[0], (s)[1]}
-
-#define a_gauge(T, n, s)                \
-    T *n[3] = {(s)[0], (s)[0], (s)[1]}; \
-    T **n##_data = n;                   \
-    T **n##_idle = n + 1;
 
 #define a_past(T, n, old, neu)                    \
     assert(old[1] == neu[1] && old[0] <= neu[0]); \
@@ -61,11 +52,6 @@
 #define a_tail(T, n, orig, len)                        \
     T##s n = {(T *)(orig[1]) - (len), (T *)(orig[1])}; \
     assert($size(n) <= $size(orig));
-
-#define a_tailf(T, n, orig, f)                 \
-    T##s n = {(T *)(orig[1]), (T *)(orig[1])}; \
-    while ((--*(n) >= *(orig)) && (f));        \
-    ++*(n);
 
 // a_head: first len elements [start, start+len)
 #define a_head(T, n, orig, len)                        \
@@ -92,10 +78,6 @@
         (s1)[0] = (s2)[0], (s1)[1] = (s2)[1]; \
     }
 
-/** produce a subslice given offset and length */
-// ABC-016: parenthesize; o is still evaluated once per element
-#define $cut(s, o, l) {$off(s, o), $off(s, (o) + (l))}
-
 // FUZZ-26B04Iucge: typed slices are aligned by contract, see $fits.
 #define $for(T, n, s) for (T *n = s[0]; n < s[1]; ++n)
 #define $rof(T, n, s) for (T *n = s[1]; n > s[0] && (--n, 1);)
@@ -107,39 +89,9 @@
 
 #define eats(T, i, s) for (T *i = s[0]; i < s[1]; i++)
 
-#define $reverse(s)                                                    \
-    {                                                                  \
-        size_t sz = sizeof(**s);                                       \
-        uint8_t tmp[sz];                                               \
-        for (void *f = s[0], *t = s[1] - 1; f < t; f += sz, t -= sz) { \
-            memcpy(tmp, f, sz);                                        \
-            memcpy(f, t, sz);                                          \
-            memcpy(t, tmp, sz);                                        \
-        }                                                              \
-    }
-
 typedef int (*fncmp)(const void *, const void *);
 #define $sort(s, cmp) qsort((void *)s[0], $len(s), sizeof(**s), (fncmp)cmp)
-#define $bsearch(p, s, cmp) bsearch(p, s[0], $len(s), sizeof(**s), (fncmp)cmp)
-
-#define $minlen(a, b) ($len(a) > $len(b) ? $len(b) : $len(a))
 #define $minsize(a, b) ($size(a) > $size(b) ? $size(b) : $size(a))
-
-#define $copy(into, from) \
-    memcpy((void *)*into, (void *)*from, $minsize(into, from))
-
-#define $feed1(s, v) \
-    {                \
-        **(s) = (v); \
-        ++*s;        \
-    }
-
-#define $feed(into, from)                 \
-    {                                     \
-        size_t sz = $minsize(into, from); \
-        memcpy(*into, *from, sz);         \
-        *(uint8_t **)into += sz;          \
-    }
 
 fun int $memcmp($cc a, $cc b) {
     size_t sza = $size(a), szb = $size(b);
@@ -156,17 +108,6 @@ typedef int (*$cmpfn)($cc a, $cc b);
 #define $cmp(a, b) $memcmp((void const *const *)(a), (void const *const *)b)
 
 #define $eq(a, b) ($size(a) == $size(b) && 0 == memcmp(*a, *b, $size(a)))
-
-// ABC-005: on snprintf truncation only room-1 payload bytes land (the
-// last byte is the NUL); never count the NUL, never advance past it
-#define $printf(into, fmt, ...)                                       \
-    {                                                                  \
-        size_t _room = $size(into);                                    \
-        int l = snprintf((char *)*into, _room, fmt, __VA_ARGS__);      \
-        *into += (l < 0) ? 0                                           \
-                 : ((size_t)l < _room ? (size_t)l                      \
-                                      : (_room ? _room - 1 : 0));      \
-    }
 
 // Expand a slice as the (length, pointer) pair printf("%.*s", ...) wants.
 // Use as: printf("got '" $FMT_S "'\n", $ARG(my_slice));
@@ -204,20 +145,22 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
             continue;
         }
         ++*p;
-        if ($empty(p)) return SBADARG;
+        if ($empty(p)) return BADARG;
         switch (**p) {
-            case 's':
+            case 's': {
                 sarg = va_arg(ap, u8 const **);
                 // ABC-005: a short feed truncates the output; report
                 // SNOROOM instead of advancing past the '$s'
-                if ($size(sarg) > $size(into)) {
-                    $feed(into, sarg);
+                size_t sz = $minsize(into, sarg);
+                memcpy(*into, *sarg, sz);
+                *into += sz;
+                if (sz < (size_t)$size(sarg)) {
                     va_end(ap);
                     return SNOROOM;
                 }
-                $feed(into, sarg);
                 ++*p;
                 break;
+            }
             case 'u':
             case 'f': {
                 size_t room = $size(into);
@@ -227,7 +170,7 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
                                                 va_arg(ap, double));
                 if (n < 0) {
                     va_end(ap);
-                    return SBADARG;
+                    return BADARG;
                 }
                 // ABC-005: snprintf truncation is SNOROOM; its NUL is
                 // not payload, only room-1 bytes actually landed
@@ -270,12 +213,6 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
     {                \
         s[0] = NULL; \
         s[1] = NULL; \
-    }
-
-#define a$findif(T, p, s, cond)          \
-    T *p = s[0];                         \
-    {                                    \
-        while (p < s[1] && !(cond)) ++p; \
     }
 
 // ABC-005: move the whole tail ($len-off-len), not len elements;

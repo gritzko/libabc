@@ -431,7 +431,7 @@ fun ok64 FILEDrain(int fd, $u8 into) {
     return OK;
 }
 
-fun ok64 FILEdrainv($$u8 datav, int fd) {
+fun ok64 FILEdrainv(u8ss datav, int fd) {
     struct iovec io[FILEmaxiov];
     int l = FILE2iovec(io, (u8cssp)datav);
     ssize_t re;

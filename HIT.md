@@ -10,7 +10,7 @@ A HIT is a min-heap of sorted slices (iterators). Instantiate with the
 ```
 
 The element type gives `X(,Z)` and `X(,KeyEq)` (the key view, depot
-wiki/Containers.mkd); the heap types `X(,cspb)`, `X(,csss)` come from Sx.
+wiki/Containers.mkd); the heap types `X(,cspb)`, `X(,csss)` are typedef'd in HITx.h.
 HITx defines nothing in the type's own namespace; its internals are
 `_lowercase`.  `ABC_X_MERGE` (defined: on; HIT.h) makes Merge fold equal
 keys oldest first by `X(,Merge)(acc, younger)` instead of the youngest

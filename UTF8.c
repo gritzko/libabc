@@ -11,19 +11,19 @@ ok64 _utf8sFeed32(utf8s into, u32 cp) {
     sane($ok(into));
     if (cp < 0x800) {
         test($len(into) >= 2, UTFNOROOM);
-        $feed1(into, (u8)(cp >> 6) | UTF8LEAD2);
-        $feed1(into, (u8)(cp & 63) | UTF8CONT);
+        utf8sFeed1(into, (u8)(cp >> 6) | UTF8LEAD2);
+        utf8sFeed1(into, (u8)(cp & 63) | UTF8CONT);
     } else if (cp < 0x10000) {
         test($len(into) >= 3, UTFNOROOM);
-        $feed1(into, (u8)(cp >> 12) | UTF8LEAD3);
-        $feed1(into, (u8)((cp >> 6) & 63) | UTF8CONT);
-        $feed1(into, (u8)(cp & 63) | UTF8CONT);
+        utf8sFeed1(into, (u8)(cp >> 12) | UTF8LEAD3);
+        utf8sFeed1(into, (u8)((cp >> 6) & 63) | UTF8CONT);
+        utf8sFeed1(into, (u8)(cp & 63) | UTF8CONT);
     } else if (cp <= MAX_UNICODE_CODEPOINT) {
         test($len(into) >= 4, UTFNOROOM);
-        $feed1(into, (u8)(cp >> 18) | UTF8LEAD4);
-        $feed1(into, (u8)((cp >> 12) & 63) | UTF8CONT);
-        $feed1(into, (u8)((cp >> 6) & 63) | UTF8CONT);
-        $feed1(into, (u8)(cp & 63) | UTF8CONT);
+        utf8sFeed1(into, (u8)(cp >> 18) | UTF8LEAD4);
+        utf8sFeed1(into, (u8)((cp >> 12) & 63) | UTF8CONT);
+        utf8sFeed1(into, (u8)((cp >> 6) & 63) | UTF8CONT);
+        utf8sFeed1(into, (u8)(cp & 63) | UTF8CONT);
     } else {
         fail(UTFBAD)
     }

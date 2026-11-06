@@ -29,7 +29,7 @@ Despite that NEST is a single-pass algorithm. Yes, minimalism.
     NESTFeed(nestbuf, a$str("Next waypoint: $LOC. Reach by: $TIME."));
     NESTSplice(nestbuf, LOC);
     if (!$empty(locname)) {
-        $u8feed(nestidle, locname);
+        u8sFeed(nestidle, locname);
     } else {
         NESTFeed(nestbuf, "coordinates ${LAT}:${LONG}");
     }
@@ -39,7 +39,7 @@ Despite that NEST is a single-pass algorithm. Yes, minimalism.
 While NEST allows for [complex][c] templated output, there is a huge
 advantage, relative to PHP and other options, that we do not need to reinvent
 control flow or to make any new API bindings. Everything is achieved
-by *reusing* the existing `$u8feedX` family of ABC byte-buffer routines
+by *reusing* the existing `u8sFeed*` family of ABC byte-buffer routines
 or by employing any other C API that can write into a byte buffer.
 
 Shortcomings? NEST is not Turing-complete. It cannot stream data (as of now).

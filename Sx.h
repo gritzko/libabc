@@ -35,8 +35,6 @@ typedef T const *const *X(, cspc);
 typedef X(, s) * X(, ss)[2];
 typedef X(, cs) * X(, css)[2];
 typedef X(, csp) * X(, csps)[2];
-typedef X(, csp) *X(, cspb)[4];  //  HITx's heap buffer
-typedef X(, css) *X(, csss)[2];  //  HITx's heap of inner HITs
 typedef X(, p) * X(, ps)[2];
 
 typedef T *X(, g)[3];
@@ -48,9 +46,6 @@ typedef T **X(, $);
 typedef T const **X(, c$);
 typedef T *const *X(, $c);
 typedef T const *const *X(, c$c);
-typedef T const *const *X(, $cc);
-
-typedef X($, ) * X($$, )[2];
 
 typedef int (*X(, cmpfn))(const X(, ) *, const X(, ) *);
 
@@ -221,11 +216,6 @@ fun b8 X(, Eq)(T const *a, T const *b) {
 }
 #endif
 
-fun T const *X($, lastc)(X($c, c) data) {
-    assert(!$empty(data));
-    return data[1] - 1;
-}
-
 // sSort / sBinSearch: see QSORTx.h (inline Z comparator, no fn-ptr overhead)
 
 #ifndef ABC_S_PREFETCH
@@ -369,12 +359,6 @@ fun T const *X(, csHead)(X(, cs) s) {
     return *s;
 }
 
-fun T const *X($, find)(X($c, c) haystack, T const *needle) {
-    for (T const *p = haystack[0]; p < haystack[1]; p++)
-        if (memcmp(p, needle, sizeof(T)) == 0) return p;
-    return NULL;
-}
-
 fun ok64 X(, csFind)(X(, cs) haystack, T needle) {
     for (; !$empty(haystack); ++*haystack) {
         if (memcmp(*haystack, &needle, sizeof(T)) == 0) {
@@ -453,27 +437,14 @@ fun ok64 X(, sRevFindS)(X(, s) haystack, X(, csc) needle) {
 }
 #endif
 
-fun ok64 X($, tail)(X($, c) into, X($c, c) from, size_t off) {
-    if ($len(from) < (i64)off) return SMISS;
-    into[0] = from[0] + off;
-    into[1] = from[1];
-    return OK;
-}
-
-fun ok64 X($, retract)(X($, c) from, size_t len) {
-    if ($len(from) < (i64)len) return SMISS;
-    from[1] -= len;
-    return OK;
-}
-
 fun ok64 X(, sSup)(X(, s) full, X(, s) consumed) {
-    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return SMISS;
+    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return BADRANGE;
     full[1] = consumed[0];
     return OK;
 }
 
 fun ok64 X(, scSup)(X(, cs) full, X(, cs) consumed) {
-    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return SMISS;
+    if (unlikely(full[1] != consumed[1] || full[0] > consumed[0])) return BADRANGE;
     full[1] = consumed[0];
     return OK;
 }
@@ -482,21 +453,6 @@ fun void X(, sZero)(X(, s) s) { memset((void *)*s, 0, $size(s)); }
 #ifndef ABC_X_$
 fun void X(, Zero)(X(, p) p) { memset((void *)p, 0, sizeof(T)); }
 #endif
-/*
-fun ok64 X($, last)(X($, c) into, X($c, c) from, size_t len) {
-    if ($len(from) < len) return SMISS;
-    into[0] = from[1] - len;
-    into[1] = from[1];
-    return OK;
-}
-*/
-fun ok64 X($, part)(X($, c) into, X($c, c) orig, size_t from, size_t till) {
-    if ($len(orig) < (i64)till || from > till) return SMISS;
-    into[0] = orig[0] + from;
-    into[1] = orig[0] + till;
-    return OK;
-}
-
 //  ABC-26B02JHe_k: copy the records of `from` to the head of `into`,
 //  overlap-safe; NOROOM (nothing written) if `into` is shorter.
 fun ok64 X(, sCopy)(X(, sc) into, X(, csc) from) {
@@ -515,44 +471,11 @@ fun b8 X(, csZ)(X(, scp) a, X(, scp) b) {
 }
 */
 
-fun ok64 X($, alloc)(X($, ) what, size_t len) {
-    T *m = (T *)malloc(len * sizeof(T));
-    if (m == NULL) return NOROOM;
-    what[0] = m;
-    what[1] = m + len;
-    return OK;
-}
-
-fun b8 X($, ok)(X($, c) orig) {
-    return $ok(orig) && $size(orig) % sizeof(T) == 0;
-}
-
-fun ok64 X($, dup)(X($, ) copy, X($, c) orig) {
-    ok64 o = X($, alloc)(copy, $len(orig));
-    if (o != OK) return o;
-    memcpy((void *)*copy, (void *)*orig, $size(orig));
-    return OK;
-}
-
-fun ok64 X($, free)(X($, c) what) {
-    if (what[0] == NULL) return SBADARG;
-    free((void *)what[0]);
-    what[0] = what[1] = NULL;
-    return OK;
-}
-
-fun u64 X(, cs_len)(X(, cs) s) {
-    if (s == NULL || s[0] == NULL || s[1] <= s[0]) return 0;
-    return s[1] - s[0];
-}
-
-fun u64 X(, s_len)(X(, s) s) { return X(, cs_len)((X(, csp))s); }
-
 // ABC-005: Drain contract (see $drain / sDrain1) — write what fits
 // and advance both sides; was all-or-nothing and never advanced from
 fun ok64 X(, sDrain)(X(, s) into, X(, cs) from) {
-    size_t len = X(, cs_len)(from);
-    size_t room = X(, s_len)(into);
+    size_t len = $empty(from) ? 0 : (size_t)$len(from);
+    size_t room = $empty(into) ? 0 : (size_t)$len(into);
     if (len > room) len = room;
     if (len == 0) return OK;
     memcpy((void *)*into, (void *)*from, len * sizeof(T));
@@ -560,22 +483,6 @@ fun ok64 X(, sDrain)(X(, s) into, X(, cs) from) {
     *from += len;
     return OK;
 }
-/*
-fun ok64 X(, sFeed1)(X(, s) into, X(, ) from) {
-    if (1 > X(, s_len)(into)) return SNOROOM;
-    memcpy((void *)*into, (void *)&from, sizeof(T));
-    *into += 1;
-    return OK;
-}
-*/
-fun ok64 X($, feed)(X($, ) into, X($c, c) from) {
-    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
-    if (unlikely($size(from) > $size(into))) return SNOROOM;
-    if ($size(from)) memcpy((void *)*into, (void *)*from, $size(from));
-    *into += $len(from);
-    return OK;
-}
-
 fun ok64 X(, sFeed)(X(, s) into, X(, csc) from) {
     if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
     if (unlikely($size(from) > $size(into))) return NOROOM;
@@ -589,7 +496,7 @@ fun ok64 X(, gFeed)(X(, g) into, X(, csc) from) {
 }
 
 fun ok64 X(, sFeedSome)(X(, s) into, X(, cs) from) {
-    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
+    if (unlikely(!$okz(from) || !$okz(into))) return BADARG;
     size_t len = $len(from);
     if ((i64)len > $len(into)) len = $len(into);
     if (len) memcpy((void *)*into, (void *)*from, len * sizeof(T));
@@ -604,30 +511,6 @@ fun ok64 X(, sFeedN)(X(, s) into, X(, cs) from, size_t len) {
     if (len) memcpy((void *)*into, (void *)*from, len * sizeof(T));
     *into += len;
     *from += len;
-    return OK;
-}
-
-fun ok64 X($, feedall)(X($, ) into, X($c, c) from) {
-    if (unlikely(!$okz(from) || !$okz(into))) return SBADARG;
-    if (unlikely($size(from) > $size(into))) return SNOROOM;
-    if ($size(from)) memcpy((void *)*into, (void *)*from, $size(from));
-    *into += $len(from);
-    return OK;
-}
-
-fun ok64 X($, drain)(X($, ) into, X($, c) from) {
-    size_t len = $len(into) < $len(from) ? $len(into) : $len(from);
-    memcpy((void *)*into, (void *)*from, len * sizeof(T));
-    *into += len;
-    *from += len;
-    return OK;
-}
-
-fun ok64 X($, take)(X(, c$) prefix, X($, c) from, size_t len) {
-    if ($len(from) < (i64)len) return SNODATA;
-    prefix[0] = from[0];
-    from[0] += len;
-    prefix[1] = from[0];
     return OK;
 }
 
@@ -646,12 +529,12 @@ fun T X(, gTop)(X(, g) g) {
     return *X(, sLast)(X(, gLeft)(g));
 }
 fun ok64 X(, gPop)(X(, g) g, X(, p) x) {
-    if (X(, gEmpty)(g)) return SNODATA;
+    if (X(, gEmpty)(g)) return NODATA;
     X(, Mv)(x, X(, sLast)(X(, gLeft)(g)));
     return X(, gShed1)(g);
 }
 fun ok64 X(, gPopN)(X(, g) g, size_t n, X(, cs) popped) {
-    if (X(, gLeftLen)(g) < n) return SNODATA;
+    if (X(, gLeftLen)(g) < n) return NODATA;
     popped[1] = g[1];
     ok64 o = X(, gShed)(g, n);
     popped[0] = g[1];
@@ -712,13 +595,13 @@ fun ok64 X(, csFed)(X(, cs) into, size_t len) {
 }
 
 fun ok64 X(, sPuked)(X(, s) from, size_t len) {
-    if ($len(from) < (i64)len) return SMISS;
+    if ($len(from) < (i64)len) return NODATA;
     from[1] -= len;
     return OK;
 }
 
 fun ok64 X(, sDrain1)(X(, cs) from, T *into) {
-    if ($empty(from)) return SNODATA;
+    if ($empty(from)) return NODATA;
 #ifndef ABC_X_$
     X(, Mv)(into, *from);
 #else
@@ -746,38 +629,6 @@ fun ok64 X(, sFeedP)(X(, s) into, T const *what) {
     Ocopy(*into, what);  //  Mv is not defined for ABC_X_$ types
     ++*into;
     return OK;
-}
-
-fun void X($, drop)(X($, ) into, T const *from) {
-    Ocopy(*into, from);
-    ++*into;
-}
-
-fun ok64 X($, drainn)(X($, ) into, X($, c) from, size_t len) {
-    if ((i64)len > $len(into) || (i64)len > $len(from)) {
-        return (i64)len > $len(into) ? BNOROOM : BNODATA;
-    }
-    memcpy((void *)*into, (void *)*from, len * sizeof(T));
-    *from += len;
-    *into += len;
-    return OK;
-}
-
-fun int X(, memcmp)(T const *a, T const *b) { return memcmp(a, b, sizeof(*a)); }
-
-fun size_t X($, prefix)(X($, c) common, X($c, c) a, X($c, c) b) {
-    size_t lim = $len(a);
-    if ($len(b) < (i64)lim) lim = $len(b);
-    size_t l = 0;
-    while (l < lim && X(, memcmp)(*a + l, *b + l) == 0) l++;
-    common[0] = a[0];
-    common[1] = a[0] + l;
-    return l;
-}
-
-fun size_t X($, offset)(X($c, c) outer, X($c, c) inner) {
-    assert(outer[0] <= inner[0] && outer[1] >= inner[1]);
-    return inner[0] - outer[0];
 }
 
 //  slice Mv: assign the two pointers (retired: sDup, csDup)
@@ -826,19 +677,7 @@ fun void X(, s_purge)(X($, ) s, X(, isfn) f) {
     }
 }
 
-fun void X($, str0)(X($, c) s, T const *a) {
-    u8 v0[sizeof(T)] = {};
-    s[0] = a;
-    size_t i = 0;
-    while (0 != memcmp(&v0, a + i, sizeof(T))) ++i;
-    s[1] = a + i;
-}
-
 static const u8 X(, zero)[sizeof(T)] = {};
-
-fun b8 X($, is0)(X($, ) s, size_t ndx) {
-    return 0 == memcmp(X(, zero), X(, sAtP)(s, ndx), sizeof(T));
-}
 
 fun b8 X(, IsZero)(X(, cp) p) {
     return memcmp(p, X(, zero), sizeof(*p)) == 0;

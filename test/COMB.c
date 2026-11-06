@@ -11,7 +11,7 @@ ok64 COMBtest1() {
     sane(1);
     aBcpad(u8, pad, PAGESIZE);
     COMBinit(padbuf);
-    $feed1(padidle, 'A');
+    call(u8sFeed1, padidle, 'A');
     COMBsave(padbuf);
     Breset(padbuf);
     call(COMBload, padbuf);
@@ -27,7 +27,7 @@ ok64 COMBtest3() {
     sane(1);
     aBcpad(u8, pad, PAGESIZE);
     COMBinit(padbuf);
-    $feed1(padidle, 'A');
+    call(u8sFeed1, padidle, 'A');
     COMBsave(padbuf);
     u64* c = (u64*)padbuf[0];
     // data offset beyond the buffer

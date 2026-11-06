@@ -390,7 +390,7 @@ ok64 RONTestSpliceIsolation() {
 }
 
 // ABC-008: repro: chained pads must advance the cursor and be
-// all-or-nothing (no partial garbage on SBADARG).
+// all-or-nothing (no partial garbage on BADARG).
 ok64 RONTestFeedPadChained() {
     sane(1);
     u8 buf[16] = {};

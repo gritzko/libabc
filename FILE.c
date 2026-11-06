@@ -562,7 +562,7 @@ ok64 u8bWantDataLen(u8bp buf, size_t need) {
     sane(Bok(buf));
     if (u8bDataLen(buf) >= need) done;
     int fd = FILEBookedFD(buf);
-    test(fd >= 0 && FILE_WANTS[fd], BNODATA);
+    test(fd >= 0 && FILE_WANTS[fd], NODATA);
     return FILE_WANTS[fd](buf, NO, need);
 }
 
@@ -663,7 +663,7 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
         } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (n < 0) return FILEERROR;
         test(n > 0, FILEEND);  // EOF before getting needed bytes
-        Bump(buf, n);
+        u8bFed(buf, (size_t)n);
     }
     done;
 }

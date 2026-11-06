@@ -47,7 +47,7 @@ ok64 Bndx_test() {
     u64bAllocate(buf, 1024);
     for (u64 i = 0; i < 1000; ++i) {
         call(u64bFeed1, buf, i);
-        sane(Blast(buf) == i);
+        sane(*u64bLast(buf) == i);
     }
     u64bFree(buf);
     done;
@@ -169,10 +169,10 @@ ok64 u8sPop_test() {
     call(u8sPop1, s, &last);
     want(last == 'a');
     want($empty(s));
-    // underflow must stay SNODATA
+    // underflow must stay NODATA
     u8 out3[4];
     u8s into3 = {out3, out3 + 4};
-    want(SNODATA == u8sPop(s, into3));
+    want(NODATA == u8sPop(s, into3));
     done;
 }
 

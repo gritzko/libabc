@@ -49,7 +49,7 @@ fun ok64 X(HASH, _scan)(size_t *ndx, X($, ) data, HASH_T const *rec) {
     size_t base = (*ndx) & ~MASK;
     for (size_t i = off + 1; i < off + ABC_HASH_LINE; ++i) {
         *ndx = base + (i & MASK);
-        if (X($, is0)(data, *ndx)) return NONE;
+        if (X(, IsZero)(data[0] + *ndx)) return NONE;
         // ABC-015: (rec, slot) arg order, same as Get/Del below
         if (X(, KeyEq)(rec, *data + *ndx)) return OK;
     }
@@ -60,7 +60,7 @@ fun ok64 X(HASH, _find)(size_t *ndx, X($, ) data, HASH_T const *rec) {
     u64 hash = X(, Hash)(rec);
     *ndx = hash & LMASK;
     // is0 first: the all-zero record is the empty slot, never found
-    if (X($, is0)(data, *ndx)) return NONE;
+    if (X(, IsZero)(data[0] + *ndx)) return NONE;
     if (X(, KeyEq)(rec, $atp(data, *ndx))) return OK;
     return X(HASH, _scan)(ndx, data, rec);
 }
@@ -70,7 +70,7 @@ fun ok64 X(HASH, _get)(HASH_T *rec, X($, ) data, size_t ndx, u64 hash) {
     size_t base = ndx & ~MASK;
     for (size_t i = (off + 1) & MASK; i != off; i = (i + 1) & MASK) {
         ndx = base + i;
-        if (X($, is0)(data, ndx)) return NONE;
+        if (X(, IsZero)(data[0] + ndx)) return NONE;
         if (X(, KeyEq)(rec, $atp(data, ndx))) {
             *rec = $at(data, ndx);
             return OK;
@@ -85,7 +85,7 @@ fun ok64 X(HASH, _get)(HASH_T *rec, X($, ) data, size_t ndx, u64 hash) {
 fun ok64 X(HASH, Get)(HASH_T *rec, X($, ) data) {
     u64 hash = X(, Hash)(rec);
     size_t ndx = hash & LMASK;
-    if (X($, is0)(data, ndx)) return NONE;
+    if (X(, IsZero)(data[0] + ndx)) return NONE;
     if (X(, KeyEq)(rec, $atp(data, ndx))) {
         *rec = $at(data, ndx);  // TODO mv
         return OK;
@@ -134,7 +134,7 @@ fun b8 X(HASH, _shiftlap)(X($, ) data, size_t ndx) {
     b8 lap = NO;
     for (size_t x = base + ((ndx + 1) & MASK); x != ndx;
          x = base + ((x + 1) & MASK)) {
-        if (X($, is0)(data, x)) break;
+        if (X(, IsZero)(data[0] + x)) break;
         if (x == at) lap = YES;
         size_t nom = X(, Hash)(*data + x) & LMASK;
         if (((ndx - nom) & MASK) < ((x - nom) & MASK)) {
@@ -149,7 +149,7 @@ fun b8 X(HASH, _shiftlap)(X($, ) data, size_t ndx) {
 fun ok64 X(HASH, _shift)(X($, ) data, size_t ndx) {
     sane($ok(data) && (i64)ndx < $len(data));
     X(HASH, _shiftlap)(data, ndx);
-    return X($, is0)(data, ndx) ? NONE : OK;  // refilled: nonzero
+    return X(, IsZero)(data[0] + ndx) ? NONE : OK;  // refilled: nonzero
 }
 
 // NONE if absent (std::erase count 0); callers that don't care ignore it
@@ -173,7 +173,7 @@ fun ok64 X(HASH, DelAt)(X($, ) data, size_t ndx) {
 // NONE (the table's end).  Start at 0, ++ndx to go on.
 fun ok64 X(HASH, Next)(size_t *ndx, X($, ) data) {
     for (; *ndx < (size_t)$len(data); ++*ndx)
-        if (!X($, is0)(data, *ndx)) return OK;
+        if (!X(, IsZero)(data[0] + *ndx)) return OK;
     return NONE;
 }
 

@@ -20,7 +20,9 @@
 #define HIT_E X(, cs)    // entry = const slice
 #define HIT_H X(, csps)  // heap = slice of pointers to entries
 
-// The heap's buffer X(,cspb) (Sx.h): the pointers live in its DATA.
+// The heap's buffer: the pointers live in its DATA.
+typedef X(, csp) *X(, cspb)[4];
+typedef X(, css) *X(, csss)[2];  //  a heap of inner HITs
 
 // --- Comparator: compare entries by head element ---
 

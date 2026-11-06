@@ -67,11 +67,4 @@ fun int ok64is(ok64 val, ok64 root) {
     return (val & ((1ULL << bits) - 1)) == root;
 }
 
-fun ok64 errnok() {
-    ok64 e = errno;
-    e &= 63;
-    e <<= 54;
-    return e;
-}
-
 #endif

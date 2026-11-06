@@ -104,9 +104,9 @@ fun ok64 u64bBury(u64bp buf) {
 
 // Digup: discard current data, restore buried data from past.
 fun ok64 u64bDigup(u64bp buf) {
-    if (u64bPastLen(buf) < 1) return BNODATA;
+    if (u64bPastLen(buf) < 1) return NODATA;
     u64 dl = *(buf[1] - 1);
-    if (u64bPastLen(buf) < dl + 1) return BNODATA;
+    if (u64bPastLen(buf) < dl + 1) return NODATA;
     ((u64 **)buf)[1] -= dl + 1;
     ((u64 **)buf)[2] = buf[1] + dl;
     return OK;
@@ -141,12 +141,6 @@ fun ok64 u64bDigup(u64bp buf) {
 #define X(M, name) M##u256##name
 #include "Bx.h"
 #undef X
-
-#define Bprintf(buf, fmt, ...)           \
-    {                                    \
-        u8 **into = Bidle(buf);          \
-        $printf(into, fmt, __VA_ARGS__); \
-    }
 
 fun ok64 put32(u8s into, u32 x) {
     if ($len(into) < 4) return BNOROOM;

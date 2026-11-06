@@ -138,7 +138,7 @@ ok64 RONVerify(u8c** txt) {
 ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width) {
     if ($len(into) < width) return SNOROOM;
     // ABC-008: validate before writing (all-or-nothing Feed contract)
-    if (width <= 10 && (val >> (6 * width)) != 0) return SBADARG;
+    if (width <= 10 && (val >> (6 * width)) != 0) return BADARG;
     u8p p = into[0] + width;
     for (u8 i = 0; i < width; i++) {
         *--p = RON64_CHARS[val & 63];
@@ -150,7 +150,7 @@ ok64 RONu8sFeedPad(u8** into, ron60 val, u8 width) {
 }
 
 ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n) {
-    if (n == 0 || prob == 0) return SBADARG;
+    if (n == 0 || prob == 0) return BADARG;
     // ABC-008: saturate need instead of wrapping 2*prob*n
     u64 need = (n > UINT64_MAX / 2 / prob) ? UINT64_MAX : 2 * prob * n;
     u8 w = 1;
@@ -161,7 +161,7 @@ ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n) {
     }
     *width = w;
     // ABC-008: n >= space would make avail 0 (division by zero below)
-    if (n >= space) return SBADARG;
+    if (n >= space) return BADARG;
     u64 avail = space - n;
     *base = rand % avail;
     return OK;

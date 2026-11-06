@@ -17,7 +17,7 @@ ok64 $test1() {
     call(i32sFeed1, into, a2);
     call(i32sFeedP, into, &a1);
     want($len(data) == 2);
-    call($i32feed, into, data);
+    call(i32sFeed, into, data);
     want($len(data) == 4);
     want($at(data, 0) == 0);
     want($at(data, 1) == 1);
@@ -281,7 +281,7 @@ ok64 draintest() {
         call(i32sDrain, into, from);
         i32cs part = {chunk, into[0]};
         want(!$empty(part));
-        call($i32feed, out, part);
+        call(i32sFeed, out, part);
         ++rounds;
     }
     want(rounds == 3);
@@ -331,9 +331,6 @@ ok64 offtest() {
     want(p == str);
     want(o == 1);
     want($off(s, 100) == str + 6);
-    $u8c sub = $cut(s, 1, 2);
-    want($len(sub) == 2);
-    want(sub[0] == str + 1);
     done;
 }
 

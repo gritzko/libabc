@@ -80,7 +80,7 @@ static ok64 hp_pop(hplane &l, hp *out) {
     ok64 o = l.rev ? HEAPhpPopZ(&v, l.b, hpRZ) : HEAPhpPop(&v, l.b);
     *out = v;
     if (empty) {
-        must(o == BNODATA && l.len() == 0, "Pop empty");
+        must(o == NODATA && l.len() == 0, "Pop empty");
         done;
     }
     must(o == OK && v.key == l.top(), "Pop key");

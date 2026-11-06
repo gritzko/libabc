@@ -31,6 +31,7 @@ A slice is `T *s[2]`, a `[head, term)` pointer pair; consuming a slice means mov
  -  `u8csEq`/`u8csIn`/`u8sFork`/`u8sJoin`/`u8csSub` — equality, containment.
  -  `a_pad`/`a_wrap`/`a$`/`a_dup`/`a_head`/`a_tail`/`a_rest`/`a_part` — stack-slice and sub-slice construction macros (type first).
  -  `$for`/`$rof`/`$eat` — forward/reverse/consuming iteration over a slice.
+ -  `$len`/`$empty`/`$at`/`$atp`/`$mv`/`$eq` — generic accessor macros; writes and border moves go through the typed functions only (CODE-26B065tb4L).
 
 ###  B.h, Bx.h, BUF.h — buffers and arenas
 

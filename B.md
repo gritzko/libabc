@@ -55,6 +55,11 @@ when the arena pops past it (see "Arenas" below).
 | Reset           | `u8bReset(buf)`     | clear PAST and DATA      |
 | Shift           | `u8bShift(buf, n)`  | move DATA, set PAST to n |
 
+These are the buffer API (CODE-26B065tb4L): the unchecked `Bpush`/`Bpop`/
+`Btop`/`Bump`/`Brewind` macros and the lowercase `X(B, verb)` functions
+(`Bu8eat`, `Bu8empty`, ...) are gone; `Bu8mark`/`Bu8rewind` remain for
+outside callers.  `u8bPop` on empty DATA returns `NODATA`.
+
 ##  Arenas
 
 A `u8a` is an **arena**: a buffer that dispenses memory to other

@@ -176,7 +176,7 @@ fun ok64 $$feedf($u8 into, u8cs tmpl, u8css args) {
         if (**t < '1' || **t > '9') return BADTMPL;
         int n = **t - '1';
         ++*t;
-        if (n >= $len(args)) return BNODATA;
+        if (n >= $len(args)) return NODATA;
         o = u8sFeed(into, $at(args, n));
     }
     // ABC-005: a failed feed of the LAST item exits with t exhausted;
@@ -228,22 +228,8 @@ fun ok64 u8sFeedCStr($u8 into, const char *str) {
     return OK;
 }
 
-fun ok64 u8sFeedn($u8 into, u8c *what, size_t n) {
-    if (unlikely($len(into) < (i64)n)) return SNOROOM;
-    memcpy(*into, what, n);
-    *into += n;
-    return OK;
-}
-
-fun ok64 u8sFeed1xN($u8 into, u8 what, size_t n) {
-    if ($len(into) < (i64)n) return BNOROOM;
-    memset(*into, what, n);
-    *into += n;
-    return OK;
-}
-
 fun ok64 u8sPop1(u8cs s, u8p last) {
-    if (unlikely($len(s) <= 0)) return SNODATA;
+    if (unlikely($len(s) <= 0)) return NODATA;
     --s[1];
     *last = *s[1];
     return OK;
@@ -251,7 +237,7 @@ fun ok64 u8sPop1(u8cs s, u8p last) {
 
 fun ok64 u8sPop(u8cs s, u8sc into) {
     size_t len = $len(into);
-    if (unlikely((i64)len > $len(s))) return SNODATA;
+    if (unlikely((i64)len > $len(s))) return NODATA;
     // ABC-005: pop reads the shed TAIL (like u8sPop1/u8sPop32);
     // it used to copy the head while shedding the tail
     s[1] -= len;
@@ -260,7 +246,7 @@ fun ok64 u8sPop(u8cs s, u8sc into) {
 }
 
 fun ok64 u8sPop32(u8cs s, u32p last) {
-    if (unlikely($len(s) < 4)) return SNODATA;
+    if (unlikely($len(s) < 4)) return NODATA;
     s[1] -= 4;
     memcpy(last, s[1], 4);
     return OK;
@@ -268,7 +254,7 @@ fun ok64 u8sPop32(u8cs s, u32p last) {
 
 // Stream-mode gateway: ensure idle/data space for file-backed buffers.
 // For booked buffers: extends file+mapping. For streaming: flushes/reads.
-// Plain allocated buffers return BNOROOM/BNODATA.
+// Plain allocated buffers return BNOROOM/NODATA.
 ok64 u8bWantIdleLen(u8bp buf, size_t need);
 ok64 u8bWantDataLen(u8bp buf, size_t need);
 

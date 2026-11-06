@@ -104,8 +104,8 @@ ok64 TLVFeedKeyVal($u8 tlv, u8c type, u8cs key, $cu8c val) {
     }
     **tlv = keylen;
     ++*tlv;
-    $feed(tlv, key);
-    $feed(tlv, val);
+    call(u8sFeed, tlv, key);
+    call(u8sFeed, tlv, val);
     done;
 }
 ok64 TLVDrain$(u8c$ rec, u8cs from) {
@@ -154,8 +154,8 @@ ok64 TLVInitLong($u8 tlv, u8 type, Bu8p stack) {
 
 ok64 TLVEndAny($u8 tlv, u8 type, Bu8p stack) {
     sane($ok(tlv) && Bok(stack) && !Bempty(stack) &&
-         *Btop(stack) + 2 <= $head(tlv));
-    u8* start = *Btop(stack);
+         *u8pbLast(stack) + 2 <= $head(tlv));
+    u8* start = *u8pbLast(stack);
     size_t len = $head(tlv) - start;
     if (TLVlong(*start)) {
         test(len >= 4 + 1, FAILSANITY);

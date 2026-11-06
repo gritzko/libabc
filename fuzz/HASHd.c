@@ -61,7 +61,7 @@ FUZZ(u8, HASHdfuzz) {
     u32bZero(dictbuf);
     call(Play, dict, ins, Size, &full);
 
-    $u32feedall(u32bIdle(copybuf), u32bDataC(dictbuf));
+    u32sFeed(u32bIdle(copybuf), u32bDataC(dictbuf));
 
     for (int j = 0; j < 1000; ++j) {
         u32bZero(dictbuf);

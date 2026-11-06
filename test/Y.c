@@ -7,7 +7,10 @@
 
 // ABC-007: a Yx instance whose y-merge keeps every tied record,
 // so a silently dropped record becomes visible in the output.
-fun ok64 Yu64x(u8cs s, u8cs rest) { return $u8take(s, rest, sizeof(u64)); }
+fun ok64 Yu64x(u8cs s, u8cs rest) {
+    ok64 o = u8csSub(rest, s, 0, sizeof(u64));
+    return o == OK ? u8csUsed(rest, sizeof(u64)) : o;
+}
 
 fun b8 Yu64z($cu8c *a, $cu8c *b) { return u64Z((u64c *)**a, (u64c *)**b); }
 

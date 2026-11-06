@@ -41,8 +41,8 @@ ok64 BITSbytelen() {
 
 ok64 BITSstr() {
     sane(YES);
-    const char* sbadarg = okstr(SBADARG);
-    testeqv((long long)(0), (long long)(strcmp(sbadarg, "SBADARG")), "%lld");
+    const char* snoroom = okstr(SNOROOM);
+    testeqv((long long)(0), (long long)(strcmp(snoroom, "SNOROOM")), "%lld");
     const char* ok = okstr(OK);
     testeqv((long long)(0), (long long)(strcmp(ok, "OK")), "%lld");
     done;

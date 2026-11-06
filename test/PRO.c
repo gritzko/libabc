@@ -13,7 +13,6 @@ ok64 fail_test() {
     done;
 }
 
-// BBADARG now in B.h
 con ok64 ABBADARG = 0x28b2ca34a6d0;
 con ok64 ABCBADARG = 0xa2cc2ca34a6d0;
 con ok64 ABCDBADARG = 0x28b30d2ca34a6d0;
@@ -23,7 +22,6 @@ ok64 PROis() {
     test(ok64is(ABCDBADARG, BADARG), BADARG);
     test(ok64is(ABCBADARG, BADARG), BADARG);
     test(ok64is(ABBADARG, BADARG), BADARG);
-    test(ok64is(BBADARG, BADARG), BADARG);
     test(ok64is(BADARG, BADARG), BADARG);
     done;
 }

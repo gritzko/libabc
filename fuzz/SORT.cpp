@@ -16,7 +16,10 @@
 
 static u16 so_key(u64 v) { return (u16)(v >> 48); }
 
-fun ok64 SOkvx(u8cs s, u8cs rest) { return $u8take(s, rest, sizeof(u64)); }
+fun ok64 SOkvx(u8cs s, u8cs rest) {
+    ok64 o = u8csSub(rest, s, 0, sizeof(u64));
+    return o == OK ? u8csUsed(rest, sizeof(u64)) : o;
+}
 
 fun ok64 SOkvy($u8 into, u8css eqs) {
     ok64 o = OK;

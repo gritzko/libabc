@@ -90,7 +90,7 @@ fun ok64 X(SKIP, drain)(X(SKIP, tab) * hop, u8bp buf, size_t pos) {
     test((i64)(X(SKIP, len)(pos) * sizeof(T)) <= $len(w) &&
              (i64)(X(SKIP, top)(pos) * sizeof(T)) >= $len(w),
          SKIPBAD);
-    $copy(into, w);
+    memcpy((void *)*into, *w, $minsize(into, w));
     hop->pos = pos;
 
     done;
@@ -105,7 +105,7 @@ fun ok64 X(SKIP, finish)(u8bp buf, X(SKIP, tab) * k) {
         a_dup(u8c, rest, tail);
         call(TLVDrain$, lastk, rest);
         call(u8sCopy, tail, rest);
-        call($u8retract, u8bDataC(buf), $len(lastk));
+        call(u8bShed, buf, $len(lastk));
     }
     a$raw(w, k->off);
     // ABC-015: top() counts T entries, the byte view needs top*sizeof(T)
