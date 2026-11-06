@@ -20,14 +20,7 @@ quotedString = ["] (qdTxt|quotedPair)* ["];
 sep = [()<>@,;:\\"/\[\]?={} \t];
 token = (char - ctl - sep)+;
 
-Method =   "OPTIONS" | 
-            "GET" |
-            "HEAD" |
-            "POST" |
-            "PUT" |
-            "DELETE" |
-            "TRACE" |
-            "CONNECT";
+Method = token;
 RequestURI = [^ \t\r\n]+;
 HTTPVersion = "HTTP/" digit "." digit;
 RequestLine = Method sp RequestURI sp HTTPVersion crlf ;

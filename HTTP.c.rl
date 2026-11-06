@@ -217,14 +217,7 @@ HTTPquotedPair = (   "\\"  HTTPchar ); # no quotedPair callback
 HTTPquotedString = (   ["]  (HTTPqdTxt|HTTPquotedPair)*  ["] ); # no quotedString callback
 HTTPsep = (   [()<>@,;:\\"/\[\][()<>@,;:\\"/\[\]?={} \t] ); # no sep callback
 HTTPtoken = (   (HTTPchar  -  HTTPctl  -  HTTPsep)+ ); # no token callback
-HTTPMethod = (       "OPTIONS"  |   
-                        "GET"  | 
-                        "HEAD"  | 
-                        "POST"  | 
-                        "PUT"  | 
-                        "DELETE"  | 
-                        "TRACE"  | 
-                        "CONNECT" )  >HTTPMethod0 %HTTPMethod1;
+HTTPMethod = (   HTTPtoken )  >HTTPMethod0 %HTTPMethod1;
 HTTPRequestURI = (   [^ \t\r\n]+ )  >HTTPRequestURI0 %HTTPRequestURI1;
 HTTPHTTPVersion = (   "HTTP/"  HTTPdigit  "."  HTTPdigit )  >HTTPHTTPVersion0 %HTTPHTTPVersion1;
 HTTPRequestLine = (   HTTPMethod  HTTPsp  HTTPRequestURI  HTTPsp  HTTPHTTPVersion  HTTPcrlf   )  >HTTPRequestLine0 %HTTPRequestLine1;

@@ -298,6 +298,25 @@ ok64 HTTPtest8() {
     done;
 }
 
+// STD-26B068hWaP: RFC 9110 §9.1 method = token, not a fixed list
+ok64 HTTPtest9() {
+    sane(1);
+    a$str(req, "PATCH / HTTP/1.1\r\n\r\n");
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 8);
+    state.headers = hdrsidle;
+    call(HTTPutf8Drain, req, &state);
+    a$str(patch, "PATCH");
+    $testeq(state.method, patch);
+    a$str(req2, "X-MY.METHOD_1 /a HTTP/1.1\r\n\r\n");
+    HTTPstate st2 = {};
+    st2.headers = hdrsidle;
+    call(HTTPutf8Drain, req2, &st2);
+    a$str(custom, "X-MY.METHOD_1");
+    $testeq(st2.method, custom);
+    done;
+}
+
 ok64 HTTPtest() {
     sane(1);
     call(HTTPtest1);
@@ -308,6 +327,7 @@ ok64 HTTPtest() {
     call(HTTPtest6);
     call(HTTPtest7);
     call(HTTPtest8);
+    call(HTTPtest9);
     done;
 }
 
