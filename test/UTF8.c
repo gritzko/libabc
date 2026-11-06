@@ -118,11 +118,35 @@ ok64 UTF8test3() {
     done;
 }
 
+// STD-26B068PXdv: the encoder refuses surrogates and values past U+10FFFF
+// (RFC 3629 §3) writing nothing; every scalar value round-trips.
+ok64 UTF8test4() {
+    sane(1);
+    for (u32 cp = 0; cp <= 0x110000; cp++) {
+        a_pad(u8, buf, 4);
+        b8 bad = (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF;
+        same(utf8sFeed32(buf_idle, cp), bad ? UTFBAD : OK);
+        if (bad) {
+            same($len(buf_data), 0);
+            continue;
+        }
+        u32 back = 0;
+        u8cs d = {buf_data[0], buf_data[1]};
+        call(utf8sDrain32, &back, d);
+        same(back, cp);
+        same($len(d), 0);
+    }
+    a_pad(u8, big, 4);
+    same(utf8sFeed32(big_idle, 0xFFFFFFFF), UTFBAD);
+    done;
+}
+
 ok64 UTF8test() {
     sane(1);
     call(UTF8test1);
     call(UTF8test2);
     call(UTF8test3);
+    call(UTF8test4);
     done;
 }
 

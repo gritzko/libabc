@@ -14,6 +14,7 @@ ok64 _utf8sFeed32(utf8s into, u32 cp) {
         utf8sFeed1(into, (u8)(cp >> 6) | UTF8LEAD2);
         utf8sFeed1(into, (u8)(cp & 63) | UTF8CONT);
     } else if (cp < 0x10000) {
+        test(cp < 0xD800 || cp > 0xDFFF, UTFBAD);  // STD-26B068PXdv
         test($len(into) >= 3, UTFNOROOM);
         utf8sFeed1(into, (u8)(cp >> 12) | UTF8LEAD3);
         utf8sFeed1(into, (u8)((cp >> 6) & 63) | UTF8CONT);
