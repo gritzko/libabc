@@ -1118,7 +1118,7 @@ ok64 FILEHoldTest() {
     u8bp buf = FILESlot(pfd[1]);
     a_pad(u8, pat, 2 * 4096);
     u8bFed(pat, 2 * 4096);
-    call(FILEBufFeed, pfd[1], u8cbData(pat));
+    call(FILEBufFeed, pfd[1], u8bDataC(pat));
     call(FILEFlush, pfd + 1);
     same(u8bDataLen(buf), 2 * 4096);  // held past a page
     call(FILEFlushAll, pfd + 1);
@@ -1126,6 +1126,26 @@ ok64 FILEHoldTest() {
     int wfd = pfd[1];
     call(FILEClose, &wfd);
     close(pfd[0]);
+    done;
+}
+
+//  STD-26B06CqQgU: a tty is never held, FILEFlush drains it
+ok64 FILEHoldTtyTest() {
+    sane(1);
+    int m = posix_openpt(O_RDWR | O_NOCTTY);
+    test(m >= 0 && 0 == grantpt(m) && 0 == unlockpt(m), FILEFAIL);
+    int t = open(ptsname(m), O_RDWR | O_NOCTTY);
+    test(t >= 0, FILEFAIL);
+    call(FILEBuffer, t, 4 * PAGESIZE);
+    call(FILESetFlags, t, FILE_HOLD);
+    u8bp buf = FILESlot(t);
+    a_pad(u8, pg, PAGESIZE);
+    u8bFed(pg, PAGESIZE);
+    call(FILEBufFeed, t, u8bDataC(pg));
+    call(FILEFlush, &t);
+    same(u8bDataLen(buf), 0);  // a held pipe keeps this page
+    call(FILEClose, &t);
+    close(m);
     done;
 }
 
@@ -1159,6 +1179,7 @@ ok64 FILEtest() {
     call(FILEStreamTest);
     call(FILEDeferPipeTest);
     call(FILEHoldTest);
+    call(FILEHoldTtyTest);
     call(FILECloseAllTest);
     call(FILEtest1);
     call(FILEtest2);

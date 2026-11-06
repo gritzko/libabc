@@ -260,7 +260,7 @@ ok64 FILEFlushAll(int const *fd);
 // CODE-26B06BfNAx: buffered fd flags.  DEFER_PIPE: an EPIPE drops the data,
 // later feeds/flushes are no-ops, FILEClose returns FILEPIPE once; SIGPIPE
 // is blocked around the write.  HOLD: FILEFlush is a no-op, so only
-// FILEFlushAll or a full buffer (FILEBuffer's size) writes.
+// FILEFlushAll or a full buffer (FILEBuffer's size) writes; a tty is never held.
 enum { FILE_DEFER_PIPE = 1, FILE_HOLD = 2 };
 ok64 FILESetFlags(int fd, u8 flags);
 

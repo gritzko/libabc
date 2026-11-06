@@ -626,6 +626,7 @@ ok64 FILEBuffer(int fd, size_t size) {
 
 ok64 FILESetFlags(int fd, u8 flags) {
     sane(FILEstream(fd) != NULL && !(flags & FILE_GONE));
+    if (isatty(fd)) flags &= ~FILE_HOLD;  // STD-26B06CqQgU: a tty streams
     FILE_SLOT[fd].flags = (FILE_SLOT[fd].flags & FILE_GONE) | flags;
     done;
 }
