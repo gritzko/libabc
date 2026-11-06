@@ -5,7 +5,6 @@ set(CMAKE_C_STANDARD 23)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 
-
 include_directories(..)
 
 #find_package(sodium CONFIG)
@@ -171,12 +170,6 @@ target_compile_options(BOXtest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(BOXtest abc)
 add_test(NAME BOXtest COMMAND BOXtest)
 
-add_executable(MMAPtest MMAP.c)
-target_link_options(MMAPtest PRIVATE ${TEST_LDD_FLAGS})
-target_compile_options(MMAPtest PRIVATE ${TEST_CXX_FLAGS})
-target_link_libraries(MMAPtest abc)
-add_test(NAME MMAPtest COMMAND MMAPtest)
-
 add_executable(FILEtest FILE.c)
 target_link_options(FILEtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(FILEtest PRIVATE ${TEST_CXX_FLAGS})
@@ -336,12 +329,6 @@ target_link_libraries(SLOGtest abc)
 target_compile_options(SLOGtest PRIVATE ${TEST_CXX_FLAGS})
 add_test(NAME SLOGtest COMMAND SLOGtest)
 
-#add_executable(SSTtest SST.c)
-#target_link_options(SSTtest PRIVATE ${TEST_LDD_FLAGS})
-#target_compile_options(SSTtest PRIVATE ${TEST_CXX_FLAGS})
-#target_link_libraries(SSTtest abc rdx)
-#add_test(NAME SSTtest COMMAND SSTtest)
-
 add_executable(LSMtest LSM.c)
 target_link_options(LSMtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(LSMtest PRIVATE ${TEST_CXX_FLAGS})
@@ -460,13 +447,6 @@ target_link_libraries(CURLmemtest abc)
 add_test(NAME CURLmemtest COMMAND CURLmemtest)
 set_tests_properties(CURLmemtest PROPERTIES TIMEOUT 20)
 endif()
-
-# MEM-021: mmap grow sizers must refuse an oversize request, never shrink
-add_executable(MMAPgrowtest MMAPgrow.c)
-target_link_options(MMAPgrowtest PRIVATE ${TEST_LDD_FLAGS})
-target_compile_options(MMAPgrowtest PRIVATE ${TEST_CXX_FLAGS})
-target_link_libraries(MMAPgrowtest abc)
-add_test(NAME MMAPgrowtest COMMAND MMAPgrowtest)
 
 # MEM-021: DNSNameText must report NOROOM, not truncate silently
 add_executable(DNStexttest DNStext.c)

@@ -115,9 +115,7 @@ HEXx.h
 INT.h
 LSM.h
 JSON.h
-JSON.rl.h
 LEX.h
-MMAP.h
 NEST.h
 OK.h
 PAGE.h
@@ -152,7 +150,6 @@ JSON.rl.c
 LEX.c
 LEX.rl.c
 LSM.c
-MMAP.c
 PAGE.c
 POL.c
 PUPS.c

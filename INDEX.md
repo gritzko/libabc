@@ -268,13 +268,6 @@ Compile a pattern to a Thompson NFA and simulate it over text (full or prefix ma
 
 ##  Storage & I/O
 
-###  MMAP.h, MMAPx.h — memory-mapped buffers
-
-mmap-backed `Bvoid` buffers with grow-by-remap.
-
- -  `MMAPopen`/`MMAPclose`/`MMAPresize` — map a buffer of a size, unmap, and resize (remap) it.
- -  `MMAPresize2`/`MMAPresize4`/`MMAPmayresize` — double, grow-by-quarter.
-
 ###  PAGE.h, PACK.h, COMB.h — paged & packed storage
 
 Lazy-loaded paged buffers (`PAGE`), LZ4-compressed page storage (`PACK`), and a self-describing combined-buffer header (`COMB`). Guide: [COMB.md].
@@ -283,11 +276,10 @@ Lazy-loaded paged buffers (`PAGE`), LZ4-compressed page storage (`PACK`), and a 
  -  `pack`/`PACKIdxLen`/`PACKIdxSetLen` — LZ4 page store with a 32-byte index block tracking 12 pages' compressed lengths.
  -  `COMBinit`/`COMBsave`/`COMBload` — stamp a magic header and persist/restore a buffer's PAST/DATA/IDLE offsets.
 
-###  SST.h, SKIP.h, SLOG.h — sorted tables & skip logs
+###  SKIP.h, SLOG.h — skip indexes & skip logs
 
-Sorted-string tables with a skip index (`SST`/`SKIP`), and a skip-record log for seekable append streams (`SLOG`). Guides: [SST.md], [SKIP.md], [SLOG.md].
+A block-granular skip index (`SKIP`), and a skip-record log for seekable append streams (`SLOG`). Guides: [SKIP.md], [SLOG.md].
 
- -  `SSTheader`/`SSTab` — the 16-byte SST file header and the skip table type aliased to `SKIPu8tab`.
  -  `SKIPfeed`/`SKIPdrain`/`SKIPload`/`SKIPhop` — build a block-granular skip index over a buffer and hop through it.
  -  `SLOGCreate`/`SLOGFeed`/`SLOGMark`/`SLOGClose` — write path: emit a stream with rank-based skip records + a close record.
  -  `SLOGOpen`/`SLOGSeek` — read path: load the skip list from the close record and seek to the first entry `≥` a target.
@@ -343,7 +335,7 @@ An fd+timer event poller (`POL`), its read/write buffer layer (`POLL`), and an a
  -  `POLTrackEvents`/`AddEvents`/`Events`/`IgnoreEvents`/`TrackTime`/`AddTime` — register/read an fd's interest set + timer callbacks.
  -  `CURLInit`/`CURLGet`/`CURLPost`/`CURLTick`/`CURLFree` — async HTTP GET/POST driven by callbacks.
 
-###  URI.h, URI.rl.h — URI parsing
+###  URI.h — URI parsing
 
 A `uri` is eight slice views into the original text (scheme … fragment); walk path segments via `PATH`. Guide: [URI.md].
 A scheme takes NO dot (DOG-051), unlike RFC 3986 §3.1: `x.c:12` is a path, never the scheme `x.c` plus the path `12`.
@@ -356,7 +348,7 @@ A scheme takes NO dot (DOG-051), unlike RFC 3986 §3.1: `x.c:12` is a path, neve
 
 ###  HTTP.h, JSON.h (+ .rl) — HTTP & JSON parsers
 
-Ragel-generated SAX-style streaming lexers; the `.rl.h` files are the generated lexer enums/callbacks. Guide: [JSON.md].
+Ragel-generated SAX-style streaming lexers; the lexer enums/callbacks live in the generated `.c.rl` files. Guide: [JSON.md].
 
  -  `HTTPLexer`/`HTTPutf8Drain`/`HTTPutf8Feed`/`HTTPfind` — drive the HTTP lexer over a stream, look up a header by key.
  -  `JSONLexer`/`JSONfmtInit`/`JSONFmt` — the JSON SAX lexer and a re-indenting pretty-printer.
@@ -386,7 +378,7 @@ ANSI CSI parsing (`ANSI`) and styled-output rendering with RGB/256/basic colour,
 
 The shared lexer framework and a code generator that emits typed lexer templates (C / Go). Guide: [LEX.md].
 
- -  `LEXstate`/`LEXLexer` — the lexer state record and the driver shared by the generated `*.rl.h` lexers.
+ -  `LEXstate`/`LEXLexer` — the lexer state record and the driver shared by the generated `*.rl.c` lexers.
  -  `LEX_TEMPL` — the table of per-language lexer source templates the generator instantiates.
 
 ###  NEST.h — nested-context tracking
@@ -418,7 +410,6 @@ Tracks open/close of nested markup or container contexts in a buffer, with splic
 [LSM.md]: ./LSM.md
 [HIT.md]: ./HIT.md
 [COMB.md]: ./COMB.md
-[SST.md]: ./SST.md
 [SKIP.md]: ./SKIP.md
 [SLOG.md]: ./SLOG.md
 [PUPS.md]: ./PUPS.md

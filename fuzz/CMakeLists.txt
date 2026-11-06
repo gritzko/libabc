@@ -78,10 +78,6 @@ add_executable(BITfuzz BIT.c ../RON.c)
 add_executable(PUPSfuzz PUPS.c)
 target_link_libraries(PUPSfuzz abc)
 
-#add_executable(SST SST.c)
-#target_link_options(SST PRIVATE "${FUZZ_LDD_FLAGS}")
-#target_compile_options(SST PRIVATE "${FUZZ_C_FLAGS}")
-
 #  FUZZ-26B04IO_g6: TARGETfuzz replays the local, uncommitted corpus/TARGET/
 #  once, no fuzzing; lsan.supp mutes a musl libFuzzer leak
 file(GLOB FUZZ_CORPORA CONFIGURE_DEPENDS LIST_DIRECTORIES true

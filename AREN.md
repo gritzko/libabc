@@ -2,7 +2,7 @@
 
 Arena is a stack-like allocator.
 In the ABC system, the use of `malloc/free` is discouraged.
-For larger chunks of RAM, one can use [MMAP][M] (almost)directly.
+For larger chunks of RAM, one can use `bMap` (Bx.h) directly.
 For smaller pieces, there is stack.
 There is one popular case inbetween: tons of small pieces that do not fit on the stack.
 That is exactly what *arenas* are for.
@@ -15,4 +15,3 @@ ABC arena is a really thin sugar coating on top of ABC [buffers][B],
 specifically `Bu8`.
 
 [B]: ./B.md
-[M]: ./MMAP.md

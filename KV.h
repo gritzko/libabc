@@ -11,7 +11,7 @@ typedef struct kv32 {
 fun u64 kv32Hash(kv32 const *v) { return mix32(v->key); }
 
 fun b8 kv32Z(kv32 const *a, kv32 const *b) { return a->key < b->key; }
-//  BOX-26A26EbjLj: the max record (BOXx tombstone, SSTx sentinel)
+//  BOX-26A26EbjLj: the max record (BOXx tombstone)
 con kv32 kv32Max = {u32max, u32max};
 fun b8 kv32KeyEq(kv32 const *a, kv32 const *b) { return a->key == b->key; }
 
