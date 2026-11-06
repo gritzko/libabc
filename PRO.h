@@ -34,7 +34,7 @@ extern uint8_t _pro_depth;
 // Default 1 GiB; mmap is lazy + MAP_NORESERVE so unused pages cost
 // nothing until first touch.
 #ifndef ABC_BASS_BYTES
-#define ABC_BASS_BYTES (1UL << 30)
+#define ABC_BASS_BYTES (1ULL << 30)
 #endif
 
 extern thread_local u8 *ABC_BASS[4];

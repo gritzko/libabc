@@ -64,7 +64,7 @@ fun h64 X(, Hash)(T a) { return mix64(a); }
 #undef X
 
 fun bin64 bin64of(u8 level, u64 ndx) {
-    return (ndx << (level + 1)) | ((1UL << level) - 1);
+    return (ndx << (level + 1)) | ((1ULL << level) - 1);
 }
 
 #define aBIN(name, lev, ndx) bin64 name = bin64of(lev, ndx)
@@ -75,7 +75,7 @@ fun u64 bin64level_bits(bin64 bin) { return (bin + 1) ^ bin; }
 
 fun u64 bin64head(bin64 bin) { return (bin & (bin + 1)) >> 1; }
 
-fun u64 bin64size(bin64 bin) { return 1UL << bin64level(bin); }
+fun u64 bin64size(bin64 bin) { return 1ULL << bin64level(bin); }
 
 fun u64 bin64term(bin64 b) { return bin64head(b) + bin64size(b); }
 
@@ -146,7 +146,7 @@ fun b8 bin64patch_midpeak(bin64 *midpeak, u64 len, u64 newlen) {
     u64 flips = len ^ newlen;
     u64 b = clz64(flips);
     u8 level = 63 - b;
-    u64 changed = (1UL << level) - 1;
+    u64 changed = (1ULL << level) - 1;
     if (!(changed & len)) return NO;
     u64 offset = len >> level;
     *midpeak = bin64of(level, offset);
@@ -195,8 +195,8 @@ fun ok64 BINPeaks($bin64 bins, size_t len) {
     ok64 o = OK;
     while (len && o == OK) {
         u64 l = ctz64(len);
-        u64 zeros = (1UL << (l + 1)) - 1;
-        u64 ones = (1UL << l) - 1;
+        u64 zeros = (1ULL << (l + 1)) - 1;
+        u64 ones = (1ULL << l) - 1;
         len &= ~zeros;
         u64 bin = (len << 1) | ones;
         o = bin64sFeed1(bins, bin);

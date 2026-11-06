@@ -64,7 +64,7 @@ fun int ok64is(ok64 val, ok64 root) {
     if (root == 0) return val == 0;
     u8 bits = (64 - clz64(root) + 5) / 6 * 6;
     if (bits >= 64) return val == root;
-    return (val & ((1UL << bits) - 1)) == root;
+    return (val & ((1ULL << bits) - 1)) == root;
 }
 
 fun ok64 errnok() {

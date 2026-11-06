@@ -9,7 +9,7 @@ typedef const ron60 ron60c;
 typedef ron60* ron60p;
 typedef const ron60 * ron60cp;
 
-#define ron60Max ((1UL << 60) - 1)
+#define ron60Max ((1ULL << 60) - 1)
 
 // RON Base64 character set
 extern const char* RON64_CHARS;
@@ -87,7 +87,7 @@ fun ok64 ron60DeNorm(ron60 r) {
 
 fun ok64 ron60NormInc(ron60 r) {
    ron60 shift = (r >> 54) >> 3;
-   return r + (1UL<<(shift*6));
+   return r + (1ULL << (shift * 6));
 }
 
 fun ok64 ron60Inc(ron60 r) {
@@ -98,7 +98,7 @@ fun ok64 ron60Inc(ron60 r) {
 
 fun ok64 ron60NormInk(ron60 r) {
    ron60 shift = (r >> 54) >> 3;
-   return r + (1UL << ((9 - shift) * 6));
+   return r + (1ULL << ((9 - shift) * 6));
 }
 
 fun ok64 ron60Ink(ron60 r) {

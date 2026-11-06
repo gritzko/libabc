@@ -46,7 +46,7 @@ ok64 POLLoop(u64 ns);
 ok64 POLStop();
 ok64 POLSleep(u64 ns);
 
-#define POLNanosPerSec 1000000000UL
+#define POLNanosPerSec 1000000000ULL
 #define POLNanosPerMSec (POLNanosPerSec / 1000)
 #define POLNanosPerYear (POLNanosPerSec * 60 * 60 * 24 * 365)
 #define POLNanosPerMonth (POLNanosPerYear / 12)

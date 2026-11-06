@@ -24,7 +24,7 @@ con ok64 BMISS = 0xb59271c;
 con ok64 BADARENA	= 0x2ca34a6ce5ca;
 
 #define B_MAX_LEN_BITS 48
-#define B_MAX_LEN (1UL << B_MAX_LEN_BITS)
+#define B_MAX_LEN (1ULL << B_MAX_LEN_BITS)
 
 #define BTYPE(T) typedef T *const B##T[4];
 

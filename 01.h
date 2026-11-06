@@ -263,7 +263,7 @@ fun u64 round_power_of_2(u64 a) {
     // MEM-021: no power of two fits above 2^63; `1UL << 64` was UB and
     // returned 1 on x86, silently shrinking whatever it sized
     if (p == 0) return 0;
-    return 1UL << (64 - p);
+    return 1ULL << (64 - p);
 }
 
 fun u8 upper_log_2(u64 val) {
@@ -315,12 +315,12 @@ fun h64 mix64(u64 a) {
 #define Ocopy(a, b) memcpy((void *)(a), (void *)(b), sizeof(*a));
 #endif
 
-#define XB (1UL << 60)
-#define PB (1UL << 50)
-#define TB (1UL << 40)
-#define GB (1UL << 30)
-#define MB (1UL << 20)
-#define KB (1UL << 10)
+#define XB (1ULL << 60)
+#define PB (1ULL << 50)
+#define TB (1ULL << 40)
+#define GB (1ULL << 30)
+#define MB (1ULL << 20)
+#define KB (1ULL << 10)
 
 #define u8max 0xff
 #define u16max 0xffff
@@ -335,7 +335,7 @@ con u128 u128Max = {{u64max, u64max}};
 #define O1low32(lohi) (((u64)lohi) & 0xffffffff)
 #define O1high32(lohi) (((u64)lohi) >> 32)
 
-#define bitmask(l) ((1UL << l) - 1)
+#define bitmask(l) ((1ULL << l) - 1)
 #define bitpack(a, h, l) (((u64)(a) & bitmask(l)) << (h))
 #define bitpick(u, h, l) ((u >> h) & bitmask(l))
 #define bitpack4816(a, b) (bitpack(a, 0, 48) | bitpack(b, 48, 16))
@@ -373,7 +373,7 @@ fun u8 u64topbyte(u64 u) {
 
 fun u64 u64setbyte(u64 u, u8 b, u8 ndx) {
     u8 shift = ndx << 3;
-    u64 mask = 0xffUL << shift;
+    u64 mask = 0xffULL << shift;
     u64 newval = ((u64)b) << shift;
     return (u & ~mask) | newval;
 }
