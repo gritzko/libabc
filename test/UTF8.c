@@ -67,10 +67,62 @@ ok64 UTF8test2() {
     done;
 }
 
+// STD-26B068SZeb: overlong and out-of-range boundaries per RFC 3629 §3
+struct utf8bad_case {
+    u8 bytes[4];
+    u8 len;
+    ok64 o;
+};
+
+static struct utf8bad_case const utf8bad_cases[] = {
+    {{0xC0, 0x80}, 2, UTFBAD},             {{0xC1, 0xBF}, 2, UTFBAD},
+    {{0xC2, 0x80}, 2, OK},                 {{0xE0, 0x80, 0x80}, 3, UTFBAD},
+    {{0xE0, 0x9F, 0xBF}, 3, UTFBAD},       {{0xE0, 0xA0, 0x80}, 3, OK},
+    {{0xED, 0x9F, 0xBF}, 3, OK},           {{0xED, 0xA0, 0x80}, 3, UTFBAD},
+    {{0xED, 0xBF, 0xBF}, 3, UTFBAD},       {{0xEE, 0x80, 0x80}, 3, OK},
+    {{0xF0, 0x80, 0x80, 0x80}, 4, UTFBAD}, {{0xF0, 0x8F, 0xBF, 0xBF}, 4, UTFBAD},
+    {{0xF0, 0x90, 0x80, 0x80}, 4, OK},     {{0xF4, 0x8F, 0xBF, 0xBF}, 4, OK},
+    {{0xF4, 0x90, 0x80, 0x80}, 4, UTFBAD},
+};
+
+// STD-26B068SZeb: every 3- and 4-byte lead x continuation combination
+// decodes iff its value is the shortest form of a scalar value.
+ok64 UTF8test3() {
+    sane(1);
+    for (size_t i = 0; i < sizeof(utf8bad_cases) / sizeof(*utf8bad_cases);
+         i++) {
+        u32 cp = 0;
+        u8cs d = {utf8bad_cases[i].bytes,
+                  utf8bad_cases[i].bytes + utf8bad_cases[i].len};
+        same(utf8sDrain32(&cp, d), utf8bad_cases[i].o);
+    }
+    for (u32 b0 = 0xE0; b0 < 0xF8; b0++)
+        for (u32 b1 = 0x80; b1 < 0xC0; b1++)
+            for (u32 b2 = 0x80; b2 < 0xC0; b2++)
+                for (u32 b3 = 0x80; b3 < (b0 < 0xF0 ? 0x81 : 0xC0); b3++) {
+                    u8 buf[4] = {(u8)b0, (u8)b1, (u8)b2, (u8)b3};
+                    u32 v, cp = 0;
+                    b8 ok;
+                    if (b0 < 0xF0) {
+                        v = (b0 & 15) << 12 | (b1 & 63) << 6 | (b2 & 63);
+                        ok = v >= 0x800 && (v < 0xD800 || v > 0xDFFF);
+                    } else {
+                        v = (b0 & 7) << 18 | (b1 & 63) << 12 |
+                            (b2 & 63) << 6 | (b3 & 63);
+                        ok = v >= 0x10000 && v <= 0x10FFFF;
+                    }
+                    u8cs d = {buf, buf + (b0 < 0xF0 ? 3 : 4)};
+                    same(utf8sDrain32(&cp, d), ok ? OK : UTFBAD);
+                    if (ok) same(cp, v);
+                }
+    done;
+}
+
 ok64 UTF8test() {
     sane(1);
     call(UTF8test1);
     call(UTF8test2);
+    call(UTF8test3);
     done;
 }
 

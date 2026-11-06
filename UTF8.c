@@ -61,7 +61,7 @@ ok64 _utf8sDrain32(u32 *cp, utf8cs data) {
         if ((utf8[3] & 0b11000000) != 0b10000000) fail(UTFBAD);
         code_point = (byte & 0b00000111) << 18 | (utf8[1] & 0b00111111) << 12 |
                      (utf8[2] & 0b00111111) << 6 | (utf8[3] & 0b00111111);
-        if (code_point < 0xffff || 0x10ffff < code_point) fail(UTFBAD);
+        if (code_point < 0x10000 || 0x10ffff < code_point) fail(UTFBAD);
         *data += 4;
     } else {
         // we may have a continuation
