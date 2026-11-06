@@ -44,36 +44,6 @@ fun ok64 TLVu8sDrain(u8cs from, u8p type, u8csp value) {
     return OK;
 }
 
-fun ok64 TLVu8bInto(u8bp into, u8 type) {
-    if (u8bIdleLen(into) < 5) return TLVNOROOM;
-    size_t dl = u8bDataLen(into);
-    if (unlikely(dl > u32max)) return TLVTOOLONG;
-    u8bFeed1(into, type & ~TLVaA);
-    u8sFeed32(u8bIdle(into), (u32*)&dl);  // all le
-    ((u8**)into)[1] = into[2];
-    return OK;
-}
-
-fun ok64 TLVu8bOuto(u8bp into, u8 type) {
-    if (u8bPastLen(into) < 5) return TLVNODATA;
-    size_t ndl = u8bDataLen(into);
-    a_tail(u8c, hdr, u8bPast(into), 5);
-    u8 t = 0;
-    u64 l = 0;
-    u8sDrain1(hdr, &t);
-    u8* lp = (u8*)*hdr;
-    u8sDrain32(hdr, (u32p)&l);
-    ((u8**)into)[1] = into[1] - 5 - l;
-    u32 ndl32 = ndl;
-    memcpy(lp, &ndl32, 4);
-    u8cs empty = {};
-    if (ndl <= 0xff) {
-        u8bSplice(into, l + 2, 3, empty);
-        *u8sAtP(u8bData(into), l) |= TLVaA;
-    }
-    return OK;
-}
-
 // ----------------------
 
 fun int TLVhuge(u8 t) { return t >= '!' && t <= ':'; }
@@ -84,28 +54,12 @@ fun u32 TLVlen(size_t len) { return len <= 0xff ? 2 + len : 5 + len; }
 
 ok64 TLVDrain$(u8c$ rec, u8cs from);
 
-/** Open a TLV header for a record of unknown length.
- *  The buffer must be stable during the whole write;
- *  no shifts, no reallocs, no remaps.
- * @deprecated */
-ok64 TLVOpen($u8 tlv, u8 type, u32** len);
-
-/** Open a TLV header for a yet-unwritten (short) record. */
-ok64 TLVInitShort($u8 tlv, u8 type, Bu8p stack);
-
-/** Open a TLV header for a yet-unwritten (long) record. */
-ok64 TLVInitLong($u8 tlv, u8 type, Bu8p stack);
-
-/** Finalize the header once the record is complete. */
-ok64 TLVEndAny($u8 tlv, u8 type, Bu8p stack);
-
-// @deprecated
-ok64 TLVClose($u8 tlv, u8 type, u32* const* len);
-
-ok64 TLVFeedKeyVal($u8 tlv, u8c type, u8cs key, $cu8c val);
+ok64 TLVFeedKeyVal($u8 tlv, u8c type, u8csc key, $cu8c val);
 
 ok64 TLVDrainKeyVal(u8* type, u8cs key, u8cs val, u8cs tlv);
 
+// A record of yet-unknown length: Start reserves a long (Huge: a 9-byte)
+// header at `idle` and sets `inner` past it; End frames it, moves `idle`.
 ok64 TLVu8sStart(u8sc idle, u8s inner, u8 lit);
 
 ok64 TLVu8sEnd(u8s idle, u8sc inner, u8 lit);
@@ -113,5 +67,34 @@ ok64 TLVu8sEnd(u8s idle, u8sc inner, u8 lit);
 ok64 TLVu8sStartHuge(u8sc idle, u8s inner, u8 lit);
 
 ok64 TLVu8sEndHuge(u8s idle, u8sc inner, u8 lit);
+
+// Buffer form of Start/End kept for impII STATE.c (CODE-26B065FmPf):
+// the header stashes the DATA length, DATA restarts at the payload.
+fun ok64 TLVu8bInto(u8bp into, u8 type) {
+    size_t dl = u8bDataLen(into);
+    if (unlikely(dl > u32max)) return TLVTOOLONG;
+    u8s inner = {};
+    ok64 o = TLVu8sStart(u8bIdle(into), inner, type);
+    if (o != OK) return o;
+    u32 dl32 = dl;
+    memcpy(into[2] + 1, &dl32, 4);
+    ((u8**)into)[1] = ((u8**)into)[2] = inner[0];
+    return OK;
+}
+
+fun ok64 TLVu8bOuto(u8bp into, u8 type) {
+    if (u8bPastLen(into) < 5) return TLVNODATA;
+    u8* hdr = into[1] - 5;
+    u32 dl = 0;
+    memcpy(&dl, hdr + 1, 4);
+    if (hdr - into[0] < (i64)dl) return TLVBADREC;
+    u8s outer = {hdr, into[3]};
+    u8s inner = {into[2], into[3]};
+    ok64 o = TLVu8sEnd(outer, inner, type);
+    if (o != OK) return o;
+    ((u8**)into)[1] = hdr - dl;
+    ((u8**)into)[2] = outer[0];
+    return OK;
+}
 
 #endif

@@ -59,38 +59,7 @@ ok64 _TLVu8sFeed(u8s into, u8 type, u8csc value) {
     done;
 }
 
-ok64 TLVOpen($u8 tlv, u8 type, u32** len) {
-    sane($ok(tlv) && len != NULL && TLVlong(type));
-    test($len(tlv) >= 5, TLVNOROOM);
-    **tlv = type;
-    ++*tlv;
-    *len = (u32*)*tlv;
-    u32 zero = 0;
-    u8sFeed32(tlv, &zero);
-    done;
-}
-
-ok64 TLVClose($u8 tlv, u8 type, u32* const* len) {
-    sane($ok(tlv) && TLVlong(type) && len != NULL && *len != NULL &&
-         (u8*)*len < *tlv && *(*((u8**)len) - 1) == type);
-    size_t d = *tlv - (u8*)*len;
-    test(d <= TLV_MAX_LEN && d >= 4, TLVBADREC);
-    d -= 4;
-    if (d > 0xff) {
-        **len = d;
-    } else {
-        u8* p = *(u8**)len - 1;
-        *p += TLVaA;
-        ++p;
-        *p = d;
-        ++p;
-        con size_t shift = sizeof(u32) - sizeof(u8);
-        memmove(p, p + shift, d);
-        *tlv -= shift;
-    }
-    done;
-}
-ok64 TLVFeedKeyVal($u8 tlv, u8c type, u8cs key, $cu8c val) {
+ok64 TLVFeedKeyVal($u8 tlv, u8c type, u8csc key, $cu8c val) {
     sane($ok(tlv) && $ok(key) && ($empty(val) || $ok(val)));
     size_t keylen = $len(key);
     test(keylen < 0x100, TLVBADARG);
@@ -136,74 +105,21 @@ ok64 TLVDrainKeyVal(u8* type, u8cs key, $u8c val, u8cs tlv) {
     tlv[0] = body[1];
     done;
 }
-ok64 TLVInitShort($u8 tlv, u8 type, Bu8p stack) {
-    sane($ok(tlv) && Bok(stack) && TLVlong(type));
-    call(u8pbPush, stack, &$head(tlv));
-    call(u8sFeed2, tlv, type | TLVaA, 0);
-    done;
-}
-
-ok64 TLVInitLong($u8 tlv, u8 type, Bu8p stack) {
-    sane($ok(tlv) && Bok(stack) && TLVlong(type));
-    call(u8pbPush, stack, &$head(tlv));
-    u8 head[] = {type & ~TLVaA, 0, 0, 0, 0};
-    a$(u8c, h, head);
-    call(u8sFeed, tlv, h);
-    done;
-}
-
-ok64 TLVEndAny($u8 tlv, u8 type, Bu8p stack) {
-    sane($ok(tlv) && Bok(stack) && !Bempty(stack) &&
-         *u8pbLast(stack) + 2 <= $head(tlv));
-    u8* start = *u8pbLast(stack);
-    size_t len = $head(tlv) - start;
-    if (TLVlong(*start)) {
-        test(len >= 4 + 1, FAILSANITY);
-        len -= 4 + 1;
-        if (len < 0x100) {
-            u8cs from = {start + 1 + 4, tlv[0]};
-            $u8 into = {start + 1 + 1, tlv[0] - 4 + 1};
-            u8sCopy(into, from);
-            tlv[0] -= 4 - 1;
-            *start |= TLVaA;
-            *(start + 1) = (u8)len;
-        } else {
-            *(u32*)(start + 1) = len;
-        }
-    } else if (TLVshort(*start)) {
-        len -= 1 + 1;
-        if (len >= 0x100) {
-            test(len <= TLV_MAX_LEN, TLVTOOLONG);
-            test($len(tlv) >= 4 - 1, TLVNOROOM);
-            u8cs from = {start + 1 + 1, tlv[0]};
-            $u8 into = {start + 1 + 4, tlv[0] + 4 - 1};
-            u8sCopy(into, from);
-            tlv[0] += 4 - 1;
-            *start &= ~TLVaA;
-            *(u32*)(start + 1) = len;
-        } else {
-            *(start + 1) = (u8)len;
-        }
-    } else {
-        fail(TLVBADREC);
-    }
-    u8pbPop(stack);
-    done;
-}
-
 ok64 TLVu8sStart(u8sc outer, u8s inner, u8 lit) {
-    sane(u8sOK(outer) && inner != NULL);
+    sane(u8sOK(outer) && inner != NULL && TLVlong(lit));
+    test($len(outer) >= 5, TLVNOROOM);
     $mv(inner, outer);
-    call(u8sFeed1, inner, lit);
     u32 z = 0;
-    call(u8sFeed32, inner, &z);
+    u8sFeed1(inner, lit);
+    u8sFeed32(inner, &z);
     done;
 }
 
 ok64 TLVu8sEnd(u8s outer, u8sc inner, u8 lit) {
     sane(u8sOK(outer) && u8sOK(inner) && inner[1] == outer[1] &&
-         *inner > *outer + 5 && lit == **outer);
+         *inner >= *outer + 5 && lit == **outer);
     u64 tl = *inner - *outer;
+    test(tl - 5 <= u32max, TLVTOOLONG);
     *(u32*)(1 + *outer) = tl - 5;
     if (tl <= 0xff + 5) {
         **outer |= TLVaA;
@@ -217,25 +133,23 @@ ok64 TLVu8sEnd(u8s outer, u8sc inner, u8 lit) {
 
 ok64 TLVu8sStartHuge(u8sc outer, u8s inner, u8 lit) {
     sane(u8sOK(outer) && inner != NULL && TLVlong(lit));
+    test($len(outer) >= 9, TLVNOROOM);
     $mv(inner, outer);
-    call(u8sFeed1, inner, lit - TLVaA);
     u64 z = 0;
-    call(u8sFeed64, inner, &z);
+    u8sFeed1(inner, lit - TLVaA);
+    u8sFeed64(inner, &z);
     done;
 }
 
 ok64 TLVu8sEndHuge(u8s outer, u8sc inner, u8 lit) {
     sane(u8sOK(outer) && u8sOK(inner) && inner[1] == outer[1] &&
-         *inner > *outer + 9 && lit == **outer + TLVaA);
+         *inner >= *outer + 9 && lit == **outer + TLVaA);
     u64 tl = *inner - *outer;
     *(u64*)(1 + *outer) = tl - 9;
     if (tl <= 0xff + 9) {
         **outer += 2 * TLVaA;
         memmove(*outer + 2, *outer + 9, tl - 9);
         *outer = *inner - 7;
-    } else if (tl <= 0xffff + 9) {
-        // we can, but we do not want to move records > 255 bytes
-        *outer = *inner;
     } else {
         *outer = *inner;
     }

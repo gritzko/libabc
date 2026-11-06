@@ -121,11 +121,11 @@ ok64 LSM1000000() {
 #define LEN (1 << 10)
     aB(u8, mil);
     call(u8bAllocate, milbuf, LEN * 16 * 2);
-    aBpad(u8p, stack, 8);
     for (u64 i = 0; i < LEN; ++i) {
-        call(TLVInitShort, milidle, 'I', stack);
-        call(ZINTu64feed, milidle, i ^ 13);
-        call(TLVEndAny, milidle, 'I', stack);
+        u8s inner = {};
+        call(TLVu8sStart, milidle, inner, 'I');
+        call(ZINTu64feed, inner, i ^ 13);
+        call(TLVu8sEnd, milidle, inner, 'I');
     }
     call(LSMSort, mildata, TLVDrain$, ZINTz, nomerge, milidle);
     for (u64 i = 0; i < LEN; ++i) {

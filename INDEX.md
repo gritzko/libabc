@@ -102,11 +102,12 @@ Canonical 1/2/4/8-byte little-endian ints plus delta and blocked codings; shorte
 
 ###  TLV.h — type-length-value records
 
-Tagged self-describing records with short (inline-length) and long (streamed) framings; the wire format for logs and stores. Guide: [TLV.md].
+Tagged self-describing records with short (1-byte length), long (4-byte) and huge (8-byte) framings; the wire format for logs and stores. Guide: [TLV.md].
 
  -  `TLVu8sFeed`/`TLVu8sDrain` — write/read one `(type, value)` record into a slice.
- -  `TLVu8bInto`/`TLVu8bOuto` — open a long record on a buffer (reserve the header) and close it once the payload is.
- -  `TLVInitShort`/`TLVInitLong`/`TLVEndAny` — header-open/finalize for a record of yet-unknown length.
+ -  `TLVu8sStart`/`TLVu8sEnd` — open a record of yet-unknown length (reserve the header, write into `inner`), then frame it and move `idle`.
+ -  `TLVu8sStartHuge`/`TLVu8sEndHuge` — the same with the 8-byte-length huge header.
+ -  `TLVu8bInto`/`TLVu8bOuto` — buffer-only wrapper over Start/End (kept for impII).
  -  `TLVFeedKeyVal`/`TLVDrainKeyVal` — key/value record convenience codec.
  -  `TLVhuge`/`TLVlong`/`TLVshort`/`TLVlen` — classify a type byte's framing class + compute a payload's framed length.
 

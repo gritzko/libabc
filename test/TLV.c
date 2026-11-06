@@ -105,14 +105,65 @@ ok64 TLVtest3() {
 ok64 TLVtest4() {
     sane(1);
     aBpad2(u8, pad, PAGESIZE);
-    aBpad(u8p, stack, 16);
     u8 correct[] = {'a', 4, 't', 'e', 's', 't'};
     a$(u8c, cor, correct);
     u8cs text = {cor[0] + 2, cor[1]};
-    call(TLVInitLong, padidle, 'A', stack);
-    call(u8sFeed, padidle, text);
-    call(TLVEndAny, padidle, 'A', stack);
+    u8s inner = {};
+    call(TLVu8sStart, padidle, inner, 'A');
+    call(u8sFeed, inner, text);
+    call(TLVu8sEnd, padidle, inner, 'A');
     $testeq(cor, paddata);
+    done;
+}
+
+// CODE-26B065FmPf: Start/End and the Huge pair frame every payload
+// length right (short, long, huge), nest, and fail with `inner` untouched.
+ok64 TLVtestStartEnd() {
+    sane(1);
+    Bu8 buf = {};
+    call(u8bAllocate, buf, 1 << 18);
+    u64 lens[] = {0, 1, 255, 256, 0x10000 + 9};
+    for (int huge = 0; huge < 2; ++huge) {
+        for (size_t i = 0; i < sizeof(lens) / sizeof(*lens); ++i) {
+            u8bReset(buf);
+            u8s inner = {};
+            if (huge) {
+                call(TLVu8sStartHuge, u8bIdle(buf), inner, 'X');
+            } else {
+                call(TLVu8sStart, u8bIdle(buf), inner, 'X');
+            }
+            memset(inner[0], 'x', lens[i]);
+            inner[0] += lens[i];
+            if (huge) {
+                call(TLVu8sEndHuge, u8bIdle(buf), inner, 'X');
+            } else {
+                call(TLVu8sEnd, u8bIdle(buf), inner, 'X');
+            }
+            u64 hlen = lens[i] <= 0xff ? 2 : huge ? 9 : 5;
+            testeqv((u64)(hlen + lens[i]), (u64)u8bDataLen(buf), "%lu");
+            u8 t = 0;
+            u8cs val = {};
+            // the inline drain misframes huge records, CODE-26A23C_Sau
+            call(_TLVu8sDrain, u8bDataC(buf), &t, val);
+            testeqv((u64)'X', (u64)t, "%lu");
+            testeqv(lens[i], (u64)$len(val), "%lu");
+        }
+    }
+    u8bReset(buf);
+    u8s outer = {}, inner = {};
+    call(TLVu8sStart, u8bIdle(buf), outer, 'O');
+    call(TLVu8sStart, outer, inner, 'I');
+    call(TLVu8sEnd, outer, inner, 'I');
+    call(TLVu8sEnd, u8bIdle(buf), outer, 'O');
+    u8 nested[] = {'o', 2, 'i', 0};
+    a$(u8c, nest, nested);
+    $testeq(nest, u8bDataC(buf));
+    u8 four[4] = {};
+    u8s tiny = {four, four + 4};
+    u8s keep = {four, four};
+    want(TLVu8sStart(tiny, keep, 'A') == TLVNOROOM);
+    want(keep[1] == four);
+    call(u8bFree, buf);
     done;
 }
 
@@ -153,6 +204,7 @@ ok64 TLVtest() {
     call(TLVtest3);
     call(TLVtest4);
     call(TLVtest5);
+    call(TLVtestStartEnd);
     done;
 }
 
