@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <sys/wait.h>
 
 #include "INT.h"
 #include "PRO.h"
@@ -1136,6 +1137,15 @@ ok64 FILEHoldTtyTest() {
     test(m >= 0 && 0 == grantpt(m) && 0 == unlockpt(m), FILEFAIL);
     int t = open(ptsname(m), O_RDWR | O_NOCTTY);
     test(t >= 0, FILEFAIL);
+    pid_t rd = fork();  // BUILD-26B06DBE35: macOS's pty queue is ~1 KiB
+    test(rd >= 0, FILEFAIL);
+    if (rd == 0) {
+        close(t);
+        u8 sink[256];
+        while (read(m, sink, sizeof(sink)) > 0) {}
+        _exit(0);
+    }
+    close(m);
     call(FILEBuffer, t, 4 * PAGESIZE);
     call(FILESetFlags, t, FILE_HOLD);
     u8bp buf = FILESlot(t);
@@ -1145,7 +1155,7 @@ ok64 FILEHoldTtyTest() {
     call(FILEFlush, &t);
     same(u8bDataLen(buf), 0);  // a held pipe keeps this page
     call(FILEClose, &t);
-    close(m);
+    waitpid(rd, NULL, 0);
     done;
 }
 
