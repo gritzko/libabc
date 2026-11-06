@@ -42,6 +42,8 @@ Codes are the shared ones (01.h), as in HASH.md:
 
   - `Init(buf, len)`: an empty table of len slots on a mapped buffer;
     `BADARG` for a bad len, `NOROOM` past the max.
+  - A lookup or insert on an un-Init-ed (empty DATA) buffer fails
+    `sane()`; Next/DelAt see no slots.
   - `Get(&rec, buf)`, `At(&slot, buf, &rec)`: OK or NONE.
   - `Put(buf, &rec)`: OK (overwrite, or `X(,Merge)` with
     `ABC_SWISS_MERGE`) or `FULL`: 7/8 of the slots are live or tombs.

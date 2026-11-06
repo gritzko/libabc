@@ -102,6 +102,28 @@ ok64 SWISS0() {
     done;
 }
 
+//  CODE-26B065sXWC: a mapped but un-Init-ed (empty) buffer is refused
+ok64 SWISSnoinit() {
+    sane(1);
+    Bkv64 t = {};
+    call(kv64bMap, t, 1 << 20);
+    kv64 r = {5, 7}, *s = NULL;
+    kv64 const *c = NULL;
+    size_t i = 0;
+    want(FAILSANITY == SWISSkv64Put(t, &r));
+    want(FAILSANITY == SWISSkv64PutGrow(t, &r));
+    want(FAILSANITY == SWISSkv64Probe(&s, t, &r));
+    want(FAILSANITY == SWISSkv64ProbeGrow(&s, t, &r));
+    want(FAILSANITY == SWISSkv64Get(&r, t));
+    want(FAILSANITY == SWISSkv64At(&c, t, &r));
+    want(FAILSANITY == SWISSkv64Del(t, &r));
+    want(NONE == SWISSkv64DelAt(t, 0));
+    want(NONE == SWISSkv64Next(&i, t));
+    want(BADARG == SWISSkv64Grow(t));
+    call(kv64bUnMap, t);
+    done;
+}
+
 //  PutGrow from 16 slots to 2^17, then delete half, churn, iterate
 ok64 SWISSgrow() {
     sane(1);
@@ -233,6 +255,7 @@ ok64 SWISS() {
     sane(1);
     call(SWISSscan);
     call(SWISS0);
+    call(SWISSnoinit);
     call(SWISSgrow);
     call(SWISSprobe);
     call(SWISSdelat);

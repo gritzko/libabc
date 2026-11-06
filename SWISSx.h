@@ -11,9 +11,6 @@
 #define SWISS_T X(, )
 static_assert(sizeof(SWISS_T) >= 16, "SWISSx.h: records of 16 B and up");
 
-#define CTL(buf) ((u8 *)(buf)[0] + SWISS_HEAD)
-#define LEFT(buf) (*(u64 *)(buf)[0])
-#define LEN(buf) ((size_t)((buf)[2] - (buf)[1]))
 
 // ABC_SWISS_MERGE (optional, any value): Put folds rec into a resident of
 // the same key by X(,Merge)(resident, rec) instead of overwriting it.
@@ -35,8 +32,8 @@ fun ok64 X(SWISS, Init)(X(B, ) buf, size_t len) {
     size_t past = (SWISS_HEAD + max + sizeof(SWISS_T) - 1) / sizeof(SWISS_T);
     buf[1] = buf[0] + past;
     buf[2] = buf[1] + len;
-    memset(CTL(buf), 0, len);
-    LEFT(buf) = len - len / 8;
+    memset((u8 *)X(, bHead)(buf) + SWISS_HEAD, 0, len);
+    *(u64 *)X(, bHead)(buf) = len - len / 8;
     done;
 }
 
@@ -49,9 +46,10 @@ fun ok64 X(SWISS, Init)(X(B, ) buf, size_t len) {
 // the probe path, from the home offset on, so residents sit at their home.
 fun ok64 X(SWISS, _seek)(size_t *ndx, X(, b) buf, SWISS_T const *rec,
                          u64 h) {
-    u8 const *ctl = CTL(buf);
+    size_t len = X(, bDataLen)(buf);
+    u8 const *ctl = (u8 *)X(, bHead)(buf) + SWISS_HEAD;
     SWISS_T const *slot = buf[1];
-    size_t mask = LEN(buf) - 1, p = HOME(h, mask), at = SIZE_MAX;
+    size_t mask = len - 1, p = HOME(h, mask), at = SIZE_MAX;
     __builtin_prefetch(slot + p);
     u8 tag = TAG(h);
     for (size_t g = p & ~(size_t)15, k = 16;; g = (g + k) & mask, k += 16) {
@@ -74,6 +72,7 @@ fun ok64 X(SWISS, _seek)(size_t *ndx, X(, b) buf, SWISS_T const *rec,
 }
 
 fun ok64 X(SWISS, Get)(SWISS_T *rec, X(, b) buf) {
+    sane(X(, bDataLen)(buf) != 0);  // Init-ed
     size_t i = 0;
     if (OK != X(SWISS, _seek)(&i, buf, rec, X(, Hash)(rec))) return NONE;
     *rec = buf[1][i];
@@ -82,6 +81,7 @@ fun ok64 X(SWISS, Get)(SWISS_T *rec, X(, b) buf) {
 
 // Read-only lookup: OK, *slot the resident with rec's key; NONE untouched.
 fun ok64 X(SWISS, At)(SWISS_T const **slot, X(, b) buf, SWISS_T const *rec) {
+    sane(X(, bDataLen)(buf) != 0);  // Init-ed
     size_t i = 0;
     if (OK != X(SWISS, _seek)(&i, buf, rec, X(, Hash)(rec))) return NONE;
     *slot = buf[1] + i;
@@ -91,14 +91,16 @@ fun ok64 X(SWISS, At)(SWISS_T const **slot, X(, b) buf, SWISS_T const *rec) {
 // OK: *slot the resident.  NONE: *slot claimed for rec (tagged, contents
 // stale).  FULL: no room left (7/8 of the slots live or dead), untouched.
 fun ok64 X(SWISS, _claim)(SWISS_T **slot, X(, b) buf, SWISS_T const *rec) {
+    sane(X(, bDataLen)(buf) != 0);  // Init-ed
     u64 h = X(, Hash)(rec);
     size_t i = 0;
     ok64 o = X(SWISS, _seek)(&i, buf, rec, h);
     if (o == NONE) {
-        u8 *c = CTL(buf) + i;
+        u64 *left = (u64 *)X(, bHead)(buf);
+        u8 *c = (u8 *)left + SWISS_HEAD + i;
         if (*c == SWISS_EMPTY) {
-            if (LEFT(buf) == 0) return FULL;
-            --LEFT(buf);
+            if (*left == 0) return FULL;
+            --*left;
         }
         *c = TAG(h);
     }
@@ -110,7 +112,7 @@ fun ok64 X(SWISS, _claim)(SWISS_T **slot, X(, b) buf, SWISS_T const *rec) {
 fun ok64 X(SWISS, Put)(X(B, ) buf, SWISS_T const *rec) {
     SWISS_T *s = NULL;
     ok64 o = X(SWISS, _claim)(&s, buf, rec);
-    if (o == FULL) return o;
+    if (o != OK && o != NONE) return o;
 #ifdef ABC_SWISS_MERGE
     if (o == OK) {
         X(, Merge)(s, rec);
@@ -132,11 +134,12 @@ fun ok64 X(SWISS, Probe)(SWISS_T **slot, X(B, ) buf, SWISS_T const *rec) {
 // Nothing ever moves: a slot whose group has an empty byte was never on a
 // longer probe path, so it empties; else it turns a tomb.  NONE: ndx empty.
 fun ok64 X(SWISS, DelAt)(X(B, ) buf, size_t ndx) {
-    u8 *ctl = CTL(buf);
-    if (ndx >= LEN(buf) || !(ctl[ndx] & SWISS_LIVE)) return NONE;
+    u64 *left = (u64 *)X(, bHead)(buf);
+    u8 *ctl = (u8 *)left + SWISS_HEAD;
+    if (ndx >= X(, bDataLen)(buf) || !(ctl[ndx] & SWISS_LIVE)) return NONE;
     if (SWISSEmpty(ctl + (ndx & ~(size_t)15))) {
         ctl[ndx] = SWISS_EMPTY;
-        ++LEFT(buf);
+        ++*left;
     } else {
         ctl[ndx] = SWISS_TOMB;
     }
@@ -150,6 +153,7 @@ fun ok64 X(SWISS, Unprobe)(X(B, ) buf, SWISS_T *slot) {
 
 // NONE if absent (std::erase count 0)
 fun ok64 X(SWISS, Del)(X(B, ) buf, SWISS_T const *rec) {
+    sane(X(, bDataLen)(buf) != 0);  // Init-ed
     size_t i = 0;
     if (OK != X(SWISS, _seek)(&i, buf, rec, X(, Hash)(rec))) return NONE;
     X(SWISS, DelAt)(buf, i);
@@ -158,8 +162,8 @@ fun ok64 X(SWISS, Del)(X(B, ) buf, SWISS_T const *rec) {
 
 // Iteration: OK and *ndx at the first live slot at or after *ndx, else NONE.
 fun ok64 X(SWISS, Next)(size_t *ndx, X(, b) buf) {
-    u8 const *ctl = CTL(buf);
-    size_t len = LEN(buf);
+    u8 const *ctl = (u8 *)X(, bHead)(buf) + SWISS_HEAD;
+    size_t len = X(, bDataLen)(buf);
     if (likely(*ndx < len && (ctl[*ndx] & SWISS_LIVE))) return OK;
     while (*ndx < len) {
         size_t g = *ndx & ~(size_t)15;
@@ -178,9 +182,10 @@ fun ok64 X(SWISS, Next)(size_t *ndx, X(, b) buf) {
 // (absl's drop-deletes scheme); tombs are purged.  A slot left in its group
 // stays.  Not a sequence of valid states: never interrupted.
 fun void X(SWISS, _rehash)(X(B, ) buf, size_t len2) {
-    u8 *ctl = CTL(buf);
+    u64 *left = (u64 *)X(, bHead)(buf);
+    u8 *ctl = (u8 *)left + SWISS_HEAD;
     SWISS_T *slot = buf[1];
-    size_t len = LEN(buf), mask = len2 - 1, live = 0;
+    size_t len = X(, bDataLen)(buf), mask = len2 - 1, live = 0;
     memset(ctl + len, 0, len2 - len);
     for (size_t i = 0; i < len; ++i)
         ctl[i] = (ctl[i] & SWISS_LIVE) ? SWISS_MOVE : SWISS_EMPTY;
@@ -209,14 +214,14 @@ fun void X(SWISS, _rehash)(X(B, ) buf, size_t len2) {
             }
         }
     }
-    LEFT(buf) = len2 - len2 / 8 - live;
+    *left = len2 - len2 / 8 - live;
 }
 
 // Grow DATA 2x in place, rehashing.  NOROOM if IDLE is shorter than DATA or
 // the control array has no room; BADARG on a bad length.  Never maps.
 fun ok64 X(SWISS, Grow)(X(B, ) buf) {
     sane(buf != NULL && buf[0] != NULL);
-    size_t len = LEN(buf);
+    size_t len = X(, bDataLen)(buf);
     test(len >= SWISS_GROUP && 0 == (len & (len - 1)), BADARG);
     test(X(, bIdleLen)(buf) >= len && 2 * len <= X(SWISS, _max)(buf), NOROOM);
     X(SWISS, _rehash)(buf, 2 * len);
@@ -225,9 +230,10 @@ fun ok64 X(SWISS, Grow)(X(B, ) buf) {
 
 // FULL: rehash at the same length if tombs hold half the room, else Grow.
 fun ok64 X(SWISS, _room)(X(B, ) buf) {
-    size_t len = LEN(buf), live = 0;
+    u8 const *ctl = (u8 *)X(, bHead)(buf) + SWISS_HEAD;
+    size_t len = X(, bDataLen)(buf), live = 0;
     for (size_t g = 0; g < len; g += SWISS_GROUP)
-        live += __builtin_popcount(SWISSLive(CTL(buf) + g));
+        live += __builtin_popcount(SWISSLive(ctl + g));
     if (live * 16 < len * 7) {
         X(SWISS, _rehash)(buf, len);
         return OK;
@@ -266,8 +272,5 @@ fun ok64 X(SWISS, Move)(X(B, ) into, X(B, ) from) {
 
 #undef TAG
 #undef HOME
-#undef CTL
-#undef LEFT
-#undef LEN
 #undef ABC_SWISS_MERGE
 #undef SWISS_T
