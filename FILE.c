@@ -695,7 +695,7 @@ ok64 FILEFlushThreshold(int fd, u8b buf, size_t threshold) {
     sane(fd >= 0 && Bok(buf));
     if (u8bDataLen(buf) >= threshold) {
         ssize_t written;
-        do { written = write(fd, *u8bData(buf), u8bDataLen(buf));
+        do { written = write(fd, *u8bData(buf), min(u8bDataLen(buf), FILE_IO_MAX));
         } while (written < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (written < 0) return FILEErr(FILEFAIL);
         //  ABC-013: consume only the written prefix — a partial write
@@ -712,7 +712,7 @@ ok64 FILEEnsureSoft(int fd, u8b buf, size_t needed) {
     }
     while (u8bDataLen(buf) < needed && u8bIdleLen(buf) > 0) {
         ssize_t n;
-        do { n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
+        do { n = read(fd, *u8bIdle(buf), min(u8bIdleLen(buf), FILE_IO_MAX));
         } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (n < 0) return FILEFAIL;
         if (n == 0) break;  // EOF
@@ -736,7 +736,7 @@ ok64 FILEEnsureHard(int fd, u8b buf, size_t needed) {
     while (u8bDataLen(buf) < needed) {
         test(u8bIdleLen(buf) > 0, FILENOROOM);
         ssize_t n;
-        do { n = read(fd, *u8bIdle(buf), u8bIdleLen(buf));
+        do { n = read(fd, *u8bIdle(buf), min(u8bIdleLen(buf), FILE_IO_MAX));
         } while (n < 0 && errno == EINTR);  // ABC-013: EINTR-retry
         if (n < 0) return FILEFAIL;
         test(n > 0, FILEEND);  // EOF before getting needed bytes

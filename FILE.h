@@ -93,6 +93,9 @@ typedef int *FILE;
     FILE name = &_##name;
 */
 
+// FILE-26B06Ehkwu: one read/write call, macOS refuses > INT_MAX (EINVAL)
+#define FILE_IO_MAX ((size_t)1 << 30)
+
 #ifdef IOV_MAX
 #define FILEmaxiov IOV_MAX
 #elif defined __IOV_MAX
@@ -361,7 +364,7 @@ fun void FILEIgnoreSIGPIPE(void) { signal(SIGPIPE, SIG_IGN); }
 // Drains the data to the file; if the slice is non empty on return, see errno!
 fun ok64 FILEFeed(int fd, u8 const **data) {
     ssize_t re;
-    do { re = write(fd, *data, $size(data)); } while (re < 0 && errno == EINTR);
+    do { re = write(fd, *data, min((size_t)$size(data), FILE_IO_MAX)); } while (re < 0 && errno == EINTR);
     if (re <= 0) return FILEFAIL;
     *data += re;
     return OK;
@@ -413,7 +416,7 @@ fun ok64 FILEFeedAll(int fd, uint8_t const *const *data) {
 
 fun ok64 FILEdrain(u8 **into, int fd) {
     ssize_t ret;
-    do { ret = read(fd, *into, $size(into)); } while (ret < 0 && errno == EINTR);
+    do { ret = read(fd, *into, min((size_t)$size(into), FILE_IO_MAX)); } while (ret < 0 && errno == EINTR);
     if (ret <= 0) {
         if (ret == 0) return FILEEND;
         return FILEFAIL;  // TODO
@@ -425,7 +428,7 @@ fun ok64 FILEdrain(u8 **into, int fd) {
 // FILEDrain: read from fd into slice (fd-first arg order, matches FILEFeed)
 fun ok64 FILEDrain(int fd, $u8 into) {
     ssize_t ret;
-    do { ret = read(fd, *into, $len(into)); } while (ret < 0 && errno == EINTR);
+    do { ret = read(fd, *into, min((size_t)$len(into), FILE_IO_MAX)); } while (ret < 0 && errno == EINTR);
     if (ret <= 0) {
         if (ret == 0) return FILEEND;
         return FILEFAIL;

@@ -225,7 +225,7 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
                 if (u8bIdleLen(p->buf) < need) fail(PAGENOROOM);
                 done;
             }
-            ssize_t n = write(fd, *data, u8csLen(data));
+            ssize_t n = write(fd, *data, min(u8csLen(data), FILE_IO_MAX));
             if (n < 0) {
                 if (errno == EINTR) continue;  // ABC-013: EINTR-retry
                 // ABC-014: `need` is still unmet — report FILEAGAIN, not OK,
@@ -246,7 +246,7 @@ ok64 PAGEStreamFd(pagep p, b8 rw, u64 pos, size_t need) {
                 idle = u8bIdle(p->buf);
                 if (u8sEmpty(idle)) fail(PAGENOROOM);
             }
-            ssize_t n = read(fd, *idle, u8sLen(idle));
+            ssize_t n = read(fd, *idle, min(u8sLen(idle), FILE_IO_MAX));
             if (n < 0) {
                 if (errno == EINTR) continue;  // ABC-013: EINTR-retry
                 // ABC-014: `need` is still unmet — report FILEAGAIN, not OK,
