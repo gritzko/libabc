@@ -139,11 +139,33 @@ ok64 JSONEscapeTest() {
     done;
 }
 
+// JSON-26B065PDML: JSONfmt nests up to JSON_MAX_NEST, refuses an unopened close
+ok64 JSONNestTest() {
+    sane(1);
+    u8 deep[2 * JSON_MAX_NEST + 2];
+    for (int i = 0; i <= JSON_MAX_NEST; ++i) {
+        deep[i] = '[';
+        deep[2 * JSON_MAX_NEST + 1 - i] = ']';
+    }
+    u8c ind[] = " ";
+    u8cs indent = {ind, ind + 1};
+    a_pad(u8, out, 1 << 18);
+    u8cs ok = {deep + 1, deep + 2 * JSON_MAX_NEST + 1};
+    call(JSONFmt, out_idle, ok, indent);
+    a_pad(u8, out2, 1 << 18);
+    u8cs over = {deep, deep + 2 * JSON_MAX_NEST + 2};
+    want(JSONBAD == JSONFmt(out2_idle, over, indent));
+    u8cs close = u8scstr("]");
+    want(JSONBAD == JSONFmt(out_idle, close, indent));
+    done;
+}
+
 ok64 JSONtest() {
     sane(1);
     call(JSONEscapeTest);
     call(JSONCompactTest);
     call(JSONPrettyTest);
+    call(JSONNestTest);
     done;
 }
 

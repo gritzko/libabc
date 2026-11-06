@@ -8,6 +8,8 @@
 con ok64 JSONBAD = 0x137185cb28d;
 con ok64 JSONFAIL = 0x4dc6173ca495;
 
+#define JSON_MAX_NEST 255  // container nesting cap (JSONfmt's u8 depth)
+
 // SAX event handler type: receives token slice and user context
 typedef ok64 (*JSONsax_fn)(u8cs tok, void *ctx);
 

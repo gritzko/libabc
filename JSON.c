@@ -112,6 +112,7 @@ static ok64 JSONfmtLiteral(u8cs tok, void *ctx) {
 static ok64 JSONfmtOpenObject(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
+    test(f->depth < JSON_MAX_NEST, JSONBAD);
     call(JSONfmtPre, f);
     call(u8sFeed1, f->out, '{');
     ++f->depth;
@@ -122,6 +123,7 @@ static ok64 JSONfmtOpenObject(u8cs tok, void *ctx) {
 static ok64 JSONfmtCloseObject(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
+    test(f->depth > 0, JSONBAD);
     --f->depth;
     if (!f->need_nl) {
         call(JSONfmtNL, f);
@@ -134,6 +136,7 @@ static ok64 JSONfmtCloseObject(u8cs tok, void *ctx) {
 static ok64 JSONfmtOpenArray(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
+    test(f->depth < JSON_MAX_NEST, JSONBAD);
     call(JSONfmtPre, f);
     call(u8sFeed1, f->out, '[');
     ++f->depth;
@@ -144,6 +147,7 @@ static ok64 JSONfmtOpenArray(u8cs tok, void *ctx) {
 static ok64 JSONfmtCloseArray(u8cs tok, void *ctx) {
     sane($ok(tok) && ctx != NULL);
     JSONfmt *f = (JSONfmt *)ctx;
+    test(f->depth > 0, JSONBAD);
     --f->depth;
     if (!f->need_nl) {
         call(JSONfmtNL, f);
