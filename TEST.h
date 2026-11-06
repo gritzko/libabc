@@ -28,13 +28,10 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
     ABC_INIT                                                          \
     int main(int argn, char **args) {                                 \
         _PRO_TRACE_INIT(args[0]);                                     \
-        if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {                 \
-            fprintf(stderr, "ABC_BASS u8bMap failed\n");              \
-            return 1;                                                 \
-        }                                                             \
+        if (ABCThreadStart() != OK) return 1;                         \
         (void)argn; (void)args;                                       \
         ok64 ret = f();                                               \
-        u8bUnMap(ABC_BASS);                                           \
+        ABCThreadStop();                                              \
         if (ret != OK && PROfailed.file && PROfailed.code == ret) {   \
             fprintf(stderr, "%s<%s in %s at %s:%i: %s\ntest fail\n",   \
                     PROindent, ok64str(ret), #f, PROfailed.file,      \
@@ -59,7 +56,7 @@ con ok64 TESTFAILEQ = 0x74e71d3ca49539a;
     ABC_INIT                                                       \
     FUZZ_C int LLVMFuzzerInitialize(int *argc, char ***argv) {            \
         (void)argc; (void)argv;                                    \
-        if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) return 1;      \
+        if (ABCThreadStart() != OK) return 1;                      \
         return 0;                                                  \
     }                                                              \
     FUZZ_C int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) { \

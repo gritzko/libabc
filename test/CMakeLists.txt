@@ -29,6 +29,12 @@ add_executable(NOMAINtest NOMAIN.c)
 target_link_libraries(NOMAINtest abc-core)
 add_test(NAME NOMAINtest COMMAND NOMAINtest)
 
+# CODE-26B065M0M4: THREAD() entries map their own BASS
+find_package(Threads REQUIRED)
+add_executable(THREADtest THREAD.c)
+target_link_libraries(THREADtest abc-core Threads::Threads)
+add_test(NAME THREADtest COMMAND THREADtest)
+
 add_executable(SPAWNtest SPAWN.c)
 target_link_options(SPAWNtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(SPAWNtest PRIVATE ${TEST_CXX_FLAGS})

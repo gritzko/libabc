@@ -12,16 +12,18 @@
 #include "BUF.h"
 #include "OK.h"
 
-extern uint8_t _pro_depth;
+// CODE-26B065M0M4: call depth is per thread, like ABC_BASS
+extern thread_local uint8_t _pro_depth;
 
 // ===== ABC_BASS: thread-local scratch arena =====
 //
 // Buffer-Arena-Scratch-Stack — a per-thread LIFO arena that lives for
-// the program's lifetime.  Set up by MAIN() / TEST() / FUZZ() at
-// program entry; every call() / try() snapshots its boundaries on
-// entry and rewinds them on return, so a procedure's BASS scratch
-// dies automatically when control returns to the caller.  Forked
-// children inherit BASS via CoW (MAP_PRIVATE).
+// the thread's lifetime.  Mapped by MAIN() / TEST() / FUZZ() for the
+// main thread, by THREAD() or ABCThreadStart() for others; every
+// call() / try() snapshots its boundaries on entry and rewinds them
+// on return, so a procedure's BASS scratch dies automatically when
+// control returns to the caller.  Forked children inherit BASS via
+// CoW (MAP_PRIVATE).
 //
 // See abc/B.md §Arenas.  The macros a_lign / a_cquire / a_rent / a_ren
 // / a_carve (below) act on BASS implicitly — there is no explicit
@@ -394,26 +396,51 @@ fun ok64 PROStderrToFile(char const *name) {
 // CODE-26B065z50Q: a program with its own main() puts ABC_INIT at
 // file scope (the PRO globals), brackets main with ABCStart/ABCStop.
 // Before ABCStart, BASS is empty: rentals fail with BNOROOM.
-#define ABC_INIT                     \
-    uint8_t _pro_depth = 0;          \
-    u8cs *STD_ARGS[4] = {};          \
+#define ABC_INIT                            \
+    thread_local uint8_t _pro_depth = 0;    \
+    u8cs *STD_ARGS[4] = {};                 \
     thread_local u8 *ABC_BASS[4] = {};
 
-fun ok64 ABCStart(int argn, char **args) {
-    _PRO_TRACE_INIT(args[0]);
+// CODE-26B065M0M4: map / unmap the calling thread's ABC_BASS; any
+// thread doing BASS-carving library work (FILE, URI, LEX) needs it.
+fun ok64 ABCThreadStart() {
+    sane(ABC_BASS[0] == NULL);
     if (u8bMap(ABC_BASS, ABC_BASS_BYTES) != OK) {
         fprintf(stderr, "ABC_BASS u8bMap failed\n");
         return FAILSANITY;
     }
-    ok64 o = _parse_args(argn, args);
+    done;
+}
+
+fun void ABCThreadStop() { u8bUnMap(ABC_BASS); }
+
+fun ok64 ABCStart(int argn, char **args) {
+    _PRO_TRACE_INIT(args[0]);
+    ok64 o = ABCThreadStart();
+    if (o != OK) return o;
+    o = _parse_args(argn, args);
     if (o != OK) {
         fprintf(stderr, "STD_ARGS acquire failed\n");
-        u8bUnMap(ABC_BASS);
+        ABCThreadStop();
     }
     return o;
 }
 
-fun void ABCStop() { u8bUnMap(ABC_BASS); }
+fun void ABCStop() { ABCThreadStop(); }
+
+// CODE-26B065M0M4: `THREAD(name) { body }` defines a pthread entry
+// `void *name(void *arg)` that brackets the ok64 body with
+// ABCThreadStart/Stop and returns its ok64 as the pointer (NULL is OK).
+#define THREAD(n)                                         \
+    ok64 n##Body(void *arg);                              \
+    void *n(void *arg) {                                  \
+        ok64 o = ABCThreadStart();                        \
+        if (o != OK) return (void *)(uintptr_t)o;         \
+        o = n##Body(arg);                                 \
+        ABCThreadStop();                                  \
+        return (void *)(uintptr_t)o;                      \
+    }                                                     \
+    ok64 n##Body(void *arg)
 
 #define MAIN(f)                                                          \
     ABC_INIT                                                             \
