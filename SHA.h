@@ -14,13 +14,28 @@ fun b8 sha256empty(sha256 const* sha) {
     return memcmp(sha->data, zero.data, sizeof(zero.data)) == 0;
 }
 
+// STD-26B0685n10: libsodium wants sodium_init() first (seeds randombytes,
+// picks SIMD code); it is idempotent and thread-safe, the flag skips its lock
+fun b8 SHAsodium() {
+    static int inited = 0;
+    if (__atomic_load_n(&inited, __ATOMIC_ACQUIRE)) return YES;
+    if (sodium_init() < 0) return NO;
+    __atomic_store_n(&inited, 1, __ATOMIC_RELEASE);
+    return YES;
+}
+
 typedef crypto_hash_sha256_state SHAstate;
 
+// SHA-256 needs no init to be correct: a failed sodium_init is ignored
 fun void SHASum(sha256* hash, $cu8c from) {
+    SHAsodium();
     crypto_hash_sha256(hash->data, *from, $len(from));
 }
 
-fun void SHAOpen(SHAstate* state) { crypto_hash_sha256_init(state); }
+fun void SHAOpen(SHAstate* state) {
+    SHAsodium();
+    crypto_hash_sha256_init(state);
+}
 
 fun void SHAFeed(SHAstate* state, $cu8c data) {
     crypto_hash_sha256_update(state, *data, $len(data));

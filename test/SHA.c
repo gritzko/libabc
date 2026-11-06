@@ -46,8 +46,19 @@ ok64 SHAemptytest() {
     done;
 }
 
+// STD-26B0685n10: the first SHA call runs sodium_init (1 = done before)
+ok64 SHAinittest() {
+    sane(1);
+    u8cs x = $u8str("x");
+    sha256 hash = {};
+    SHASum(&hash, x);
+    same(sodium_init(), 1);
+    done;
+}
+
 ok64 SHAtest() {
     sane(1);
+    call(SHAinittest);
     call(SHAtest1);
     call(SHAemptytest);
     done;

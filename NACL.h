@@ -28,6 +28,7 @@ con ok64 NACLFAIL0 = 0x1728c54f292540;
 // ABC-016: libsodium returns -1; NACLFAIL0 + ret minted undocumented
 // codes, so failures map to the documented NACLFAIL
 fun ok64 NACLed25519create(edpub256 *publicKey, edsec512 *secretKey) {
+    if (!SHAsodium()) return NACLFAIL;
     int ret = crypto_sign_ed25519_keypair((u8 *)publicKey, (u8 *)secretKey);
     return ret == 0 ? OK : NACLFAIL;
 }
@@ -36,6 +37,7 @@ typedef unsigned long long int nacl_size_t;
 
 fun ok64 NACLed25519sign(edsig512 *sign, const sha256 *hash,
                          const edsec512 *seckey) {
+    if (!SHAsodium()) return NACLFAIL;
     nacl_size_t slen = 0;  // ABC-016: left uninit on failure
     int ret = crypto_sign_detached((u8 *)sign, &slen, (u8 *)hash,
                                    sizeof(sha256), (u8 *)seckey);
@@ -46,6 +48,7 @@ fun ok64 NACLed25519sign(edsig512 *sign, const sha256 *hash,
 
 fun ok64 NACLed25519verify(const edsig512 *signature, const sha256 *hash,
                            const edpub256 *pubkey) {
+    if (!SHAsodium()) return NACLFAIL;
     int ret = crypto_sign_ed25519_verify_detached(
         (const u8 *)signature, (const u8 *)hash, sizeof(sha256),
         (const u8 *)pubkey);
@@ -54,6 +57,7 @@ fun ok64 NACLed25519verify(const edsig512 *signature, const sha256 *hash,
 
 // ABC-016: Blake wrappers used to discard libsodium return codes
 fun ok64 NACLBlakeInit(blake0 *state) {
+    if (!SHAsodium()) return NACLFAIL;
     int ret = crypto_generichash_blake2b_init(
         state, 0, 0, crypto_generichash_blake2b_BYTES);
     return ret == 0 ? OK : NACLFAIL;
