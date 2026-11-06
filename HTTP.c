@@ -16,7 +16,10 @@ ok64 HTTPonRequestLine(u8cs tok, HTTPstate* state) { return OK; }
 ok64 HTTPonFieldName(u8cs tok, HTTPstate* state) {
     return u8cssFeed1(state->headers, tok);
 }
+// STD-26B068T_oD: RFC 9112 §5 field-value excludes trailing OWS
 ok64 HTTPonFieldValue(u8cs tok, HTTPstate* state) {
+    while (tok[1] > tok[0] && (tok[1][-1] == ' ' || tok[1][-1] == '\t'))
+        --tok[1];
     return u8cssFeed1(state->headers, tok);
 }
 ok64 HTTPonMessageHeader(u8cs tok, HTTPstate* state) { return OK; }

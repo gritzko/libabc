@@ -246,6 +246,36 @@ ok64 HTTPtest6() {
     done;
 }
 
+// STD-26B068T_oD: RFC 9112 §5 field-value excludes trailing OWS
+ok64 HTTPtest7() {
+    sane(1);
+    a$str(req,
+          "GET / HTTP/1.1\r\n"
+          "Host: a b \t \r\n"
+          "E:  \r\n"
+          "Content-Length: 5 \r\n\r\n");
+    a$str(expected,
+          "GET / HTTP/1.1\r\n"
+          "Host: a b\r\n"
+          "E: \r\n"
+          "Content-Length: 5\r\n\r\n");
+    HTTPstate state = {};
+    aBpad2(u8cs, hdrs, 8);
+    state.headers = hdrsidle;
+    call(HTTPutf8Drain, req, &state);
+    a$str(k, "Host");
+    a$str(v, "a b");
+    u8cs host = {};
+    call(HTTPfind, &host, k, hdrsdata);
+    $testeq(host, v);
+    state.headers = hdrsdata;
+    a_pad(u8, out, 256);
+    call(HTTPutf8Feed, out_idle, &state);
+    u8cs result = {out[1], *out_idle};
+    $testeq(result, expected);
+    done;
+}
+
 ok64 HTTPtest() {
     sane(1);
     call(HTTPtest1);
@@ -254,6 +284,7 @@ ok64 HTTPtest() {
     call(HTTPtest4);
     call(HTTPtest5);
     call(HTTPtest6);
+    call(HTTPtest7);
     done;
 }
 
