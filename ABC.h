@@ -1,16 +1,13 @@
 #ifndef ABC_H
 #define ABC_H
 
+//  abc-core modules only (CODE-26B065KVJK): net/HTTP/POL/NACL/CURL are
+//  separate libs or deps; include those headers directly.
+
 #include "BUF.h"
 #include "FILE.h"
-#include "HTTP.h"
 #include "INT.h"
-#include "NACL.h"
-#include "NET.h"
-#include "POL.h"
-#include "TCP.h"
 #include "TLV.h"
-#include "UDP.h"
 #include "URI.h"
 #include "UTF8.h"
 #include "ZINT.h"

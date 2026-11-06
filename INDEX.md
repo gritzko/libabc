@@ -391,7 +391,7 @@ Tracks open/close of nested markup or container contexts in a buffer, with splic
 
 ###  ABC.h — umbrella header
 
-`#include "ABC.h"` pulls in the major abc modules at once. It is a convenience aggregator; pull individual headers when you can.
+`#include "ABC.h"` pulls in the major abc-core modules (BUF, FILE, INT, TLV, URI, UTF8, ZINT) at once; the net, HTTP, POL, NACL and CURL headers are not in it. It is a convenience aggregator; pull individual headers when you can.
 
 [README.md]: ./README.md
 [ABC.md]: ../ABC.md
