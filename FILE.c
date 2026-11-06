@@ -45,6 +45,7 @@ ok64 FILEErr(ok64 def) {
         case EPERM:        return FILEPERM;
         case EROFS:        return FILEROFS;
         case EXDEV:        return FILEXDEV;
+        case EPIPE:        return FILEPIPE;
         default:           return def;
     }
 }
@@ -373,7 +374,9 @@ typedef struct {
     Bu8 buf;
     u8 *book_end;
     u8 mode;
+    u8 flags;  // FILE_DEFER_PIPE etc, FILE_GONE: hit EPIPE
 } FILEslot;
+#define FILE_GONE 0x80
 static FILEslot FILE_SLOT[FILE_MAX_OPEN];
 
 u8bp FILESlot(int fd) {
@@ -422,7 +425,9 @@ ok64 FILEClose(int *fd) {
     u8bp buf = FILEstream(*fd);
     ok64 o = buf != NULL ? FILEFlushAll(fd) : OK;
     if (buf != NULL) {
+        if (FILE_SLOT[*fd].flags & FILE_GONE) o = FILEPIPE;
         FILE_SLOT[*fd].mode = FILE_FREE;
+        FILE_SLOT[*fd].flags = 0;
         u8bUnMap(buf);
         FILEslotFree((u8c **)buf);
     }
@@ -619,14 +624,48 @@ ok64 FILEBuffer(int fd, size_t size) {
     done;
 }
 
+ok64 FILESetFlags(int fd, u8 flags) {
+    sane(FILEstream(fd) != NULL && !(flags & FILE_GONE));
+    FILE_SLOT[fd].flags = (FILE_SLOT[fd].flags & FILE_GONE) | flags;
+    done;
+}
+
+//  CODE-26B06BfNAx: with FILE_DEFER_PIPE, SIGPIPE is blocked and a pending
+//  one consumed, so EPIPE drops the data and marks the slot gone instead.
+static ok64 FILEstreamWrite(int fd, u8bp buf, size_t threshold) {
+    FILEslot *s = FILE_SLOT + fd;
+    if (!(s->flags & FILE_DEFER_PIPE))
+        return FILEFlushThreshold(fd, buf, threshold);
+    sigset_t pipe, old, pend;
+    sigemptyset(&pipe);
+    sigaddset(&pipe, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe, &old);
+    ok64 o = FILEFlushThreshold(fd, buf, threshold);
+    if (o == FILEPIPE) {
+        int sig = 0;
+        sigpending(&pend);
+        if (!sigismember(&old, SIGPIPE) && sigismember(&pend, SIGPIPE))
+            sigwait(&pipe, &sig);
+        s->flags |= FILE_GONE;
+        Breset(buf);
+        o = OK;
+    }
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
+    return o;
+}
+
 ok64 FILEBufFeed(int fd, u8csc src) {
     sane($ok(src));
     u8bp buf = FILEstream(fd);
     test(buf != NULL, FILEBADARG);
     size_t len = (size_t)$len(src);
     if (u8bIdleLen(buf) < len) call(FILEFlushAll, &fd);
-    if (u8bIdleLen(buf) < len) return FILEFeedAll(fd, src);
-    return u8bFeed(buf, src);
+    if (FILE_SLOT[fd].flags & FILE_GONE) done;
+    if (u8bIdleLen(buf) >= len) return u8bFeed(buf, src);
+    //  Oversize: straight out, as a read-only view buffer of src
+    u8 *v[4] = {(u8 *)src[0], (u8 *)src[0], (u8 *)src[1], (u8 *)src[1]};
+    while (u8bDataLen(v)) call(FILEstreamWrite, fd, v, 1);
+    done;
 }
 
 //  Write a page or more out, consuming only what write() took (MEM-011)
@@ -634,7 +673,8 @@ ok64 FILEFlush(int const *fd) {
     sane(fd != NULL);
     u8bp buf = FILEstream(*fd);
     test(buf != NULL, FILEBADARG);
-    call(FILEFlushThreshold, *fd, buf, PAGESIZE);
+    if (FILE_SLOT[*fd].flags & (FILE_HOLD | FILE_GONE)) done;
+    call(FILEstreamWrite, *fd, buf, PAGESIZE);
     if (u8bPastLen(buf) >= u8bDataLen(buf)) u8bShift(buf, 0);
     done;
 }
@@ -643,7 +683,7 @@ ok64 FILEFlushAll(int const *fd) {
     sane(fd != NULL);
     u8bp buf = FILEstream(*fd);
     test(buf != NULL, FILEBADARG);
-    while (u8bDataLen(buf)) call(FILEFlushThreshold, *fd, buf, 1);
+    while (u8bDataLen(buf)) call(FILEstreamWrite, *fd, buf, 1);
     Breset(buf);
     done;
 }
@@ -656,7 +696,7 @@ ok64 FILEFlushThreshold(int fd, u8b buf, size_t threshold) {
         ssize_t written;
         do { written = write(fd, *u8bData(buf), u8bDataLen(buf));
         } while (written < 0 && errno == EINTR);  // ABC-013: EINTR-retry
-        if (written < 0) return FILEFAIL;  // TODO vocabulary
+        if (written < 0) return FILEErr(FILEFAIL);
         //  ABC-013: consume only the written prefix — a partial write
         //  must not lose the DATA tail.
         call(u8bUsed, buf, (size_t)written);

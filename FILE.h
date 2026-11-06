@@ -65,6 +65,7 @@ con ok64 FILENOTEMP = 0x3d254e5d874e599;  // ENOTEMPTY: directory not empty
 con ok64 FILEPERM = 0x3d254e64e6d6;      // EPERM: operation not permitted
 con ok64 FILEROFS = 0x3d254e6d83dc;       // EROFS: read-only file system
 con ok64 FILEXDEV = 0x3d254e84d39f;       // EXDEV: cross-device link
+con ok64 FILEPIPE = 0x3d254e65264e;       // EPIPE: reader is gone
 con ok64 FILEFULL = 0x3d254e3de555;
 con ok64 FILENODATA = 0x3d254e5d834a74a;
 con ok64 FILENOROOM = 0x3d254e5d86d8616;
@@ -255,6 +256,13 @@ ok64 FILEBuffer(int fd, size_t size);
 ok64 FILEBufFeed(int fd, u8csc src);
 ok64 FILEFlush(int const *fd);
 ok64 FILEFlushAll(int const *fd);
+
+// CODE-26B06BfNAx: buffered fd flags.  DEFER_PIPE: an EPIPE drops the data,
+// later feeds/flushes are no-ops, FILEClose returns FILEPIPE once; SIGPIPE
+// is blocked around the write.  HOLD: FILEFlush is a no-op, so only
+// FILEFlushAll or a full buffer (FILEBuffer's size) writes.
+enum { FILE_DEFER_PIPE = 1, FILE_HOLD = 2 };
+ok64 FILESetFlags(int fd, u8 flags);
 
 // Streaming I/O primitives (caller-provided buffers)
 ok64 FILEFlushThreshold(int fd, u8b buf, size_t threshold);

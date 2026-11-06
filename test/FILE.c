@@ -1060,6 +1060,75 @@ ok64 FILEStreamTest() {
     done;
 }
 
+//  CODE-26B06BfNAx: a DEFER_PIPE fd survives a gone reader under default
+//  SIGPIPE: feeds after EPIPE are no-ops, FILEClose reports it once.
+ok64 FILEDeferPipeTest() {
+    sane(1);
+    void (*was)(int) = signal(SIGPIPE, SIG_DFL);
+    int pfd[2] = {FILE_CLOSED, FILE_CLOSED};
+    test(0 == pipe(pfd), FILEFAIL);
+    close(pfd[0]);
+    call(FILEBuffer, pfd[1], PAGESIZE);
+    call(FILESetFlags, pfd[1], FILE_DEFER_PIPE);
+    u8bp buf = FILESlot(pfd[1]);
+    a_pad(u8, pat, 3 * 4096);
+    u8bFed(pat, 3 * 4096);
+    u8cs a = {pat[0], pat[0] + 100}, big = {pat[0], pat[0] + 3 * 4096};
+    call(FILEBufFeed, pfd[1], a);
+    call(FILEFlushAll, pfd + 1);  // EPIPE: dropped, no signal
+    same(u8bDataLen(buf), 0);
+    call(FILEBufFeed, pfd[1], a);
+    same(u8bDataLen(buf), 0);  // gone: a no-op
+    call(FILEFlush, pfd + 1);
+    call(FILEBufFeed, pfd[1], big);
+    int wfd = pfd[1];
+    testeqv((unsigned long long)FILEClose(&wfd),
+            (unsigned long long)FILEPIPE, "0x%llx");
+    want(fcntl(pfd[1], F_GETFD) < 0);
+    //  The flag is gone with the slot; a reused number starts clean
+    test(0 == pipe(pfd), FILEFAIL);
+    close(pfd[0]);
+    call(FILEBuffer, pfd[1], PAGESIZE);
+    call(FILESetFlags, pfd[1], FILE_DEFER_PIPE);
+    call(FILEBufFeed, pfd[1], big);  // oversize, straight out
+    wfd = pfd[1];
+    testeqv((unsigned long long)FILEClose(&wfd),
+            (unsigned long long)FILEPIPE, "0x%llx");
+    //  Unflagged, SIGPIPE ignored: the flush fails with FILEPIPE
+    signal(SIGPIPE, SIG_IGN);
+    test(0 == pipe(pfd), FILEFAIL);
+    close(pfd[0]);
+    call(FILEBuffer, pfd[1], PAGESIZE);
+    call(FILEBufFeed, pfd[1], a);
+    testeqv((unsigned long long)FILEFlushAll(pfd + 1),
+            (unsigned long long)FILEPIPE, "0x%llx");
+    wfd = pfd[1];
+    FILEClose(&wfd);
+    signal(SIGPIPE, was);
+    done;
+}
+
+//  CODE-26B06BfNAx: a HOLD fd writes only on FILEFlushAll or when full
+ok64 FILEHoldTest() {
+    sane(1);
+    int pfd[2] = {FILE_CLOSED, FILE_CLOSED};
+    test(0 == pipe(pfd), FILEFAIL);
+    call(FILEBuffer, pfd[1], 4 * PAGESIZE);
+    call(FILESetFlags, pfd[1], FILE_HOLD);
+    u8bp buf = FILESlot(pfd[1]);
+    a_pad(u8, pat, 2 * 4096);
+    u8bFed(pat, 2 * 4096);
+    call(FILEBufFeed, pfd[1], u8cbData(pat));
+    call(FILEFlush, pfd + 1);
+    same(u8bDataLen(buf), 2 * 4096);  // held past a page
+    call(FILEFlushAll, pfd + 1);
+    same(u8bDataLen(buf), 0);
+    int wfd = pfd[1];
+    call(FILEClose, &wfd);
+    close(pfd[0]);
+    done;
+}
+
 //  CODE-26B068lK6V: FILECloseAll unbooks/unmaps and closes live slots.
 ok64 FILECloseAllTest() {
     sane(1);
@@ -1088,6 +1157,8 @@ ok64 FILEtest() {
     call(FILETrimKeepsDirtyTest);
     call(FILEBookGapTest);
     call(FILEStreamTest);
+    call(FILEDeferPipeTest);
+    call(FILEHoldTest);
     call(FILECloseAllTest);
     call(FILEtest1);
     call(FILEtest2);
