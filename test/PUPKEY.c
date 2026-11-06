@@ -44,6 +44,11 @@ int open(char const *path, int flags, ...) {
     return openat(AT_FDCWD, path, flags, mode);
 }
 
+#ifdef __GLIBC__
+//  gcc + _FORTIFY_SOURCE rewrites open(path, flags) to __open_2
+int __open_2(char const *path, int flags) { return open(path, flags); }
+#endif
+
 //  one kv64 row as a run under `key`
 static ok64 key_run(kv64csb h, u64b keys, path8s dir, u8cs ext, u64 key,
                     u64 k) {
@@ -228,7 +233,7 @@ static ok64 PUPKeyCeil(void) {
     a_pup(kv64, g);
     ok64 o = PUPkv64Open(g, g_keys, $path(dir), ext, 1002);
     key_gone_at = 0;
-    testeqv(o, PUPGONE, "%llx");
+    testeqv((long long)o, (long long)PUPGONE, "%llx");
     PUPkv64Close(g, g_keys);
     a_pup(kv64, r);
     call(PUPkv64Open, r, r_keys, $path(dir), ext, u64max);
