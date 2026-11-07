@@ -198,6 +198,21 @@ fun void PROfailAt(ok64 code, char const *file, int line, char const *func) {
 
 #define otry(f, ...) __ = (f(__VA_ARGS__))
 
+// `ocall` is `call` minus the BASS snapshot/rewind: the callee rents
+// BASS to the caller, whose frame then owns it (ABC-26B07MlxmQ).
+#define ocall(f, ...)                                                   \
+    {                                                                   \
+        u8 __depth = _pro_depth++;                                      \
+        __ = (f(__VA_ARGS__));                                          \
+        _pro_depth = __depth;                                           \
+        if (__ != OK) {                                                 \
+            _PRO_LIFT(__, __depth);                                     \
+            trace("%s<%s at %s:%i\n", PROindent, ok64str(__), __func__, \
+                  __LINE__);                                            \
+            return __;                                                  \
+        }                                                               \
+    }
+
 #define ofix(f) if (__ == (f) && OK == (__ = OK))
 
 #define orly if (__ == OK)

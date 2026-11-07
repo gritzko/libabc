@@ -52,11 +52,42 @@ ok64 parse_args_big() {
     done;
 }
 
+// ABC-26B07MlxmQ: a callee carving on BASS keeps its carve under
+// ocall, loses it under call, and both propagate failures.
+ok64 carve_into(u8 **out, b8 bad) {
+    sane(out);
+    a_carve(u8, c, 64);
+    u8bFeed1(c, 'x');
+    *out = c[1];
+    test(!bad, BADARG);
+    done;
+}
+
+ok64 ocall_fail() {
+    sane(1);
+    u8 *p = NULL;
+    ocall(carve_into, &p, YES);
+    done;
+}
+
+ok64 ocall_test() {
+    sane(1);
+    u8 *top = ABC_BASS[2], *p = NULL;
+    call(carve_into, &p, NO);
+    test(ABC_BASS[2] == top, TESTFAIL);
+    ocall(carve_into, &p, NO);
+    test(ABC_BASS[2] > top && *p == 'x', TESTFAIL);
+    test(ocall_fail() == BADARG, TESTFAIL);
+    ((u8 **)ABC_BASS)[1] = ((u8 **)ABC_BASS)[2] = top;
+    done;
+}
+
 ok64 pro_test() {
     sane(1);
     mute(fail_test(), BADARG);
     call(PROis);
     call(parse_args_big);
+    call(ocall_test);
     done;
 }
 
