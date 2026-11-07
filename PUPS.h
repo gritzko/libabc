@@ -47,6 +47,9 @@ ok64 PUPScan(u64b keys, path8sc dir, u8csc ext, u64 ceil, u64csc dead);
 // PUPEMPTY 0 bytes (never unlinked, PUPS-26A24FhuO9), PUPGONE no such file
 // (PUPS-26A309qbG9), PUPNOMAP the rest.
 ok64 PUPMap(u8csp run, path8s dir, u8cs ext, u64 key);
+// PUPS-26B07IWyT_: map an open run fd the same way; the fd stays the
+// caller's, so a run unlinked since its open still maps.
+ok64 PUPMapFD(u8csp run, int fd);
 void PUPUnMap(u8csc run);
 
 // DOG-027: max(RONNow, the last key + 1, `floor`), then past any NAME on disk

@@ -4,7 +4,8 @@
 //  (2) a ladder that hands its merged-away runs back (`dead`) instead
 //      of unlinking them, and PUPUnlink to retire them later;
 //  (3) Open's ceiling: runs keyed above it are not mapped, and a run that
-//      vanishes between the listing and its mapping fails with PUPGONE.
+//      vanishes between the listing and its mapping fails with PUPGONE;
+//  (4) an open from given keys and held fds (PUPS-26B07IWyT_).
 #include "PUPS.h"
 
 #include <fcntl.h>
@@ -243,11 +244,71 @@ static ok64 PUPKeyCeil(void) {
     done;
 }
 
+//  (4) PUPS-26B07IWyT_: open from given keys and held fds, no listing; a
+//  run unlinked after its fd was taken still reads, a stray file is unseen.
+static ok64 PUPKeyFds(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    a_cstr(ext, ".fds.att");
+    u64 ks[3] = {1003, 1001, 1002};
+    i32 fds[3] = {-1, -1, -1};
+    {
+        a_pup(kv64, mk);
+        for (u32 r = 0; r < 3; r++)
+            call(key_run, mk, mk_keys, $path(dir), ext, ks[r], 10 + r);
+        call(key_run, mk, mk_keys, $path(dir), ext, 1004, 99);
+        PUPkv64Close(mk, mk_keys);
+    }
+    for (u32 r = 0; r < 3; r++) {
+        a_path(p);
+        call(PATHu8bDup, p, $path(dir));
+        a_pad(u8, name, 64);
+        call(RONu8sFeedPad, u8bIdle(name), (ok64)ks[r], PUP_SEQNO_W);
+        call(u8bFeed, name, ext);
+        call(PATHu8bPush, p, u8bDataC(name));
+        fds[r] = open((char const *)u8bDataHead(p), O_RDONLY);
+        want(fds[r] >= 0);
+        if (r == 1) want(unlink((char const *)u8bDataHead(p)) == 0);
+    }
+    want(!key_file($path(dir), ".fds.att", 1001));
+    u64cs runs = {ks, ks + 3};
+    i32cs fs = {fds, fds + 3};
+    a_pup(kv64, v);
+    call(PUPkv64OpenFD, v, v_keys, runs, fs);
+    testeqv((long long)u64bDataLen(v_keys), 3LL, "%lld");
+    for (u32 i = 0; i < 3; i++) want(u64bDataHead(v_keys)[i] == 1001 + i);
+    for (u64 k = 10; k < 13; k++) {
+        kv64 key = {k, 0}, got = {};
+        call(PUPkv64Get, &got, v, &key);
+        want(got.val == k * 10);
+    }
+    kv64 stray = {99, 0}, got = {};
+    want(PUPkv64Get(&got, v, &stray) == PUPNONE);
+    PUPkv64Close(v, v_keys);
+    //  the fds are still ours; a short fd list and a doubled key fail
+    a_pup(kv64, e);
+    i32cs two = {fds, fds + 2};
+    testeqv((long long)PUPkv64OpenFD(e, e_keys, runs, two),
+            (long long)PUPBADARG, "%llx");
+    u64 dup[2] = {1002, 1002};
+    u64cs dd = {dup, dup + 2};
+    testeqv((long long)PUPkv64OpenFD(e, e_keys, dd, two),
+            (long long)PUPTAKEN, "%llx");
+    PUPkv64Close(e, e_keys);
+    for (u32 r = 0; r < 3; r++) want(close(fds[r]) == 0);
+    TESTBErmrf(tmp);
+    done;
+}
+
 ok64 PUPKEYtest() {
     sane(1);
     call(PUPKeyFloor);
     call(PUPKeyDead);
     call(PUPKeyCeil);
+    call(PUPKeyFds);
     done;
 }
 

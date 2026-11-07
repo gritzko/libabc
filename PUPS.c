@@ -127,6 +127,19 @@ ok64 PUPScan(u64b keys, path8sc dir, u8csc ext, u64 ceil, u64csc dead) {
     done;
 }
 
+ok64 PUPMapFD(u8csp run, int fd) {
+    sane(run != NULL && fd >= 0);
+    struct stat st;
+    test(fstat(fd, &st) == 0, PUPNOMAP);
+    test(st.st_size != 0, PUPEMPTY);
+    void *map = mmap(NULL, (size_t)st.st_size, PROT_READ,
+                     MAP_FILE | MAP_SHARED, fd, 0);
+    test(map != MAP_FAILED, PUPNOMAP);
+    run[0] = (u8c *)map;
+    run[1] = (u8c *)map + st.st_size;
+    done;
+}
+
 ok64 PUPMap(u8csp run, path8s dir, u8cs ext, u64 key) {
     sane(run != NULL && $ok(dir) && $ok(ext));
     a_path(path);
@@ -134,18 +147,9 @@ ok64 PUPMap(u8csp run, path8s dir, u8cs ext, u64 key) {
     int fd = FILE_CLOSED;
     ok64 op = FILEOpen(&fd, $path(path), O_RDONLY);
     if (op != OK) return op == FILENONE ? PUPGONE : PUPNOMAP;
-    struct stat st;
-    ok64 o = fstat(fd, &st) == 0 ? OK : PUPNOMAP;
-    if (o == OK && st.st_size == 0) o = PUPEMPTY;
-    void *map = MAP_FAILED;
-    if (o == OK) map = mmap(NULL, (size_t)st.st_size, PROT_READ,
-                            MAP_FILE | MAP_SHARED, fd, 0);
+    ok64 o = PUPMapFD(run, fd);
     FILEClose(&fd);
-    if (o != OK) return o;
-    if (map == MAP_FAILED) return PUPNOMAP;
-    run[0] = (u8c *)map;
-    run[1] = (u8c *)map + st.st_size;
-    done;
+    return o;
 }
 
 void PUPUnMap(u8csc run) {

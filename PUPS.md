@@ -88,6 +88,8 @@ the youngest.
  -  `Open(h, keys, dir, ext, ceil)`: map `dir`'s runs keyed at or below
     `ceil` (u64max: all) into PAST. A run it cannot map fails the open and
     stays on disk; a misnamed file is skipped. `Close(h, keys)`: unmap them.
+ -  `OpenFD(h, keys, runs, fds)` (PUPS-26B07IWyT_): map the runs a caller's
+    manifest names from fds it holds, no listing; the fds stay the caller's.
  -  `Put(h, &rec)`: BOX Put. `Commit(h, keys, dir, ext, durable, floor)`:
     seal the memtable as one run; an empty memtable is a no-op.
  -  `Ladder(h, keys, dir, ext, dead, floor)`: merge the house's runs by the

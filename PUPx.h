@@ -335,6 +335,26 @@ fun ok64 X(PUP, Open)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
     done;
 }
 
+//  PUPS-26B07IWyT_: house the runs `runs` names, `fds[i]` run `runs[i]`'s
+//  open fd (the caller's, never closed), with no listing and no open by name;
+//  PUPBADARG on a length mismatch, PUPTAKEN on a key housed twice.
+fun ok64 X(PUP, OpenFD)(X(, csb) h, u64b keys, u64csc runs, i32csc fds) {
+    sane(h != NULL && u64bOK(keys) && Bdatalen(h) == 0);
+    test($len(runs) == $len(fds), PUPBADARG);
+    for (size_t i = 0; i < (size_t)$len(runs); i++) {
+        $for(u64c, k, u64bDataC(keys)) test(*k != runs[0][i], PUPTAKEN);
+        test(Bidlelen(h) > 0 && u64bIdleLen(keys) > 0, PUPNOROOM);
+        u8cs run = {};
+        call(PUPMapFD, run, fds[0][i]);
+        try(X(PUP, _ins), h, keys, run, runs[0][i]);
+        nedo {
+            PUPUnMap(run);
+            fail(__);
+        }
+    }
+    done;
+}
+
 //  Unmap every file run and empty the house; the memtable mapping is the
 //  owner's (D-2), its rows are dropped.
 fun void X(PUP, Close)(X(, csb) h, u64b keys) {
