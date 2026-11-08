@@ -40,7 +40,8 @@ ok64 RONutf8sFeed(u8** into, ron60 val);
 // Decode RON base64 string to u64
 ok64 RONutf8sDrain(ron60* o, u8c* const* from);
 
-// Convert struct tm (+ milliseconds 0-999) to RON60 timestamp.
+// ron60 time is UTC: RONNow encodes gmtime_r, decode with timegm
+// (STD-26B068C1PN).  Convert struct tm (+ ms 0-999) to RON60 timestamp.
 // Layout: YYMDDhmsll (10 RON64 digits). Months are 1-based in RON60.
 ok64 RONOfTime(ron60* r, struct tm* t, u32 ms);
 

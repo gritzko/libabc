@@ -311,7 +311,7 @@ typedef enum {
 //  ABC stat record.  Insulates callers from the platform-specific
 //  `struct stat` (Linux's `st_mtim` vs Apple's `st_mtimespec`, mode
 //  bit layout, etc.) and from `<sys/stat.h>` itself.  Timestamps are
-//  ron60-encoded (localtime-aligned ms, same encoding as RONNow) so
+//  ron60-encoded (UTC, ms resolution, same encoding as RONNow) so
 //  they drop straight into ULOG rows / RON-keyed indexes.  `mode`
 //  carries POSIX rwx bits in their canonical positions: 0700 user,
 //  0070 group, 0007 other; e.g. `(fs.mode & 0100) != 0` for owner-

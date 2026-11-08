@@ -220,15 +220,13 @@ ok64 RONTestNowMonotone() {
     done;
 }
 
-//  Recover the Unix-epoch seconds a ron60 stamp encodes the same way
-//  sniff's at_ts_of_ron60 does (localtime-written ron60 → mktime).  Used
-//  only by the SOURCE_DATE_EPOCH test to prove the override is tz-stable.
+//  Recover the Unix-epoch seconds a ron60 stamp encodes: ron60 time is
+//  UTC (STD-26B068C1PN), so timegm.  Proves SOURCE_DATE_EPOCH is tz-stable.
 static long long _epoch_of_ron(ron60 r) {
     struct tm tm = {};
     u32 ms = 0;
     if (RONToTime(r, &tm, &ms) != OK) return -1;
-    tm.tm_isdst = -1;
-    return (long long)mktime(&tm);
+    return (long long)timegm(&tm);
 }
 
 //  DIS-051: RONNow honours SOURCE_DATE_EPOCH (reproducible-build clock).
@@ -278,6 +276,57 @@ ok64 RONTestSourceDateEpoch() {
     want(_epoch_of_ron(wall) != epochs[0]);
 
     //  Restore the inherited environment.
+    if (saved) setenv("SOURCE_DATE_EPOCH", saved, 1);
+    else unsetenv("SOURCE_DATE_EPOCH");
+    if (saved_tz) setenv("TZ", saved_tz, 1); else unsetenv("TZ");
+    tzset();
+    done;
+}
+
+//  STD-26B068C1PN: ron60 time is UTC.  RONNow under SOURCE_DATE_EPOCH
+//  gives one stamp in every zone; DST fall-back neither collides nor rewinds.
+static ron60 _ron_at(long long epoch) {
+    char ebuf[32] = {};
+    snprintf(ebuf, sizeof(ebuf), "%lld", epoch);
+    setenv("SOURCE_DATE_EPOCH", ebuf, 1);
+    return RONNow();
+}
+
+static long long _utc_epoch_of_ron(ron60 r) {
+    struct tm tm = {};
+    if (RONToTime(r, &tm, NULL) != OK) return -1;
+    return (long long)timegm(&tm);
+}
+
+ok64 RONTestNowUTC() {
+    sane(1);
+    char *saved = getenv("SOURCE_DATE_EPOCH");
+    char saved_buf[64] = {};
+    if (saved) { strncpy(saved_buf, saved, sizeof(saved_buf) - 1); saved = saved_buf; }
+    char *saved_tz = getenv("TZ");
+    char tz_buf[64] = {};
+    if (saved_tz) { strncpy(tz_buf, saved_tz, sizeof(tz_buf) - 1); saved_tz = tz_buf; }
+
+    ron60 want_r = 0;
+    a_cstr(want_s, "23B14MDK00");
+    call(RONutf8sDrain, &want_r, want_s);
+    con char *zones[] = { "UTC", "Asia/Tokyo", "America/Los_Angeles",
+                          "America/New_York" };
+    for (u8 z = 0; z < sizeof(zones) / sizeof(zones[0]); z++) {
+        setenv("TZ", zones[z], 1);
+        tzset();
+        ron60 r = _ron_at(1700000000LL);
+        testeqv((long long)r, (long long)want_r, "%lld");
+        testeqv(_utc_epoch_of_ron(r), 1700000000LL, "%lld");
+        //  America/New_York falls back at 2023-11-05 06:00Z.
+        ron60 a = _ron_at(1699161000LL);   // 05:10Z
+        ron60 b = _ron_at(1699164600LL);   // 06:10Z
+        want(a != b);
+        want(_ron_at(1699163940LL) < _ron_at(1699164060LL));  // 05:59Z<06:01Z
+        testeqv(_utc_epoch_of_ron(a), 1699161000LL, "%lld");
+        testeqv(_utc_epoch_of_ron(b), 1699164600LL, "%lld");
+    }
+
     if (saved) setenv("SOURCE_DATE_EPOCH", saved, 1);
     else unsetenv("SOURCE_DATE_EPOCH");
     if (saved_tz) setenv("TZ", saved_tz, 1); else unsetenv("TZ");
@@ -543,6 +592,7 @@ ok64 RONtest() {
     call(RONTestInk);
     call(RONTestNowMonotone);
     call(RONTestSourceDateEpoch);
+    call(RONTestNowUTC);
     call(RONTestFeedPad);
     call(RONTestFeedPadChained);
     call(RONTestDrainCap);

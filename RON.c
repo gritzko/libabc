@@ -170,9 +170,9 @@ ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n) {
 //  DIS-051: reproducible-build clock override.  When SOURCE_DATE_EPOCH is
 //  set to a decimal Unix-epoch (git's standard), RONNow returns the ron60
 //  for that whole second (ms=0) instead of the wall clock, so two posts of
-//  one tree yield the same commit sha.  Encoded via localtime_r exactly
-//  like the live path, so at_ts_of_ron60's mktime recovers the epoch
-//  tz-stably.  Unset / unparsable / out-of-domain → wall clock unchanged.
+//  one tree yield the same commit sha.  Both paths encode UTC (gmtime_r,
+//  STD-26B068C1PN); decode with timegm.  Unset / unparsable / out-of-domain
+//  → wall clock unchanged.
 static b8 ron_source_date_epoch(time_t *sec_out) {
     char const *v = getenv("SOURCE_DATE_EPOCH");
     if (v == NULL || *v == 0) return NO;
@@ -194,7 +194,7 @@ ok64 RONNow() {
         ms = 0;                            // git pins whole seconds
     }
     struct tm tmbuf;
-    localtime_r(&ts.tv_sec, &tmbuf);
+    gmtime_r(&ts.tv_sec, &tmbuf);
     ron60 t = 0;
     //  Outside the 2000-2099 ron60 domain RONOfTime fails; keep `t`'s
     //  caller-safe zero rather than emit a bogus stamp.

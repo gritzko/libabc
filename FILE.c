@@ -486,11 +486,11 @@ ok64 FILEOpenAt(int *fd, int const dirfd, path8s path, int flags) {
 #define FILE_STAT_ATIM(sb) ((sb).st_atim)
 #endif
 
-//  localtime-aligned ms-resolution conversion, matching RONNow.
+//  UTC ms-resolution conversion, matching RONNow (STD-26B068C1PN).
 static ron60 ron60_of_timespec(struct timespec tsp) {
     struct tm tm = {};
     time_t sec = tsp.tv_sec;
-    localtime_r(&sec, &tm);
+    gmtime_r(&sec, &tm);
     u32 ms = (u32)(tsp.tv_nsec / 1000000);
     if (ms > 999) ms = 999;
     ron60 r = 0;
@@ -498,17 +498,14 @@ static ron60 ron60_of_timespec(struct timespec tsp) {
     return r;
 }
 
-//  Inverse of ron60_of_timespec: ron60 → localtime split → time_t (sniff
-//  AT.c's at_ts_of_ron60).  tm_isdst=-1 lets mktime auto-detect DST so the
-//  ron60↔timespec round-trip holds across the DST boundary; an undecodable
-//  ron60 yields the zero timespec (UTIME-clamped by the caller's check).
+//  Inverse of ron60_of_timespec: ron60 → UTC split → timegm (sniff AT.c's
+//  at_ts_of_ron60).  An undecodable ron60 yields the zero timespec.
 static struct timespec timespec_of_ron60(ron60 r) {
     struct tm tm = {};
     u32 ms = 0;
     struct timespec ts = {};
     if (RONToTime(r, &tm, &ms) != OK) return ts;
-    tm.tm_isdst = -1;
-    ts.tv_sec  = mktime(&tm);
+    ts.tv_sec  = timegm(&tm);
     ts.tv_nsec = (long)ms * 1000000L;
     return ts;
 }
