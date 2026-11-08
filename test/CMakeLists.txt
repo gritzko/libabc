@@ -366,7 +366,7 @@ if (sodium)  # BOOT-26A23Apv3i: optional dep
 add_executable(NACLtest NACL.c)
 target_link_options(NACLtest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(NACLtest PRIVATE ${TEST_CXX_FLAGS})
-target_link_libraries(NACLtest abc ${sodium})
+target_link_libraries(NACLtest abc ${sodium} Threads::Threads)
 add_test(NAME NACLtest COMMAND NACLtest)
 endif()
 

@@ -140,13 +140,13 @@ ok64 TLVtestStartEnd() {
                 call(TLVu8sEnd, u8bIdle(buf), inner, 'X');
             }
             u64 hlen = lens[i] <= 0xff ? 2 : huge ? 9 : 5;
-            testeqv((u64)(hlen + lens[i]), (u64)u8bDataLen(buf), "%lu");
+            testeqv((u64)(hlen + lens[i]), (u64)u8bDataLen(buf), FMTu64);
             u8 t = 0;
             u8cs val = {};
             // the inline drain misframes huge records, CODE-26A23C_Sau
             call(_TLVu8sDrain, u8bDataC(buf), &t, val);
-            testeqv((u64)'X', (u64)t, "%lu");
-            testeqv(lens[i], (u64)$len(val), "%lu");
+            testeqv((u64)'X', (u64)t, FMTu64);
+            testeqv(lens[i], (u64)$len(val), FMTu64);
         }
     }
     u8bReset(buf);
