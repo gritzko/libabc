@@ -67,9 +67,36 @@ static ok64 PUPNilRun(void) {
     done;
 }
 
+//  PUPS-26B08Iot53: a mutated nil run, 7 plain bytes under a 16-byte row,
+//  is not a whole run: the open fails clean, the file stays, nothing clipped.
+static ok64 PUPNilBadRun(void) {
+    sane(1);
+    call(FILEInit);
+    char tmp[256];
+    want(TESTBEmkdtemp(tmp, sizeof tmp) == OK);
+    a_path(dir, ((u8cs){(u8 *)tmp, (u8 *)tmp + strlen(tmp)}));
+    a_cstr(ext, ".nil.idx");
+    char path[512];
+    snprintf(path, sizeof path, "%s/0000000007.nil.idx", tmp);
+    FILE *f = fopen(path, "w");
+    want(f != NULL);
+    want(fwrite("A\0\0\0\0TC", 1, 7, f) == 7);
+    fclose(f);
+    a_pup(kv64, h);
+    want(PUPkv64Open(h, h_keys, $path(dir), ext, u64max) == PUPBADRUN);
+    want(Bpastlen(h) == 0 && u64bDataLen(h_keys) == 0);
+    PUPkv64Close(h, h_keys);
+    f = fopen(path, "r");
+    want(f != NULL);
+    fclose(f);
+    TESTBErmrf(tmp);
+    done;
+}
+
 ok64 PUPNILtest() {
     sane(1);
     call(PUPNilRun);
+    call(PUPNilBadRun);
     done;
 }
 

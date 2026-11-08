@@ -37,6 +37,8 @@ con ok64 PUPNOROOM = 0x197995d86d8616;
 con ok64 PUPGONE = 0x197994185ce;
 con ok64 PUPFULL = 0x197993de555;
 con ok64 PUPNONE = 0x197995d85ce;
+//  PUPS-26B08Iot53: a run whose data is no whole rows of the type, unclipped
+con ok64 PUPBADRUN = 0x197992ca35b797;
 
 // Feed `dir`'s `<10-RON64><ext>` run keys at or below `ceil`, but not in
 // `dead`, into `keys`, sorted; a misnamed file is skipped (DOG-027), an absent
@@ -86,7 +88,8 @@ void PUPUnlock(int *slot);
 // cell i is page i's FIRST RECORD verbatim, searched by the type's own Z.
 #define PUP_TOC_LEN_W  5
 // The 5 length bytes count the block's BYTES, so the clip needs no row width;
-// 7 is ODD, so the residue check rejects a plain run at any width but 1 and 7.
+// 7 is ODD: a broken ToC left plain is no whole rows at any width but 1 and 7,
+// so PUPx.h::_ins refuses it with PUPBADRUN, the residue check.
 #define PUP_TOC_TAIL_W 7
 
 // DOG-035: records per ToC page for a `row`-byte record; 0 when `row` is 0 or

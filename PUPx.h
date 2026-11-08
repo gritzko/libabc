@@ -47,7 +47,8 @@ fun size_t X(PUP, _bound)(size_t len) {
 }
 
 //  House `run` under `key` at its sorted spot in PAST; DATA shifts up a cell.
-//  The run is the whole mapping, ToC and tail too: PUPBADARG on a misaligned base.
+//  The run is the whole mapping, ToC and tail too: PUPBADARG on a misaligned
+//  base, PUPBADRUN on data not whole rows, never clipped (PUPS-26B08Iot53).
 fun ok64 X(PUP, _ins)(X(, csb) h, u64b keys, u8csc run, u64 key) {
     sane(h != NULL && u64bOK(keys));
     X(, cs) **b = (X(, cs) **)h;
@@ -55,6 +56,9 @@ fun ok64 X(PUP, _ins)(X(, csb) h, u64b keys, u8csc run, u64 key) {
     size_t at = (size_t)(u64sFindGE(u64bDataC(keys), &key) - u64bDataHead(keys));
     u64cs one = {&key, &key + 1};
     test((uintptr_t)run[0] % alignof(X(, )) == 0, PUPBADARG);
+    u8cs d = {}, t = {};
+    PUPTocSplit(d, t, run, (u32)sizeof(X(, )));
+    test((size_t)u8csLen(d) % sizeof(X(, )) == 0, PUPBADRUN);
     call(u64bSplice, keys, at, 0, one);
     memmove(b[0] + at + 1, b[0] + at,
             ((size_t)(b[2] - b[0]) - at) * sizeof(X(, cs)));
@@ -318,8 +322,8 @@ fun ok64 X(PUP, Ladder)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
 }
 
 //  Map `dir`'s runs keyed at or below `ceil` (u64max: all) into the house
-//  PAST, oldest first; DATA must be empty.  A run it cannot map fails the open
-//  and stays on disk (CODE-26A23CSStk); what is mapped is Close's.
+//  PAST, oldest first; DATA must be empty.  A run it cannot map or house
+//  fails the open, stays on disk (CODE-26A23CSStk); what is mapped is Close's.
 fun ok64 X(PUP, Open)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
                       u64 ceil) {
     sane(h != NULL && u64bOK(keys) && Bdatalen(h) == 0);
@@ -330,7 +334,11 @@ fun ok64 X(PUP, Open)(X(, csb) h, u64b keys, path8s dir, u8cs ext,
         u8cs run = {};
         test(Bidlelen(h) > 0, PUPNOROOM);
         call(PUPMap, run, dir, ext, *k);
-        call(X(PUP, _ins), h, keys, run, *k);
+        try(X(PUP, _ins), h, keys, run, *k);
+        nedo {
+            PUPUnMap(run);
+            fail(__);
+        }
     }
     done;
 }
