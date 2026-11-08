@@ -476,6 +476,13 @@ target_compile_options(DNStexttest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(DNStexttest abc)
 add_test(NAME DNStexttest COMMAND DNStexttest)
 
+# STD-26B068WFR4: DNS 16/32-bit fields are big-endian on the wire
+add_executable(DNSwiretest DNSwire.c)
+target_link_options(DNSwiretest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(DNSwiretest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(DNSwiretest abc)
+add_test(NAME DNSwiretest COMMAND DNSwiretest)
+
 # MEM-021: i64 formatting round trip, INT64_MIN included (no negation UB)
 add_executable(UTF8inttest UTF8int.c)
 target_link_options(UTF8inttest PRIVATE ${TEST_LDD_FLAGS})

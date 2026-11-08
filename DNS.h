@@ -8,8 +8,6 @@ con ok64 DNSBAD = 0x35770b28d;
 con ok64 DNSNOROOM = 0xd5dc5d86d8616;
 con ok64 DNSNODATA = 0xd5dc5d834a74a;
 
-#define flip16(x) ((u16)(((x) >> 8) | ((x) << 8)))
-
 // --- wire header (12 bytes) ---
 
 //  0  1  2  3  4  5  6  7  8  9  A  B
@@ -81,30 +79,34 @@ typedef struct {
 } DNSrr;
 
 // --- big-endian 16/32 on wire ---
+// STD-26B068WFR4: shifts, not swap+memcpy, so any host emits BE bytes
 
 fun ok64 DNSu8sFeed16(u8s into, u16 val) {
-    u16 be = flip16(val);
-    return u8sFeed16(into, &be);
+    if ($len(into) < 2) return INTNOROOM;
+    *(*into)++ = val >> 8;
+    *(*into)++ = val;
+    return OK;
 }
 
 fun ok64 DNSu8sDrain16(u8cs from, u16 *val) {
-    u16 be = 0;
-    ok64 o = u8sDrain16(from, &be);
-    if (o != OK) return o;
-    *val = flip16(be);
+    if ($len(from) < 2) return INTNODATA;
+    *val = (u16)((*from)[0] << 8 | (*from)[1]);
+    *from += 2;
     return OK;
 }
 
 fun ok64 DNSu8sFeed32(u8s into, u32 val) {
-    u32 be = flip32(val);
-    return u8sFeed32(into, &be);
+    if ($len(into) < 4) return INTNOROOM;
+    DNSu8sFeed16(into, val >> 16);
+    return DNSu8sFeed16(into, val);
 }
 
 fun ok64 DNSu8sDrain32(u8cs from, u32 *val) {
-    u32 be = 0;
-    ok64 o = u8sDrain32(from, &be);
-    if (o != OK) return o;
-    *val = flip32(be);
+    if ($len(from) < 4) return INTNODATA;
+    u16 hi = 0, lo = 0;
+    DNSu8sDrain16(from, &hi);
+    DNSu8sDrain16(from, &lo);
+    *val = (u32)hi << 16 | lo;
     return OK;
 }
 
@@ -311,8 +313,8 @@ fun ok64 DNSQueryBuild(u8s into, u16 id, u8csc name, u16 type) {
 // --- convenience: feed an A record (4 bytes rdata) ---
 
 fun ok64 DNSRRFeedA(u8s into, u8csc name, u32 ttl, u32 ip4) {
-    u32 be = flip32(ip4);
-    u8c *rd[2] = {(u8c *)&be, (u8c *)&be + 4};
+    u8 be[4] = {ip4 >> 24, ip4 >> 16, ip4 >> 8, ip4};
+    u8c *rd[2] = {be, be + 4};
     return DNSRRFeed(into, name, DNS_TYPE_A, DNS_CLASS_IN, ttl, rd);
 }
 
