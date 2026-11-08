@@ -499,16 +499,17 @@ ok64 URIu8sUnesc(u8s into, u8cs esc) {
     sane($ok(into) && $ok(esc));
     while (!$empty(esc)) {
         u8c c = *esc[0]++;
-        if (c == '%' && $len(esc) >= 2) {
-            int hi = URIHexVal(esc[0][0]);
-            int lo = URIHexVal(esc[0][1]);
-            if (hi >= 0 && lo >= 0) {
-                call(u8sFeed1, into, (u8c)((hi << 4) | lo));
-                esc[0] += 2;
-                continue;
-            }
+        if (c != '%') {
+            call(u8sFeed1, into, c);
+            continue;
         }
-        call(u8sFeed1, into, c);
+        // STD-26B068uzG8: RFC 3986 §2.1, "%" HEXDIG HEXDIG or bust
+        test($len(esc) >= 2, URIBAD);
+        int hi = URIHexVal(esc[0][0]);
+        int lo = URIHexVal(esc[0][1]);
+        test(hi >= 0 && lo >= 0, URIBAD);
+        call(u8sFeed1, into, (u8c)((hi << 4) | lo));
+        esc[0] += 2;
     }
     done;
 }

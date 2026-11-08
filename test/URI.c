@@ -344,8 +344,7 @@ ok64 URITestEscape() {
         {"foo%40bar.com", "foo@bar.com"},
         {"100%25", "100%"},
         {"%D1%84%D0%B0%D0%B9%D0%BB", "файл"},
-        {"bad%zz", "bad%zz"},  // invalid hex passes through
-        {"trailing%", "trailing%"},  // incomplete passes through
+        // bad%zz, trailing% are URIBAD now, see URITestPctStrict
         {"", ""},
     };
 
@@ -680,6 +679,43 @@ ok64 URITestDotlessScheme() {
     done;
 }
 
+// STD-26B068uzG8: RFC 3986 §2.1, a `%` must start "%" HEXDIG HEXDIG
+ok64 URITestPctStrict() {
+    sane(1);
+    static char const* badu[] = {"http://ex.com/a%zz", "http://ex.com/a%2",
+                                 "http://ex.com/a%", "/a%G1", "?q%", "#f%z"};
+    for (size_t i = 0; i < sizeof(badu) / sizeof(badu[0]); i++) {
+        a_cstr(text, badu[i]);
+        uri u = {};
+        if (URIutf8Drain(text, &u) == OK) {
+            fprintf(stderr, "FAIL pct[%zu]: '%s' parsed\n", i, badu[i]);
+            return URIFAIL;
+        }
+    }
+    static char const* goodu[] = {"http://ex.com/a%2F", "/a%2f", "/%41?%41#%41"};
+    for (size_t i = 0; i < sizeof(goodu) / sizeof(goodu[0]); i++) {
+        a_cstr(text, goodu[i]);
+        uri u = {};
+        call(URIutf8Drain, text, &u);
+    }
+    static char const* bade[] = {"a%zzb", "a%2", "a%", "a%G1", "%"};
+    for (size_t i = 0; i < sizeof(bade) / sizeof(bade[0]); i++) {
+        a_cstr(esc, bade[i]);
+        a_pad(u8, buf, 64);
+        if (URIu8sUnesc(buf_idle, esc) != URIBAD) {
+            fprintf(stderr, "FAIL unesc[%zu]: '%s' not URIBAD\n", i, bade[i]);
+            return URIFAIL;
+        }
+    }
+    a_cstr(okesc, "%2F%2f%41");
+    a_pad(u8, okbuf, 64);
+    call(URIu8sUnesc, okbuf_idle, okesc);
+    a_cstr(okwant, "//A");
+    u8cs okgot = {okbuf[1], *okbuf_idle};
+    if (!$eq(okgot, okwant)) return URIFAIL;
+    done;
+}
+
 ok64 URItest() {
     sane(1);
     call(URItest1);
@@ -696,6 +732,7 @@ ok64 URItest() {
     call(URITestNoschemeRoundTrip);
     call(URITestDotSegments);
     call(URITestDotlessScheme);
+    call(URITestPctStrict);
     done;
 }
 

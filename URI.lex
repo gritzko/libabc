@@ -12,7 +12,7 @@ reserved    = gen_delims | sub_delims;
 
 unreserved  = alpha | digit | "-" | "." | "_" | "~";
 
-delims      = "<" | ">" | "%" |  "#" | '"';
+delims      = "<" | ">" | "#" | '"';
 
 unwise      = "{" | "}" | "|" | "\\" | "^" | "[" | "]" | "`";
 

@@ -226,7 +226,7 @@ URIgen_delims = (   ":"  |  "/"  |  "?"  |  "#"  |  "["  |  "]"  |  "@" ); # no 
 URIsub_delims = (   "!"  |  "$"  |  "&"  |  "'"  |  "("  |  ")"  |  "*"  |  "+"  |  ","  |  ";"  |  "=" ); # no sub_delims callback
 URIreserved = (   URIgen_delims  |  URIsub_delims ); # no reserved callback
 URIunreserved = (   URIalpha  |  URIdigit  |  "-"  |  "."  |  "_"  |  "~" ); # no unreserved callback
-URIdelims = (   "<"  |  ">"  |  "%"  |    "#"  |  '"' ); # no delims callback
+URIdelims = (   "<"  |  ">"  |  "#"  |  '"' ); # no delims callback
 URIunwise = (   "{"  |  "}"  |  "|"  |  "\\"  |  "^"  |  "["  |  "]"  |  "`" ); # no unwise callback
 URIpchar = (   URIunreserved  |  URIpct_encoded  |  URIsub_delims  |  ":"  |  "@"  |  URIdelims  |  URIunwise ); # no pchar callback
 URIslash = (   "/"  |  "\\" ); # no slash callback
