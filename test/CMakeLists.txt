@@ -50,6 +50,18 @@ target_compile_options(Stest PRIVATE ${TEST_CXX_FLAGS})
 target_link_libraries(Stest abc)
 add_test(NAME Stest COMMAND Stest)
 
+# ABC-26B08Hw_ki: arena poisoning; the bad-access cases are ASan-only
+add_executable(POISONtest POISON.c)
+target_link_libraries(POISONtest abc-core)
+add_test(NAME POISONtest COMMAND POISONtest)
+if (WITH_ASAN)
+foreach(m over rewind mark past)
+    add_test(NAME POISON${m}test COMMAND POISONtest ${m})
+    set_tests_properties(POISON${m}test PROPERTIES
+        PASS_REGULAR_EXPRESSION "use-after-poison")
+endforeach()
+endif()
+
 add_executable(Btest B.c)
 target_link_options(Btest PRIVATE ${TEST_LDD_FLAGS})
 target_compile_options(Btest PRIVATE ${TEST_CXX_FLAGS})

@@ -183,7 +183,7 @@ ok64 BITbuf_test() {
 ok64 BITacquire_test() {
     sane(1);
     Bu1 b = {};
-    call(u1bAcquire, ABC_BASS, b, 130);  // -> 3 words
+    ocall(u1bAcquire, ABC_BASS, b, 130);  // -> 3 words
     u64s s; u64sMv(s, u1bData(b));
     testeqv((long long)u1sLen(u1sConst(s)), 192LL, "%lld");
     testeqv((long long)u1sCount(u1sConst(s)), 0LL, "%lld");

@@ -390,6 +390,9 @@ fun X(, gp) X(, bAlign)(u8 *const *arena) {
                  & ~((uintptr_t)alignof(T) - 1);
     u8 *base = (u8 *)al;
     if (base > arena[3]) base = arena[3];
+#ifdef ABC_ASAN
+    Bunpoison(base, Bpoisoned(base, arena[3]));
+#endif
     ((u8 **)arena)[1] = base;
     ((u8 **)arena)[2] = base;
     return (X(, gp))(arena + 1);
@@ -421,6 +424,7 @@ fun ok64 X(, bAren)(u8 *const *arena, X(, csp) ren, X(, csc) orig) {
                  & ~((uintptr_t)alignof(T) - 1);
     u8 *base = (u8 *)al;
     if (base + need > arena[3]) return BNOROOM;
+    Bunpoison(base, base + need);
     if (need) memcpy(base, orig[0], need);
     ren[0] = (T const *)base;
     ren[1] = (T const *)base + count;
@@ -457,8 +461,13 @@ fun ok64 X(, bAcquire)(u8a arena, X(, b) child, size_t cap) {
     T **c = (T **)child;
     c[0] = c[1] = c[2] = (T *)base;
     c[3] = (T *)(base + sz);
-    ((u8 **)arena)[1] = base + sz;
-    ((u8 **)arena)[2] = base + sz;
+    // ABC-26B08Hw_ki: a red zone past the carve, if it fits, under ASan
+    size_t rz = B_REDZONE ? B_REDZONE + (-(uintptr_t)(base + sz) & 7) : 0;
+    if (rz > room - pad - sz) rz = 0;
+    Bpoison(base + sz, base + sz + rz);
+    Bunpoison(base, base + sz);
+    ((u8 **)arena)[1] = base + sz + rz;
+    ((u8 **)arena)[2] = base + sz + rz;
     return OK;
 }
 

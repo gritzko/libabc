@@ -19,6 +19,42 @@ con ok64 BFAIL = 0xb3ca495;
 con ok64 BNODATA = 0xb5d834a74a;
 con ok64 BNOMEM = 0x2d7616396;
 
+// ABC-26B08Hw_ki: under ASan, arena carves get red zones and rewinds
+// poison what they pop; in other builds these compile away.
+#ifdef __has_feature
+#if __has_feature(address_sanitizer)
+#define ABC_ASAN 1
+#endif
+#endif
+#ifdef __SANITIZE_ADDRESS__
+#define ABC_ASAN 1
+#endif
+#ifdef ABC_ASAN
+#include <sanitizer/asan_interface.h>
+#define B_REDZONE 32
+#define Bpoison(lo, hi)                                                 \
+    do {                                                                \
+        u8c *l_ = (u8c *)(lo), *h_ = (u8c *)(hi);                       \
+        if (h_ > l_) __asan_poison_memory_region((void *)l_, h_ - l_);  \
+    } while (0)
+#define Bunpoison(lo, hi)                                               \
+    do {                                                                \
+        u8c *l_ = (u8c *)(lo), *h_ = (u8c *)(hi);                       \
+        if (h_ > l_) __asan_unpoison_memory_region((void *)l_, h_ - l_); \
+    } while (0)
+// The end of the poisoned run at `p`, at most `end` (an arena's popped
+// IDLE prefix, see Bx.h bAlign).
+fun u8 *Bpoisoned(u8 *p, u8 *end) {
+    while (p < end && __asan_address_is_poisoned(p))
+        p = (u8 *)(((uintptr_t)p | 7) + 1);
+    return p < end ? p : end;
+}
+#else
+#define B_REDZONE 0
+#define Bpoison(lo, hi)
+#define Bunpoison(lo, hi)
+#endif
+
 #define B_MAX_LEN_BITS 48
 #define B_MAX_LEN (1ULL << B_MAX_LEN_BITS)
 
@@ -43,6 +79,7 @@ fun u8 *u8aMark(u8a arena) { return arena[2]; }
 //  again from `mark` forward.  Any child `Bu8` Acquired between
 //  the Mark and this Rewind is now invalid — do not touch it.
 fun void u8aRewind(u8a arena, u8 *mark) {
+    Bpoison(mark, arena[2]);
     arena[1] = mark;
     arena[2] = mark;
 }
@@ -50,6 +87,7 @@ fun void u8aRewind(u8a arena, u8 *mark) {
 //  Full reset — pop everything ever Acquired from this arena.
 //  Equivalent to u8aRewind back to arena[0].
 fun void u8aReset(u8a arena) {
+    Bpoison(arena[0], arena[2]);
     arena[1] = arena[0];
     arena[2] = arena[0];
 }

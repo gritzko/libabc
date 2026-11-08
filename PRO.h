@@ -76,13 +76,21 @@ __attribute__((unused)) con char *_pro_indent =
 // on return, so any BASS scratch the callee acquired dies before
 // control comes back.  Caller-side gauges / carves are preserved
 // (their pointers sit below the snapshot).
+// ABC-26B08Hw_ki: the BASS restore of call/try/callsafe; under ASan the
+// popped span is poisoned (B.h Bpoison).
+#define _PRO_REWIND(snap)                                 \
+    {                                                     \
+        Bpoison(snap[1], ABC_BASS[2]);                    \
+        ((u8 **)ABC_BASS)[1] = (u8 *)snap[0];             \
+        ((u8 **)ABC_BASS)[2] = (u8 *)snap[1];             \
+    }
+
 #define call(f, ...)                                                    \
     {                                                                   \
         u8 __depth = _pro_depth++;                                      \
         a_dup(u8c, __bass, u8bDataC(ABC_BASS));                         \
         __ = (f(__VA_ARGS__));                                          \
-        ((u8 **)ABC_BASS)[1] = (u8 *)__bass[0];                         \
-        ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
+        _PRO_REWIND(__bass);                                            \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
             _PRO_LIFT(__, __depth);                                     \
@@ -102,8 +110,7 @@ __attribute__((unused)) con char *_pro_indent =
         u8 __depth = _pro_depth++;                                      \
         a_dup(u8c, __bass, u8bDataC(ABC_BASS));                         \
         __ = (f(__VA_ARGS__));                                          \
-        ((u8 **)ABC_BASS)[1] = (u8 *)__bass[0];                         \
-        ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
+        _PRO_REWIND(__bass);                                            \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
             _PRO_LIFT(__, __depth);                                     \
@@ -123,8 +130,7 @@ __attribute__((unused)) con char *_pro_indent =
         u8 __depth = _pro_depth++;                                      \
         a_dup(u8c, __bass, u8bDataC(ABC_BASS));                         \
         __ = (fcall);                                                   \
-        ((u8 **)ABC_BASS)[1] = (u8 *)__bass[0];                         \
-        ((u8 **)ABC_BASS)[2] = (u8 *)__bass[1];                         \
+        _PRO_REWIND(__bass);                                            \
         _pro_depth = __depth;                                           \
         if (__ != OK) {                                                 \
             _PRO_LIFT(__, __depth);                                     \
