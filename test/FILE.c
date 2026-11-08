@@ -1200,8 +1200,30 @@ ok64 FILECloseAllTest() {
     done;
 }
 
+// STD-26B068HK1K: FILEFeedf into a widowed pipe must fail, not say OK
+ok64 FILEFeedfHelper(int fd) {
+    sane(1);
+    a_cstr(fmt, "n=$u\n");
+    FILEFeedf(fd, fmt, (u64)42);
+    done;
+}
+
+ok64 FILEFeedfFailTest() {
+    sane(1);
+    int p[2];
+    want(pipe(p) == 0);
+    close(p[0]);
+    void (*old)(int) = signal(SIGPIPE, SIG_IGN);
+    ok64 o = FILEFeedfHelper(p[1]);
+    signal(SIGPIPE, old);
+    close(p[1]);
+    want(o != OK);
+    done;
+}
+
 ok64 FILEtest() {
     sane(1);
+    call(FILEFeedfFailTest);
     call(FILEFdLeakTest);
     call(FILEErrTest);
     call(FILEExistsTest);

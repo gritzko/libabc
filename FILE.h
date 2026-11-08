@@ -723,11 +723,12 @@ con u8 *const NL[2] = {_NL, _NL + 1};
 #define $print FILEout
 #define $println(s) FILEout(s), FILEout(NL)
 
-#define FILEFeedf(fd, fmt, ...)                  \
-    {                                            \
-        aBpad(u8, _pad, PAGESIZE);               \
-        $feedf(u8bIdle(_pad), fmt, __VA_ARGS__); \
-        FILEFeed(fd, u8cbData(_pad));            \
+// STD-26B068HK1K: propagate format/write errors; FeedAll loops short writes
+#define FILEFeedf(fd, fmt, ...)                        \
+    {                                                  \
+        aBpad(u8, _pad, PAGESIZE);                     \
+        call($feedf, u8bIdle(_pad), fmt, __VA_ARGS__); \
+        call(FILEFeedAll, fd, u8cbData(_pad));         \
     }
 
 #endif  // ABC_F_H
