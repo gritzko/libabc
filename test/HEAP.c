@@ -60,11 +60,23 @@ ok64 HEAPtest3() {
     done;
 }
 
+// STD-26B068vOLv: sUp on an empty slice must not wrap $len-1 into UB
+ok64 HEAPtest4() {
+    sane(1);
+    u32 arr[1] = {7};
+    u32sc heap = {arr, arr};
+    testeqv(u32sUp(heap), HEAPBADARG, "%llx");
+    testeqv(u32sUpZ(heap, u32Zdesc), HEAPBADARG, "%llx");
+    testeqv((long long)arr[0], 7LL, "%lld");
+    done;
+}
+
 ok64 HEAPtest() {
     sane(1);
     call(HEAPtest1);
     call(HEAPtest2);
     call(HEAPtest3);
+    call(HEAPtest4);
     done;
 }
 

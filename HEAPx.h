@@ -11,7 +11,7 @@ con ok64 HEAPNONE = 0x44e2995d85ce;
 typedef T const X(, c);
 
 fun ok64 X(, sUpAtZ)(X(, sc) heap, size_t at, X(, z) z) {
-    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return HEAPBADARG;
+    if (unlikely(!X(, sOK)(heap) || at >= (size_t)$len(heap))) return HEAPBADARG;
     while (at) {
         size_t b = (at - 1) / 2;  // parent
         if (z(*heap + b, *heap + at)) break;
@@ -32,7 +32,7 @@ fun ok64 X(, sUpZ)(X(, sc) heap, X(, z) z) {
 }
 
 fun ok64 X(, sDownAtZ)(X(, sc) heap, size_t at, X(, z) z) {
-    if (unlikely(!X(, sOK)(heap) || (i64)at >= $len(heap))) return HEAPBADARG;
+    if (unlikely(!X(, sOK)(heap) || at >= (size_t)$len(heap))) return HEAPBADARG;
     size_t n = $len(heap);
     size_t i = at;
     do {
