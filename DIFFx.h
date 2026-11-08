@@ -227,21 +227,22 @@ static inline ok64 X(DIFF, sApply)(Ts into, Tcs a, Tcs b, e32cs edl) {
         u32 len = DIFF_LEN(*ep);
 
         switch (op) {
-            case DIFF_EQ:
-                if (ap + len > a[1]) return DIFFNOROOM;
-                if (into[0] + len > into[1]) return DIFFNOROOM;
+            case DIFF_EQ:  // STD-26B068v_B5: compare lengths, no wild pointers
+                if (len > (size_t)(a[1] - ap)) return DIFFNOROOM;
+                if (len > (size_t)(b[1] - bp)) return DIFFNOROOM;
+                if (len > (size_t)(into[1] - into[0])) return DIFFNOROOM;
                 memcpy(into[0], ap, len * sizeof(T));
                 into[0] += len;
                 ap += len;
                 bp += len;
                 break;
             case DIFF_DEL:
-                if (ap + len > a[1]) return DIFFNOROOM;
+                if (len > (size_t)(a[1] - ap)) return DIFFNOROOM;
                 ap += len;
                 break;
             case DIFF_INS:
-                if (bp + len > b[1]) return DIFFNOROOM;
-                if (into[0] + len > into[1]) return DIFFNOROOM;
+                if (len > (size_t)(b[1] - bp)) return DIFFNOROOM;
+                if (len > (size_t)(into[1] - into[0])) return DIFFNOROOM;
                 memcpy(into[0], bp, len * sizeof(T));
                 into[0] += len;
                 bp += len;

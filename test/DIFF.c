@@ -326,8 +326,25 @@ ok64 test_repeated_char() {
     done;
 }
 
+// STD-26B068v_B5: an over-long op fails DIFFNOROOM before touching memory
+ok64 test_apply_malformed() {
+    sane(1);
+    u8 abuf[4] = {'a', 'b', 'c', 'd'}, bbuf[2] = {'a', 'b'}, obuf[8] = {};
+    u8cs a = {abuf, abuf + 4}, b = {bbuf, bbuf + 2};
+    e32 bad[4] = {DIFF_ENTRY(DIFF_DEL, 0x3FFFFFFF), DIFF_ENTRY(DIFF_INS, 0x3FFFFFFF),
+                  DIFF_ENTRY(DIFF_EQ, 0x3FFFFFFF), DIFF_ENTRY(DIFF_EQ, 3)};
+    for (int i = 0; i < 4; i++) {
+        u8s out = {obuf, obuf + 8};
+        e32cs edl = {bad + i, bad + i + 1};
+        same(DIFFu8sApply(out, a, b, edl), DIFFNOROOM);
+        want(out[0] == obuf);
+    }
+    done;
+}
+
 ok64 all_tests() {
     sane(1);
+    call(test_apply_malformed);
     call(test_empty);
     call(test_equal);
     call(test_different);
