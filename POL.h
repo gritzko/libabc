@@ -41,6 +41,8 @@ ok64 POLEvents(int fd, short *events);
 ok64 POLTrackTime(timercb callback);
 // wake the timer earlier than previously set (prior POLTimer is mandatory)
 ok64 POLAddTime(int ms);
+// track the timer, its next tick `ms` from now (replaces the deadline)
+ok64 POLSetTime(timercb callback, u32 ms);
 // cancel the timer completely
 ok64 POLIgnoreTime();
 

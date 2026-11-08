@@ -101,8 +101,7 @@ static int curl_multi_timer_cb(CURLM *multi, long timeout_ms, void *userp) {
         POLIgnoreTime();
     } else {
         curl_timer_ms = (u32)(timeout_ms ? timeout_ms : 1);
-        POLTrackTime(curl_timer_cb);
-        POLAddTime(curl_timer_ms);
+        POLSetTime(curl_timer_cb, curl_timer_ms);  // replace, not sooner
     }
     return 0;
 }

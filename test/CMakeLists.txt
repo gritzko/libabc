@@ -338,6 +338,13 @@ target_link_libraries(POLlooptest abc)
 add_test(NAME POLlooptest COMMAND POLlooptest)
 set_tests_properties(POLlooptest PROPERTIES TIMEOUT 20)
 
+add_executable(POLtimetest POLtime.c)
+target_link_options(POLtimetest PRIVATE ${TEST_LDD_FLAGS})
+target_compile_options(POLtimetest PRIVATE ${TEST_CXX_FLAGS})
+target_link_libraries(POLtimetest abc)
+add_test(NAME POLtimetest COMMAND POLtimetest)
+set_tests_properties(POLtimetest PROPERTIES TIMEOUT 20)
+
 add_executable(SKIPtest SKIP.c)
 target_link_options(SKIPtest PRIVATE ${TEST_LDD_FLAGS})
 target_link_libraries(SKIPtest abc)

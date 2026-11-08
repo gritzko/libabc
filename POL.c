@@ -164,16 +164,8 @@ ok64 POLTrackTime(timercb callback) {
     // per payload, always.
     u64 now = POLNow();
     int idx = POLFindTimer((void *)callback);
-    if (idx >= 0) {
-        // Already tracked: re-arm at the -1ms initial cadence, re-heapify.
-        poller **data = pollerbData(POL_QUEUE);
-        poller *t = *data + idx;
-        t->tofd = -1;
-        t->deadline = now + 1 * POLNanosPerMSec;
-        pollersUpAtZ(data, (size_t)idx, pollerZ);
-        pollersDownAtZ(data, (size_t)idx, pollerZ);
-        done;
-    }
+    // STD-26B068i24G: already tracked keeps its deadline; POLSetTime moves it.
+    if (idx >= 0) done;
     poller t = {
         .callback = &POLTimer,
         .payload = (void *)callback,
@@ -211,6 +203,20 @@ ok64 POLAddTime(int ms) {
         return OK;
     }
     return POLNONE;
+}
+
+ok64 POLSetTime(timercb callback, u32 ms) {
+    sane(callback != NULL);
+    if (ms < 1) ms = 1;  // tofd 0 would make it an fd poller
+    call(POLTrackTime, callback);
+    poller **data = pollerbData(POL_QUEUE);
+    int idx = POLFindTimer((void *)callback);
+    poller *t = *data + idx;
+    t->tofd = -(int)ms;
+    t->deadline = POLNow() + ms * POLNanosPerMSec;
+    pollersUpAtZ(data, (size_t)idx, pollerZ);
+    pollersDownAtZ(data, (size_t)idx, pollerZ);
+    done;
 }
 
 ok64 POLIgnoreTime() {
