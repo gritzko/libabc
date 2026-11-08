@@ -652,6 +652,7 @@ fun void X(, Swap)(T *a, T *b) {
 }
 
 fun void X(, sReverse)(X(, s) s) {
+    if (s[1] - s[0] < 2) return;  // STD-26B068iT0x: no NULL - 1 when empty
     T *lo = s[0];
     T *hi = s[1] - 1;
     while (lo < hi) X(, Swap)(lo++, hi--);

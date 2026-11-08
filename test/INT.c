@@ -127,8 +127,26 @@ ok64 ORDER128() {
     done;
 }
 
+// STD-26B068iT0x: reversing {NULL, NULL} and 1-long slices is a no-op
+ok64 REVshort() {
+    sane(1);
+    u8s none = {NULL, NULL};
+    u8sReverse(none);
+    want(none[0] == NULL && none[1] == NULL);
+    u8 one[1] = {7};
+    u8s s1 = {one, one + 1};
+    u8sReverse(s1);
+    want(one[0] == 7);
+    u8 two[2] = {1, 2};
+    u8s s2 = {two, two + 2};
+    u8sReverse(s2);
+    want(two[0] == 2 && two[1] == 1);
+    done;
+}
+
 ok64 Utest() {
     sane(1);
+    call(REVshort);
     call(ORDER128);
     call(Utest1);
     call(Utest2);
