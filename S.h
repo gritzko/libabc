@@ -96,7 +96,7 @@ typedef int (*fncmp)(const void *, const void *);
 fun int $memcmp($cc a, $cc b) {
     size_t sza = $size(a), szb = $size(b);
     size_t sz = sza < szb ? sza : szb;
-    int ret = memcmp(*a, *b, sz);
+    int ret = sz ? memcmp(*a, *b, sz) : 0;  // STD-26B068VwHO: may be NULL
     if (ret == 0 && sza != szb) {
         ret = sza < szb ? -1 : 1;
     }
@@ -107,7 +107,8 @@ typedef int (*$cmpfn)($cc a, $cc b);
 
 #define $cmp(a, b) $memcmp((void const *const *)(a), (void const *const *)b)
 
-#define $eq(a, b) ($size(a) == $size(b) && 0 == memcmp(*a, *b, $size(a)))
+#define $eq(a, b) \
+    ($size(a) == $size(b) && (!$size(a) || 0 == memcmp(*a, *b, $size(a))))
 
 // Expand a slice as the (length, pointer) pair printf("%.*s", ...) wants.
 // Use as: printf("got '" $FMT_S "'\n", $ARG(my_slice));
@@ -152,7 +153,7 @@ fun ok64 $feedf(u8 **into, u8 const *const *tmpl, ...) {
                 // ABC-005: a short feed truncates the output; report
                 // SNOROOM instead of advancing past the '$s'
                 size_t sz = $minsize(into, sarg);
-                memcpy(*into, *sarg, sz);
+                if (sz) memcpy(*into, *sarg, sz);
                 *into += sz;
                 if (sz < (size_t)$size(sarg)) {
                     va_end(ap);

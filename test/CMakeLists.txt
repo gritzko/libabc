@@ -499,3 +499,10 @@ add_test(NAME FAILSITEwant COMMAND sh -c
      echo \"$o\" | grep -q 'FAILSITE.c:[0-9]*: FAILSITEdeep: want(x == 2) failed' &&
      echo \"$o\" | grep -q 'in FAILSITEtest'"
     $<TARGET_FILE:FAILSITE>)
+
+# STD-26B068VwHO: mem* with NULL and n == 0 traps, no sanitizer runtime needed
+add_executable(MEMNULLtest MEMNULL.c)
+target_compile_options(MEMNULLtest PRIVATE
+    -fsanitize=nonnull-attribute -fsanitize-trap=nonnull-attribute)
+target_link_libraries(MEMNULLtest abc-core)
+add_test(NAME MEMNULLtest COMMAND MEMNULLtest)

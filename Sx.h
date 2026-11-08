@@ -206,7 +206,8 @@ fun void X(, cgOf)(X(, cg) g, X(, csc) s) {
 
 fun b8 X(, csEq)(X(, csc) a, X(, csc) b) {
     if ($len(a) != $len(b)) return NO;
-    return 0 == memcmp(*a, *b, $size(a));
+    //  STD-26B068VwHO: empty slices may be NULL, mem* wants valid pointers
+    return $empty(a) || 0 == memcmp(*a, *b, $size(a));
 }
 fun b8 X(, sEq)(X(, sc) a, X(, sc) b) {
     return X(, csEq)((T const *const *)a, (T const *const *)b);
@@ -449,7 +450,9 @@ fun ok64 X(, scSup)(X(, cs) full, X(, cs) consumed) {
     return OK;
 }
 
-fun void X(, sZero)(X(, s) s) { memset((void *)*s, 0, $size(s)); }
+fun void X(, sZero)(X(, s) s) {
+    if (!$empty(s)) memset((void *)*s, 0, $size(s));
+}
 #ifndef ABC_X_$
 fun void X(, Zero)(X(, p) p) { memset((void *)p, 0, sizeof(T)); }
 #endif
@@ -457,7 +460,7 @@ fun void X(, Zero)(X(, p) p) { memset((void *)p, 0, sizeof(T)); }
 //  overlap-safe; SNOROOM (nothing written) if `into` is shorter.
 fun ok64 X(, sCopy)(X(, sc) into, X(, csc) from) {
     if ($len(into) < $len(from)) return SNOROOM;
-    memmove((void *)*into, (void *)*from, $size(from));
+    if (!$empty(from)) memmove((void *)*into, (void *)*from, $size(from));
     return OK;
 }
 
@@ -686,13 +689,14 @@ fun b8 X(, IsZero)(X(, cp) p) {
 fun b8 X(, csHasSuffix)(X(, csc) line, X(, csc) suffix) {
     size_t l = $len(suffix);
     size_t s = $size(suffix);
-    return (i64)l <= $len(line) && 0 == memcmp(line[1] - l, suffix[0], s);
+    return (i64)l <= $len(line) &&
+           (!s || 0 == memcmp(line[1] - l, suffix[0], s));
 }
 
 fun b8 X(, csHasPrefix)(X(, csc) line, X(, csc) prefix) {
     size_t l = $len(prefix);
     size_t s = $size(prefix);
-    return (i64)l <= $len(line) && 0 == memcmp(line[0], prefix[0], s);
+    return (i64)l <= $len(line) && (!s || 0 == memcmp(line[0], prefix[0], s));
 }
 
 fun b8 X(, pIn)(X(, cp) p, X(, csc) outer) {
