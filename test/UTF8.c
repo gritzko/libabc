@@ -3,6 +3,8 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "S.h"
@@ -141,12 +143,52 @@ ok64 UTF8test4() {
     done;
 }
 
+// STD-26B068jRIz: a numeral past the 799-byte scratch fails UTF8BADNUM
+// instead of parsing a truncated prefix; consumed bytes match strtod.
+ok64 UTF8test5() {
+    sane(1);
+    f64 f = 0;
+    char const *n40 = "1234567890123456789012345678901234567890";
+    u8cs big = $u8str(n40);
+    call(utf8sDrainFloat, big, &f);
+    same(f, strtod(n40, NULL));
+    same($len(big), 0);
+    u8cs tiny = $u8str("0.000000000000000000000000000001234e5");
+    call(utf8sDrainFloat, tiny, &f);
+    same(f, 1.234e-25);
+    char num[802];
+    for (size_t n = 799; n <= 801; ++n) {
+        num[0] = '1';
+        num[1] = '.';
+        memset(num + 2, '1', n - 2);
+        num[n] = 0;
+        u8cs s = {(u8c *)num, (u8c *)num + n};
+        if (n == 799) {
+            call(utf8sDrainFloat, s, &f);
+            same(f, strtod(num, NULL));
+            same($len(s), 0);
+        } else {
+            same(utf8sDrainFloat(s, &f), UTF8BADNUM);
+        }
+    }
+    u8cs tail = $u8str("-12.5e3, \"rest of the text goes on and on\"]");
+    call(utf8sDrainFloat, tail, &f);
+    same(f, -12.5e3);
+    same(**tail, ',');
+    u8cs ex = $u8str("1e]");
+    call(utf8sDrainFloat, ex, &f);
+    same(f, 1.0);
+    same(**ex, 'e');
+    done;
+}
+
 ok64 UTF8test() {
     sane(1);
     call(UTF8test1);
     call(UTF8test2);
     call(UTF8test3);
     call(UTF8test4);
+    call(UTF8test5);
     done;
 }
 

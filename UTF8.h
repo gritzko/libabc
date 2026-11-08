@@ -21,6 +21,7 @@ con ok64 UTF8NODATA = 0x79d3c85d834a74a;
 con ok64 UTF8BAD = 0x1e74f20b28d;
 con ok64 UTF8BADARG = 0x79d3c82ca34a6d0;
 con ok64 UTF8NOROOM = 0x79d3c85d86d8616;
+con ok64 UTF8BADNUM = 0x79d3c82ca357796;
 
 typedef unsigned char utf8;
 fun b8 utf8Z(utf8 const *a, utf8 const *b) { return *a < *b; }

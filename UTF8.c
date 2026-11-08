@@ -3,6 +3,9 @@
 //
 #include "UTF8.h"
 
+#include <ctype.h>
+#include <string.h>
+
 #include "01.h"
 #include "PRO.h"
 #include "ryu/ryu.h"
@@ -75,9 +78,15 @@ ok64 _utf8sDrain32(u32 *cp, utf8cs data) {
 
 ok64 utf8sDrainFloat(utf8cs txt, f64p f) {
     sane($ok(txt) && f != NULL);
-    size_t tl = $len(txt);
-    if (tl >= 32) tl = 31;
-    char str[32];
+    // STD-26B068jRIz: at most 800 bytes, as Go's strconv/decimal.go
+    // `d [800]byte`; longer fails UTF8BADNUM, never truncated or walked
+    char str[800];
+    size_t tl = 0, l = $len(txt) < sizeof(str) ? $len(txt) : sizeof(str);
+    while (tl < l && isspace((*txt)[tl])) ++tl;
+    while (tl < l && (isalnum((*txt)[tl]) ||
+                      ((*txt)[tl] && strchr("+-._()", (*txt)[tl]))))
+        ++tl;
+    test(tl < sizeof(str), UTF8BADNUM);
     memcpy(str, *txt, tl);
     str[tl] = 0;
     char *ep = NULL;
