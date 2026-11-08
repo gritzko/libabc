@@ -52,7 +52,7 @@ ok64 URIonURI(u8cs tok, urip state) { return OK; }
 ok64 URIonRoot(u8cs tok, urip state) { return OK; }
 //  Path segments are no longer materialized at parse time (URI-004):
 //  the lexer leaves the whole path in `state->path`; readers walk it
-//  on demand via abc/PATH (see URISplitPath below).  These two
+//  on demand via abc/PATH (see URIRelativePath below).  These two
 //  callbacks are now inert.
 ok64 URIonSegment(u8cs tok, urip state) { return OK; }
 ok64 URIonSegment_nz(u8cs tok, urip state) { return OK; }
@@ -136,64 +136,49 @@ ok64 URIutf8FeedSafe(u8s into, uricp u) {
     done;
 }
 
-// Split path into its non-empty segments, storing each (a view into
-// `path`) in the `segs` buffer.  Walks the path on demand via abc/PATH
-// (URI-004): no hand-rolled '/'-splitting, no parse-time segments
-// buffer.  PATHu8sDrainNE skips empty runs (leading '/', '//',
-// trailing '/'), matching the old behaviour exactly.
-static ok64 URISplitPath(u8csbp segs, u8csc path) {
-    sane(segs);
-    u8csbReset(segs);
-    if (u8csEmpty(path)) done;
-
-    a_dup(u8c, cursor, path);
-    u8cs seg = {};
-    while (PATHu8sDrainNE(cursor, seg) == OK) {
-        call(u8cssFeed1, u8csbIdle(segs), seg);
-    }
-    done;
-}
-
-// PTR-009: compute relative path from base to specific.  The `../`-climb
-// + tail is fed into the CALLER-OWNED writable slice `out` (no static
-// buf) via a gauge; `result` views the WRITTEN PREFIX (gauge left),
-// which the caller keeps live.  Typed slice feeds only — zero ptr math.
-static ok64 URIRelativePath(u8csp result, u8s out, u8cscs base_segs,
-                            u8cscs spec_segs) {
+// PTR-009: compute relative path from base to specific into the
+// CALLER-OWNED slice `out`; `result` views its written prefix.
+// STD-26B068dYzx: dirs run through the last '/' (RFC 3986 §5.2.3),
+// PATHu8sDrain keeps empty segments; the tail is spec's own bytes.
+static ok64 URIRelativePath(u8csp result, u8s out, u8csc base_path,
+                            u8csc spec_path) {
     sane(result && $ok(out));
     u8g g;
     u8gOf(g, out);
-    size_t base_n = u8cscsLen(base_segs);
-    size_t spec_n = u8cscsLen(spec_segs);
-
-    // Base "directory" is all but last segment (last is the "file")
-    size_t base_dir_n = base_n > 0 ? base_n - 1 : 0;
-
-    // Find common prefix length
-    size_t common = 0;
-    while (common < base_dir_n && common < spec_n) {
-        u8cs const *bs = u8cscsAtP(base_segs, common);
-        u8cs const *ss = u8cscsAtP(spec_segs, common);
-        if (!u8csEq(*bs, *ss)) break;
-        common++;
+    u8cs bfile = {}, sfile = {}, bs = {}, ss = {};
+    a_dup(u8c, bp, base_path);
+    a_dup(u8c, sp, spec_path);
+    PATHu8sBase(bfile, bp);
+    PATHu8sBase(sfile, sp);
+    u8cs b = {base_path[0], bfile[0] ? bfile[0] : base_path[0]};
+    u8cs s = {spec_path[0], sfile[0]};
+    for (;;) {
+        a_dup(u8c, b0, b);
+        a_dup(u8c, s0, s);
+        if (u8csEmpty(b) || u8csEmpty(s) || PATHu8sDrain(b, bs) != OK ||
+            PATHu8sDrain(s, ss) != OK || !u8csEq(bs, ss)) {
+            u8csMv(b, b0);
+            u8csMv(s, s0);
+            break;
+        }
     }
-
-    a_cstr(dotdot, "..");
-
-    // Generate ".." for each segment to climb from base dir
-    size_t up = base_dir_n - common;
-    for (size_t i = 0; i < up; i++) {
-        if (i > 0) call(u8gFeed1, g, '/');
-        call(u8gFeed, g, dotdot);
+    a_cstr(up, "../");
+    size_t ups = 0;
+    while (!u8csEmpty(b) && PATHu8sDrain(b, bs) == OK && ++ups)
+        call(u8gFeed, g, up);
+    if (!u8csEmpty(s) && s[0][0] == '/') s[0]++;
+    u8cs tail = {s[0], spec_path[1]};
+    // §4.2: an empty ref, a leading '/' or a colon in the first
+    // segment would change meaning, so those get a "./" prefix.
+    a_dup(u8c, cut, tail);
+    u8csFind(cut, '/');
+    u8cs first = {tail[0], cut[0]};
+    if (ups == 0 && (u8csEmpty(tail) || tail[0][0] == '/' ||
+                     u8csFind(first, ':') == OK)) {
+        a_cstr(dot, "./");
+        call(u8gFeed, g, dot);
     }
-
-    // Append remaining specific segments
-    for (size_t i = common; i < spec_n; i++) {
-        if (up > 0 || i > common) call(u8gFeed1, g, '/');
-        u8cs const *seg = u8cscsAtP(spec_segs, i);
-        call(u8gFeed, g, *seg);
-    }
-
+    call(u8gFeed, g, tail);
     u8csMv(result, u8gLeftC(g));
     done;
 }
@@ -213,8 +198,10 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
     }
 
     // Same scheme - check authority (user, host, port)
+    // An empty path is unreachable by a relative path ref (§5.2.3).
     if (!$eq(base->host, specific->host) || !$eq(base->port, specific->port) ||
-        !$eq(base->user, specific->user)) {
+        !$eq(base->user, specific->user) ||
+        (u8csEmpty(specific->path) && !u8csEmpty(base->path))) {
         // Different authority - include authority and path
         u8csMv(rel->authority, specific->authority);
         u8csMv(rel->host, specific->host);
@@ -228,29 +215,10 @@ ok64 URIRelative(urip rel, uricp base, uricp specific, u8s out) {
 
     // Same authority - check path
     if (!$eq(base->path, specific->path)) {
-        // Split paths into segments
-        a_pad(u8cs, base_segs_arr, 64);
-        a_pad(u8cs, spec_segs_arr, 64);
-        call(URISplitPath, base_segs_arr, base->path);
-        call(URISplitPath, spec_segs_arr, specific->path);
-
-        u8cscs base_segs, spec_segs;
-        u8cscsMv(base_segs, u8csbDataC(base_segs_arr));
-        u8cscsMv(spec_segs, u8csbDataC(spec_segs_arr));
-
-        // Compute relative path
-        call(URIRelativePath, rel->path, out, base_segs, spec_segs);
-        // Copy query/fragment (or mark explicitly empty)
-        if (*specific->query) {
-            u8csMv(rel->query, specific->query);
-        } else if (*base->query) {
-            rel->query[0] = rel->query[1] = *specific->data;
-        }
-        if (*specific->fragment) {
-            u8csMv(rel->fragment, specific->fragment);
-        } else if (*base->fragment) {
-            rel->fragment[0] = rel->fragment[1] = *specific->data;
-        }
+        call(URIRelativePath, rel->path, out, base->path, specific->path);
+        // A ref with a path inherits no query or fragment (§5.2.2).
+        u8csMv(rel->query, specific->query);
+        u8csMv(rel->fragment, specific->fragment);
         done;
     }
 
@@ -305,7 +273,6 @@ static ok64 URIRemoveDots(u8csp result, u8s out, u8csc merged) {
     a_dup(u8c, cursor, merged);
     u8cs seg = {};
     while (PATHu8sDrain(cursor, seg) == OK) {
-        if (u8csEmpty(seg)) continue;
         b8 dot = u8csLen(seg) == 1 && seg[0][0] == '.';
         b8 dotdot = u8csLen(seg) == 2 && seg[0][0] == '.' && seg[0][1] == '.';
         last_dot = dot || dotdot;
@@ -416,7 +383,11 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel, u8s out) {
         if (verbatim_relref) {
             u8csMv(abs->path, rel->path);
         } else {
-            call(URIMergePath, abs->path, out, base->path, rel->path);
+            // §5.2.3: an authority with an empty path merges as "/".
+            a_cstr(root, "/");
+            b8 bare = u8csEmpty(base->path) && !u8csEmpty(base->authority);
+            call(URIMergePath, abs->path, out, bare ? root : base->path,
+                 rel->path);
         }
         u8csMv(abs->query, rel->query);
         u8csMv(abs->fragment, rel->fragment);

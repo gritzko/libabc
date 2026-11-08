@@ -625,6 +625,73 @@ ok64 URITestDotSegments() {
     done;
 }
 
+// STD-26B068dYzx: URIAbsolute(base, URIRelative(base, x)) == x, the
+// relative ref serialized and re-parsed (§4.2), dirs per §5.2.3.
+ok64 URITestRelRoundTrip() {
+    sane(1);
+    static char const* cases[][3] = {
+        {"http://a/b/c/", "http://a/b/c", "../c"},
+        {"http://a/b/", "http://a/b/c", "c"},
+        {"http://a/b/c/d", "http://a/b/c/d/", "d/"},
+        {"http://a/b/c", "http://a/b//x", ".//x"},
+        {"http://a/b/", "http://a/b//x", ".//x"},
+        {"http://a/b//c", "http://a/b//d", "d"},
+        {"http://a/b//c", "http://a/b/d", "../d"},
+        {"http://a/b", "http://a/b/", "b/"},
+        {"http://a/b/", "http://a/b", "../b"},
+        {"http://a/", "http://a/x", "x"},
+        {"http://a/x", "http://a/", "./"},
+        {"http://a/x/y", "http://a/", "../"},
+        {"http://a/b/c/d", "http://a/b", "../../b"},
+        {"http://a/b/c/d", "http://a/x/y", "../../x/y"},
+        {"http://a/b/c/d", "http://a/b/c/", "./"},
+        {"http://a/b/c/d", "http://a/b/", "../"},
+        {"http://a/a/b", "http://a/a", "../a"},
+        {"http://a/b/c", "http://a/b/c/d/e/", "c/d/e/"},
+        {"http://a/b/c", "http://a/b/x:y", "./x:y"},
+        {"http://a/b/c", "http://a/x:y/z", "../x:y/z"},
+        {"http://a/b/c?q", "http://a/b/d", "d"},
+        {"http://a/b/c?q", "http://a/b/d#f", "d#f"},
+        {"http://a/b/c/", "http://a/b/c/?q", "?q"},
+        {"http://a/b/c?q", "http://a/b/c?r#f", "?r#f"},
+        {"http://a/b/c#f", "http://a/b/c#g", "#g"},
+        {"http://a/b/c/", "http://a/b/c/#g", "#g"},
+        {"http://a/b/c", "http://a/b/c", ""},
+        {"http://a/x", "http://a", "//a"},
+        {"http://a", "http://a/x", "x"},
+    };
+    size_t fails = 0;
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        a_cstr(bs, cases[i][0]);
+        a_cstr(ss, cases[i][1]);
+        uri base = {}, spec = {}, rel = {}, rel2 = {}, abs = {};
+        call(URIutf8Drain, bs, &base);
+        call(URIutf8Drain, ss, &spec);
+        a_pad(u8, rel_scr, MAX_URI_LEN);
+        call(URIRelative, &rel, &base, &spec, u8bIdle(rel_scr));
+        a_pad(u8, relbuf, MAX_URI_LEN);
+        call(URIutf8Feed, relbuf_idle, &rel);
+        a_dup(u8c, reltext, u8bDataC(relbuf));
+        call(URIutf8Drain, reltext, &rel2);
+        $null(rel2.data);  // relativized ref: merge, don't keep verbatim
+        a_pad(u8, scr, MAX_URI_LEN);
+        call(URIAbsolute, &abs, &base, &rel2, u8bIdle(scr));
+        a_pad(u8, absbuf, MAX_URI_LEN);
+        call(URIutf8Feed, absbuf_idle, &abs);
+        a_cstr(want_rel, cases[i][2]);
+        a_cstr(want_abs, cases[i][1]);
+        if (!$eq(u8bDataC(relbuf), want_rel) || !$eq(u8bDataC(absbuf), want_abs)) {
+            fprintf(stderr, "FAIL relrt[%zu]: base=%s spec=%s want '%s' got '%.*s' -> '%.*s'\n",
+                    i, cases[i][0], cases[i][1], cases[i][2],
+                    (int)$len(u8bDataC(relbuf)), *u8bDataC(relbuf),
+                    (int)$len(u8bDataC(absbuf)), *u8bDataC(absbuf));
+            fails++;
+        }
+    }
+    test(fails == 0, URIFAIL);
+    done;
+}
+
 static ok64 URIfield(size_t i, char const* name, u8cs got, char const* want) {
     a_cstr(exp, want);
     if ($len(got) == $len(exp) && ($empty(exp) || 0 == memcmp(*got, *exp, $size(exp))))
@@ -736,6 +803,7 @@ ok64 URItest() {
     call(URITestFeedSafe);
     call(URITestNoschemeRoundTrip);
     call(URITestDotSegments);
+    call(URITestRelRoundTrip);
     call(URITestDotlessScheme);
     call(URITestPctStrict);
     done;
