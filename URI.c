@@ -340,14 +340,9 @@ static ok64 URIMergePath(u8csp result, u8s out, u8csc base_path,
                          u8csc rel_path) {
     sane(result && $ok(out));
 
-    // Relative path starts with '/': it's absolute, use it verbatim.
-    if (!u8csEmpty(rel_path) && rel_path[0][0] == '/') {
-        u8g g;
-        u8gOf(g, out);
-        call(u8gFeed, g, rel_path);
-        u8csMv(result, u8gLeftC(g));
-        done;
-    }
+    // STD-26B068AUZz: an absolute path still drops dot-segments (§5.2.2).
+    if (!u8csEmpty(rel_path) && rel_path[0][0] == '/')
+        return URIRemoveDots(result, out, rel_path);
 
     // Merge base "directory" (through and including the last '/') with
     // the relative path into BASS scratch, then remove dot-segments into
@@ -377,6 +372,7 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel, u8s out) {
     // If relative has scheme, it's already absolute
     if (!$empty(rel->scheme)) {
         *abs = *rel;
+        call(URIRemoveDots, abs->path, out, rel->path);  // STD-26B068AUZz
         done;
     }
 
@@ -389,7 +385,7 @@ ok64 URIAbsolute(urip abs, uricp base, uricp rel, u8s out) {
         u8csMv(abs->host, rel->host);
         u8csMv(abs->port, rel->port);
         u8csMv(abs->user, rel->user);
-        u8csMv(abs->path, rel->path);
+        call(URIRemoveDots, abs->path, out, rel->path);  // STD-26B068AUZz
         u8csMv(abs->query, rel->query);
         u8csMv(abs->fragment, rel->fragment);
         done;

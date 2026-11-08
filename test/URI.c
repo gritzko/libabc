@@ -597,6 +597,11 @@ ok64 URITestDotSegments() {
         {"http://a/b/c/d;p?q", ".g",       "/b/c/.g"},
         {"http://a/b/c/d;p?q", "g..",      "/b/c/g.."},
         {"http://a/b/c/d;p?q", "g/../h",   "/b/c/h"},
+        {"http://a/b/c/d;p?q", "/./g",     "/g"},       // STD-26B068AUZz
+        {"http://a/b/c/d;p?q", "/../g",    "/g"},
+        {"http://a/b/c/d;p?q", "/a/..",    "/"},
+        {"http://a/b/c/d;p?q", "//g/./x",  "/x"},
+        {"http://a/b/c/d;p?q", "http://x/a/../g", "/g"},
     };
     for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
         a_cstr(bs, cases[i].base);
