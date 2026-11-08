@@ -14,6 +14,8 @@ typedef struct {
     u8    final;
     u8    nparams;
     u32   params[CSI_MAX_PARAMS];
+    u16   subs;            // sub-param bitmask
+    const char *inter;     // intermediate bytes, NULL = none
 } CSICase;
 
 #define IL(s) (int)(sizeof(s) - 1)
@@ -59,6 +61,19 @@ static const CSICase CASES[] = {
     // --- Trailing data after sequence (consumed = sequence length only) ---
     {"\x1b[Hxxx",       IL("\x1b[Hxxx"),       OK, 3, 0, 'H', 0, {0}},
     {"\x1b[<0;5;10MAB", IL("\x1b[<0;5;10MAB"), OK, 10, '<', 'M', 3, {0,5,10}},
+
+    // --- STD-26B068qhvl: intermediates, sub-params, empty params ---
+    {"\x1b[2 q",   IL("\x1b[2 q"),   OK, 5, 0,   'q', 1, {2}, 0, " "},
+    {"\x1b[?1$p",  IL("\x1b[?1$p"),  OK, 6, '?', 'p', 1, {1}, 0, "$"},
+    {"\x1b[38:2::255:0:0m", IL("\x1b[38:2::255:0:0m"), OK, 16, 0, 'm', 6,
+     {38,2,0,255,0,0}, 0x3e},
+    {"\x1b[4:3m",  IL("\x1b[4:3m"),  OK, 6, 0,   'm', 2, {4,3}, 0x2},
+    {"\x1b[;5H",   IL("\x1b[;5H"),   OK, 5, 0,   'H', 2, {0,5}},
+    {"\x1b[5;H",   IL("\x1b[5;H"),   OK, 5, 0,   'H', 2, {5,0}},
+    {"\x1b[;m",    IL("\x1b[;m"),    OK, 4, 0,   'm', 2, {0,0}},
+    {"\x1b[1 !q",  IL("\x1b[1 !q"),  OK, 6, 0,   'q', 1, {1}, 0, " !"},
+    {"\x1b[1 !\"q", IL("\x1b[1 !\"q"), ANSIBAD, 0, 0, 0, 0, {0}},
+    {"\x1b[ 1q",   IL("\x1b[ 1q"),   ANSIBAD, 0, 0, 0, 0, {0}},
 };
 
 #define NCASES (sizeof(CASES) / sizeof(CASES[0]))
@@ -109,6 +124,35 @@ ok64 ANSITestCSI() {
                 fail(TESTFAIL);
             }
         }
+        if (out.subs != tc->subs) {
+            fprintf(stderr, "FAIL [%zu]: subs got 0x%x want 0x%x\n",
+                    i, out.subs, tc->subs);
+            fail(TESTFAIL);
+        }
+        size_t ni = tc->inter ? strlen(tc->inter) : 0;
+        if (out.ninter != ni || memcmp(out.inter, tc->inter ?: "", ni) != 0) {
+            fprintf(stderr, "FAIL [%zu]: inter mismatch (%u)\n", i, out.ninter);
+            fail(TESTFAIL);
+        }
+    }
+    done;
+}
+
+// STD-26B068qhvl: thousands of separators stay bounded at CSI_MAX_PARAMS
+ok64 ANSITestCSILong() {
+    sane(1);
+    static u8 buf[4096];
+    for (int k = 0; k < 2; k++) {
+        buf[0] = 0x1b;
+        buf[1] = '[';
+        memset(buf + 2, k ? ':' : ';', sizeof(buf) - 3);
+        buf[sizeof(buf) - 1] = 'm';
+        u8cs input = {buf, buf + sizeof(buf)};
+        csi out = {};
+        call(ANSIu8sDrainCSI, input, &out);
+        want(input[0] == buf + sizeof(buf));
+        want(out.nparams == CSI_MAX_PARAMS && out.final == 'm');
+        want(out.subs == (k ? 0xfffe : 0));
     }
     done;
 }
@@ -116,6 +160,7 @@ ok64 ANSITestCSI() {
 ok64 ANSItest() {
     sane(1);
     call(ANSITestCSI);
+    call(ANSITestCSILong);
     done;
 }
 

@@ -7,50 +7,53 @@
 #include "ANSI.h"
 
 
-/* #line 26 "abc/ANSI.c.rl" */
+/* #line 25 "abc/ANSI.c.rl" */
 
 
 
 /* #line 10 "abc/ANSI.rl.c" */
 static const char _csi_actions[] = {
 	0, 1, 0, 1, 1, 1, 2, 1, 
-	3, 2, 2, 3
+	3, 1, 4
 };
 
 static const char _csi_key_offsets[] = {
-	0, 0, 1, 2, 8, 13, 15, 19
+	0, 0, 1, 2, 12, 16, 18, 26
 };
 
 static const unsigned char _csi_trans_keys[] = {
-	27u, 91u, 48u, 57u, 60u, 63u, 64u, 126u, 
-	59u, 48u, 57u, 64u, 126u, 48u, 57u, 48u, 
-	57u, 64u, 126u, 0
+	27u, 91u, 32u, 47u, 48u, 57u, 58u, 59u, 
+	60u, 63u, 64u, 126u, 32u, 47u, 64u, 126u, 
+	64u, 126u, 32u, 47u, 48u, 57u, 58u, 59u, 
+	64u, 126u, 0
 };
 
 static const char _csi_single_lengths[] = {
-	0, 1, 1, 0, 1, 0, 0, 0
+	0, 1, 1, 0, 0, 0, 0, 0
 };
 
 static const char _csi_range_lengths[] = {
-	0, 0, 0, 3, 2, 1, 2, 0
+	0, 0, 0, 5, 2, 1, 4, 0
 };
 
 static const char _csi_index_offsets[] = {
-	0, 0, 2, 4, 8, 12, 14, 17
+	0, 0, 2, 4, 10, 13, 15, 20
 };
 
 static const char _csi_indicies[] = {
-	0, 1, 2, 1, 3, 4, 5, 1, 
-	6, 3, 7, 1, 3, 1, 3, 5, 
-	1, 1, 0
+	0, 1, 2, 1, 3, 4, 5, 6, 
+	7, 1, 8, 7, 1, 7, 1, 3, 
+	4, 5, 7, 1, 1, 0
 };
 
 static const char _csi_trans_targs[] = {
-	2, 0, 3, 4, 6, 7, 5, 7
+	2, 0, 3, 4, 6, 6, 6, 7, 
+	5
 };
 
 static const char _csi_trans_actions[] = {
-	0, 0, 0, 3, 1, 7, 5, 9
+	0, 0, 0, 7, 3, 5, 1, 9, 
+	7
 };
 
 static const int csi_start = 1;
@@ -58,7 +61,14 @@ static const int csi_start = 1;
 static const int csi_en_main = 1;
 
 
-/* #line 29 "abc/ANSI.c.rl" */
+/* #line 28 "abc/ANSI.c.rl" */
+
+//  Excess params are dropped, as before; the sequence still parses.
+static void CSIPush(csip out, u32 val, b8 sub) {
+    if (out->nparams >= CSI_MAX_PARAMS) return;
+    if (sub) out->subs |= (u16)(1u << out->nparams);
+    out->params[out->nparams++] = val;
+}
 
 ok64 ANSIu8sDrainCSI(u8cs input, csip out) {
     if (out == NULL) return ANSIBAD;
@@ -70,16 +80,17 @@ ok64 ANSIu8sDrainCSI(u8cs input, csip out) {
     u8c *eof = pe;
     int cs = 0;
     u32 cur = 0;
+    b8 sub = 0, any = 0;
 
     
-/* #line 67 "abc/ANSI.rl.c" */
+/* #line 78 "abc/ANSI.rl.c" */
 	{
 	cs = csi_start;
 	}
 
-/* #line 42 "abc/ANSI.c.rl" */
+/* #line 49 "abc/ANSI.c.rl" */
     
-/* #line 70 "abc/ANSI.rl.c" */
+/* #line 81 "abc/ANSI.rl.c" */
 	{
 	int _klen;
 	unsigned int _trans;
@@ -159,21 +170,21 @@ _match:
 	break;
 	case 1:
 /* #line 12 "abc/ANSI.c.rl" */
-	{ cur = cur * 10 + (u32)(*p - '0'); }
+	{ cur = cur * 10 + (u32)(*p - '0'); any = 1; }
 	break;
 	case 2:
 /* #line 13 "abc/ANSI.c.rl" */
-	{
-        if (out->nparams < CSI_MAX_PARAMS)
-            out->params[out->nparams++] = cur;
-        cur = 0;
-    }
+	{ CSIPush(out, cur, sub); cur = 0; sub = (*p == ':'); any = 1; }
 	break;
 	case 3:
-/* #line 18 "abc/ANSI.c.rl" */
-	{ out->final = *p; {p++; goto _out; } }
+/* #line 14 "abc/ANSI.c.rl" */
+	{ out->inter[out->ninter++] = *p; }
 	break;
-/* #line 159 "abc/ANSI.rl.c" */
+	case 4:
+/* #line 15 "abc/ANSI.c.rl" */
+	{ if (any) CSIPush(out, cur, sub); out->final = *p; {p++; goto _out; } }
+	break;
+/* #line 169 "abc/ANSI.rl.c" */
 		}
 	}
 
@@ -186,7 +197,7 @@ _again:
 	_out: {}
 	}
 
-/* #line 43 "abc/ANSI.c.rl" */
+/* #line 50 "abc/ANSI.c.rl" */
 
     if (cs < 7)
         return ANSIBAD;

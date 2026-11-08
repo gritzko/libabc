@@ -8,9 +8,11 @@ con ok64 ANSIBADARG = 0x2977122ca34a6d0;
 
 // --- CSI parser (input side) ---
 //
-// Control Sequence Introducer (ECMA-48): ESC '[' [private] [params] final
+// Control Sequence Introducer (ECMA-48 5.4): ESC '[' [private] params inter final
 //   private : optional 0x3C..0x3F prefix ('<' '=' '>' '?')
-//   params  : optional decimal integers separated by ';'
+//   params  : decimal integers separated by ';' or ':' (sub-param, 5.4.2);
+//             an empty param is 0 (default), extra params are dropped
+//   inter   : up to CSI_MAX_INTER bytes 0x20..0x2F
 //   final   : single byte 0x40..0x7E (the operation code)
 //
 // Examples:
@@ -18,8 +20,11 @@ con ok64 ANSIBADARG = 0x2977122ca34a6d0;
 //   "\033[5n"         → final='n', params={5}  (status request)
 //   "\033[12;40H"     → final='H', params={12,40}  (cursor move)
 //   "\033[<0;5;10M"   → private='<', final='M', params={0,5,10}  (SGR mouse)
+//   "\033[4:3m"       → final='m', params={4,3}, subs=0b10  (curly underline)
+//   "\033[2 q"        → inter=" ", final='q', params={2}  (DECSCUSR)
 
-#define CSI_MAX_PARAMS 8
+#define CSI_MAX_PARAMS 16
+#define CSI_MAX_INTER 2
 
 //  `private` is a C++ keyword; the field stays `private` for every C caller
 //  (and the ragel-generated parser), but a C++ TU including this header for
@@ -32,6 +37,9 @@ typedef struct {
     u8  private;                  // private prefix byte, or 0
     u8  final;                    // final byte
     u8  nparams;                  // count of decoded params
+    u8  ninter;                   // count of intermediate bytes
+    u8  inter[CSI_MAX_INTER];     // intermediate bytes 0x20..0x2F
+    u16 subs;                     // bit i: params[i] follows a ':'
     u32 params[CSI_MAX_PARAMS];   // decoded decimal values
 } csi;
 #ifdef __cplusplus
