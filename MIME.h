@@ -15,7 +15,7 @@ con char *MIMEtab[][2] = {
     {"aac",    "audio/aac"},
     {"apng",   "image/apng"},
     {"asm",    "text/x-asm"},
-    {"avi",    "video/x-msvideo"},
+    {"avi",    "video/x-msvideo"},   // reg. video/vnd.avi (RFC 9559), rarely known; STD-26B068C5fx
     {"avif",   "image/avif"},
     {"bin",    "application/octet-stream"},
     {"bmp",    "image/bmp"},
@@ -62,7 +62,7 @@ con char *MIMEtab[][2] = {
     {"mid",    "audio/midi"},
     {"midi",   "audio/midi"},
     {"mjs",    "text/javascript"},
-    {"mkv",    "video/x-matroska"},
+    {"mkv",    "video/x-matroska"},  // reg. video/matroska (RFC 9559); browsers know x-
     {"ml",     "text/x-ocaml"},
     {"mov",    "video/quicktime"},
     {"mp3",    "audio/mpeg"},
@@ -71,7 +71,7 @@ con char *MIMEtab[][2] = {
     {"nim",    "text/x-nim"},
     {"ogg",    "audio/ogg"},
     {"ogv",    "video/ogg"},
-    {"opus",   "audio/opus"},
+    {"opus",   "audio/ogg"},  // Ogg Opus file, RFC 7845 §9
     {"otf",    "font/otf"},
     {"pas",    "text/x-pascal"},
     {"pdf",    "application/pdf"},
@@ -98,13 +98,13 @@ con char *MIMEtab[][2] = {
     {"tgz",    "application/gzip"},
     {"tif",    "image/tiff"},
     {"tiff",   "image/tiff"},
-    {"toml",   "text/x-toml"},
-    {"ts",     "text/typescript"},
+    {"toml",   "application/toml"},
+    {"ts",     "text/typescript"},  // unregistered; TS source, not video/mp2t
     {"tsx",    "text/typescript"},
     {"ttf",    "font/ttf"},
     {"txt",    "text/plain"},
     {"wasm",   "application/wasm"},
-    {"wav",    "audio/wav"},
+    {"wav",    "audio/wav"},  // reg. audio/vnd.wave (RFC 2361); browsers want wav
     {"webm",   "video/webm"},
     {"webp",   "image/webp"},
     {"woff",   "font/woff"},
