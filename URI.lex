@@ -12,13 +12,9 @@ reserved    = gen_delims | sub_delims;
 
 unreserved  = alpha | digit | "-" | "." | "_" | "~";
 
-delims      = "<" | ">" | "#" | '"';
+pchar = unreserved | pct_encoded | sub_delims | ":" | "@";
 
-unwise      = "{" | "}" | "|" | "\\" | "^" | "[" | "]" | "`";
-
-pchar = unreserved | pct_encoded | sub_delims | ":" | "@" | delims | unwise;
-
-slash = "/" | "\\";
+slash = "/";
 
 path_char = pchar - ("?" | "#");
 
@@ -27,7 +23,8 @@ Segment_nz = path_char+;
 segment_nz_nc = (path_char - ":")+;
 segment_nz_dc = (path_char - (":" | "."))* "." (path_char - ":")* ":" path_char*;
 
-Path = slash ( Segment_nz ( slash Segment )* )? ;
+Path = ( slash Segment )+ ;
+path_absolute = Path - ( "//" ( path_char | slash )* ) ;
 PathNoscheme = ( segment_nz_nc | segment_nz_dc ) ( slash Segment )*;
 
 drivePath = (slash|(alpha ":" slash)) ( path_char+ ( slash path_char* )* )? ;
@@ -47,16 +44,16 @@ Host        = IP_literal | IPv4address | reg_name ;
 Port        = (pchar - ("/" | "?" | "#")){1,5} ;
 Authority   = "//" ( ( User "@" )? Host ( ":" Port )? ) ;
 
-Fragment = ( " " | pchar | "/" | "?" )* ;
+Fragment = ( pchar | "/" | "?" )* ;
 
-Query = ( ( pchar | "/" | "?" ) - "#" )* ;
+Query = ( pchar | "/" | "?" )* ;
 
 PathRootless = Segment_nz ( slash Segment )*;
 
-hier_part = Authority Path? | Path | PathRootless;
+hier_part = Authority Path? | path_absolute | PathRootless;
 
 absolute_URI = Scheme hier_part? ("?" Query)? ("#" Fragment)?;
-relative_ref = ( Authority Path? | ( Path | PathNoscheme )? ) ( "?" Query )? ( "#" Fragment )?;
+relative_ref = ( Authority Path? | ( path_absolute | PathNoscheme )? ) ( "?" Query )? ( "#" Fragment )?;
 URI = absolute_URI | relative_ref ;
 
 Root = URI;

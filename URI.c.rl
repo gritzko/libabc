@@ -5,24 +5,24 @@
 // action indices for the parser
 #define URIenum 0
 enum {
-	URISegment = URIenum+14,
-	URISegment_nz = URIenum+15,
-	URIPath = URIenum+18,
-	URIPathNoscheme = URIenum+19,
-	URIScheme = URIenum+21,
-	URIIPv4address = URIenum+23,
-	URIIPvFuture = URIenum+24,
-	URIIPv6address = URIenum+25,
-	URIIP_literal = URIenum+26,
-	URIUser = URIenum+28,
-	URIHost = URIenum+29,
-	URIPort = URIenum+30,
-	URIAuthority = URIenum+31,
-	URIFragment = URIenum+32,
-	URIQuery = URIenum+33,
-	URIPathRootless = URIenum+34,
-	URIURI = URIenum+38,
-	URIRoot = URIenum+39,
+	URISegment = URIenum+12,
+	URISegment_nz = URIenum+13,
+	URIPath = URIenum+16,
+	URIPathNoscheme = URIenum+18,
+	URIScheme = URIenum+20,
+	URIIPv4address = URIenum+22,
+	URIIPvFuture = URIenum+23,
+	URIIPv6address = URIenum+24,
+	URIIP_literal = URIenum+25,
+	URIUser = URIenum+27,
+	URIHost = URIenum+28,
+	URIPort = URIenum+29,
+	URIAuthority = URIenum+30,
+	URIFragment = URIenum+31,
+	URIQuery = URIenum+32,
+	URIPathRootless = URIenum+33,
+	URIURI = URIenum+37,
+	URIRoot = URIenum+38,
 };
 
 // user functions (callbacks) for the parser
@@ -226,16 +226,15 @@ URIgen_delims = (   ":"  |  "/"  |  "?"  |  "#"  |  "["  |  "]"  |  "@" ); # no 
 URIsub_delims = (   "!"  |  "$"  |  "&"  |  "'"  |  "("  |  ")"  |  "*"  |  "+"  |  ","  |  ";"  |  "=" ); # no sub_delims callback
 URIreserved = (   URIgen_delims  |  URIsub_delims ); # no reserved callback
 URIunreserved = (   URIalpha  |  URIdigit  |  "-"  |  "."  |  "_"  |  "~" ); # no unreserved callback
-URIdelims = (   "<"  |  ">"  |  "#"  |  '"' ); # no delims callback
-URIunwise = (   "{"  |  "}"  |  "|"  |  "\\"  |  "^"  |  "["  |  "]"  |  "`" ); # no unwise callback
-URIpchar = (   URIunreserved  |  URIpct_encoded  |  URIsub_delims  |  ":"  |  "@"  |  URIdelims  |  URIunwise ); # no pchar callback
-URIslash = (   "/"  |  "\\" ); # no slash callback
+URIpchar = (   URIunreserved  |  URIpct_encoded  |  URIsub_delims  |  ":"  |  "@" ); # no pchar callback
+URIslash = (   "/" ); # no slash callback
 URIpath_char = (   URIpchar  -  ("?"  |  "#") ); # no path_char callback
 URISegment = (   URIpath_char* )  >URISegment0 %URISegment1;
 URISegment_nz = (   URIpath_char+ )  >URISegment_nz0 %URISegment_nz1;
 URIsegment_nz_nc = (   (URIpath_char  -  ":")+ ); # no segment_nz_nc callback
 URIsegment_nz_dc = (   (URIpath_char  -  (":"  |  "."))*  "."  (URIpath_char  -  ":")*  ":"  URIpath_char* ); # no segment_nz_dc callback
-URIPath = (   URIslash  (  URISegment_nz  (  URIslash  URISegment  )*  )?   )  >URIPath0 %URIPath1;
+URIPath = (   (  URIslash  URISegment  )+   )  >URIPath0 %URIPath1;
+URIpath_absolute = (   URIPath  -  (  "//"  (  URIpath_char  |  URIslash  )*  )   ); # no path_absolute callback
 URIPathNoscheme = (   (  URIsegment_nz_nc  |  URIsegment_nz_dc  )  (  URIslash  URISegment  )* )  >URIPathNoscheme0 %URIPathNoscheme1;
 URIdrivePath = (   (URIslash|(URIalpha  ":"  URIslash))  (  URIpath_char+  (  URIslash  URIpath_char*  )*  )?   ); # no drivePath callback
 URIScheme = (   (URIalpha  (  URIalpha  |  URIdigit  |  "+"  |  "-"  )*)  ':'   )  >URIScheme0 %URIScheme1;
@@ -249,12 +248,12 @@ URIUser = (   (  URIunreserved  |  URIpct_encoded  |  URIsub_delims  |  ":"  |  
 URIHost = (   URIIP_literal  |  URIIPv4address  |  URIreg_name   )  >URIHost0 %URIHost1;
 URIPort = (   (URIpchar  -  ("/"  |  "?"  |  "#")){1,5}   )  >URIPort0 %URIPort1;
 URIAuthority = (   "//"  (  (  URIUser  "@"  )?  URIHost  (  ":"  URIPort  )?  )   )  >URIAuthority0 %URIAuthority1;
-URIFragment = (   (  " "  |  URIpchar  |  "/"  |  "?"  )*   )  >URIFragment0 %URIFragment1;
-URIQuery = (   (  (  URIpchar  |  "/"  |  "?"  )  -  "#"  )*   )  >URIQuery0 %URIQuery1;
+URIFragment = (   (  URIpchar  |  "/"  |  "?"  )*   )  >URIFragment0 %URIFragment1;
+URIQuery = (   (  URIpchar  |  "/"  |  "?"  )*   )  >URIQuery0 %URIQuery1;
 URIPathRootless = (   URISegment_nz  (  URIslash  URISegment  )* )  >URIPathRootless0 %URIPathRootless1;
-URIhier_part = (   URIAuthority  URIPath?  |  URIPath  |  URIPathRootless ); # no hier_part callback
+URIhier_part = (   URIAuthority  URIPath?  |  URIpath_absolute  |  URIPathRootless ); # no hier_part callback
 URIabsolute_URI = (   URIScheme  URIhier_part?  ("?"  URIQuery)?  ("#"  URIFragment)? ); # no absolute_URI callback
-URIrelative_ref = (   (  URIAuthority  URIPath?  |  (  URIPath  |  URIPathNoscheme  )?  )  (  "?"  URIQuery  )?  (  "#"  URIFragment  )? ); # no relative_ref callback
+URIrelative_ref = (   (  URIAuthority  URIPath?  |  (  URIpath_absolute  |  URIPathNoscheme  )?  )  (  "?"  URIQuery  )?  (  "#"  URIFragment  )? ); # no relative_ref callback
 URIURI = (   URIabsolute_URI  |  URIrelative_ref   )  >URIURI0 %URIURI1;
 URIRoot = (   URIURI )  >URIRoot0 %URIRoot1;
 

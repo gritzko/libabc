@@ -788,6 +788,41 @@ ok64 URITestPctStrict() {
     done;
 }
 
+// STD-26B068Bubx: RFC 3986 §3.3 pchar, no unwise/delims, `/` only;
+// path-abempty after an authority takes empty segments
+ok64 URITestPcharStrict() {
+    sane(1);
+    static char const* badu[] = {"/a{b}|c^d\\`e<f>g\"h", "/a[b]", "/a\\b/c",
+                                 "#b#c", "http://h/p#a b"};
+    for (size_t i = 0; i < sizeof(badu) / sizeof(badu[0]); i++) {
+        a_cstr(text, badu[i]);
+        uri u = {};
+        if (URIutf8Drain(text, &u) == OK) {
+            fprintf(stderr, "FAIL pchar[%zu]: '%s' parsed\n", i, badu[i]);
+            return URIFAIL;
+        }
+    }
+    static struct { char const *uri, *host, *path; } good[] = {
+        {"http://a//b/x", "a", "//b/x"},
+        {"/a//b", "", "/a//b"},
+        {"//a", "a", ""},
+        {"http://[::1]:80/p", "[::1]", "/p"},
+    };
+    for (size_t i = 0; i < sizeof(good) / sizeof(good[0]); i++) {
+        a_cstr(text, good[i].uri);
+        uri u = {};
+        ok64 o = URIutf8Drain(text, &u);
+        if (o != OK) {
+            fprintf(stderr, "FAIL pchar good[%zu]: '%s' malformed\n", i,
+                    good[i].uri);
+            return URIFAIL;
+        }
+        call(URIfield, i, "host", u.host, good[i].host);
+        call(URIfield, i, "path", u.path, good[i].path);
+    }
+    done;
+}
+
 ok64 URItest() {
     sane(1);
     call(URItest1);
@@ -806,6 +841,7 @@ ok64 URItest() {
     call(URITestRelRoundTrip);
     call(URITestDotlessScheme);
     call(URITestPctStrict);
+    call(URITestPcharStrict);
     done;
 }
 
