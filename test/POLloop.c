@@ -278,6 +278,11 @@ ok64 POLloop_stop_once() {
 // nfds over RLIMIT_NOFILE makes poll() fail with EINVAL.
 ok64 POLloop_poll_fail() {
     sane(1);
+#if defined(__FreeBSD__)
+    //  POL-26B06EpxWR: FreeBSD caps nfds by kern.maxfilesperproc, not
+    //  RLIMIT_NOFILE, so no cheap nfds makes poll() fail there
+    done;
+#endif
     call(POLInit, 16);
     pipe2fd pp = {-1, -1};
     call(pipe_make, &pp);
