@@ -73,6 +73,7 @@ ok64 RONSpliceBase(ron60 *base, u8 *width, u64 rand, u64 prob, ron60 n);
 // Left-align a short ron60 to fill the 60-bit space.
 // ron60Z(0x25_01) = 0x25_01_00_00_00_00_00_00_00  ("a1" -> "a100000000")
 fun ok64 ron60Norm(ron60 r) {
+    if (r > ron60Max) return r;  // 11 digits: no pad, avoid a negative shift
     u8 digits = (64 - clz64(r|1) + 5) / 6;
     return r << ((10 - digits) * 6);
 }

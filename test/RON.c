@@ -524,6 +524,14 @@ ok64 RONTest64Reject() {
     done;
 }
 
+ok64 RONTestNormWide() {
+    sane(1);
+    volatile ron60 wide[] = {ron60Max + 1, ~0ULL};
+    for (int i = 0; i < 2; i++) want(ron60Norm(wide[i]) == wide[i]);
+    want(ron60Norm(1) == 1ULL << 54);
+    done;
+}
+
 ok64 RONtest() {
     sane(1);
     call(RONTestFromTm);
@@ -545,6 +553,7 @@ ok64 RONtest() {
     call(RONTest64Cases);
     call(RONTest64RoundTripOrder);
     call(RONTest64Reject);
+    call(RONTestNormWide);
     done;
 }
 
