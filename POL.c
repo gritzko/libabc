@@ -322,11 +322,11 @@ ok64 POLLoop(u64 timens) {
         }
 
         // ABC-012: clamp; a multi-week deadline overflowed int into a
-        // negative timeout, making poll() block forever
+        // negative timeout; STD-26B068X3C5: round up, no sub-ms spin
         u64 waitns = next_timeout - now;
         int pollms = waitns > 60000UL * POLNanosPerMSec
                          ? 60000
-                         : (int)(waitns / POLNanosPerMSec);
+                         : (int)((waitns + POLNanosPerMSec - 1) / POLNanosPerMSec);
         //  CODE-26B065bwvG: EINTR is a wakeup, any other failure ends the run
         if (poll(vec, pollscount, pollms) < 0) {
             if (errno == EINTR) continue;
