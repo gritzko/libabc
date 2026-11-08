@@ -17,7 +17,8 @@ u8 TTYrgb2ansi(u8 r, u8 g, u8 b) {
 // Feed old-style ANSI foreground escape sequence
 ok64 TTYansifeed(utf8s into, u8 code) {
     sane($ok(into));
-    test($size(into) >= 5, TTYNOROOM);
+    // STD-26B068NqLv: exact length, never an unterminated CSI
+    test($size(into) >= 4u + (code >= 10) + (code >= 100), TTYNOROOM);
     utf8sFeed1(into, 033);
     utf8sFeed1(into, '[');
     utf8sFeed10(into, code);

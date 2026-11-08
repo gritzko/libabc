@@ -131,11 +131,29 @@ ok64 TTYtestTrimming() {
     done;
 }
 
+// STD-26B068NqLv: exact room for 1-3 digit SGR, nothing written on NOROOM
+ok64 TTYtestAnsiRoom() {
+    sane(1);
+    u8 codes[3] = {7, 37, 107};
+    for (int i = 0; i < 3; i++) {
+        size_t need = 4 + (codes[i] >= 10) + (codes[i] >= 100);
+        u8 mem[8] = {};
+        utf8s s = {mem, mem + need - 1};
+        want(TTYansifeed(s, codes[i]) == TTYNOROOM);
+        want(s[0] == mem && mem[0] == 0);
+        utf8s t = {mem, mem + need};
+        want(TTYansifeed(t, codes[i]) == OK);
+        want(t[0] == mem + need && mem[need - 1] == 'm');
+    }
+    done;
+}
+
 ok64 TTYtest() {
     sane(1);
     call(TTYtestColors);
     call(TTYtestPadding);
     call(TTYtestTrimming);
+    call(TTYtestAnsiRoom);
     printf("TTY tests passed\n");
     done;
 }
