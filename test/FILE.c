@@ -1017,6 +1017,24 @@ ok64 FILEBookGapTest() {
     done;
 }
 
+//  FILE-26B06EC4_P: BSD pipes hold 16 KiB and big writes wait for a reader;
+//  a forked child drains pfd[0], exits 0 iff it read exactly `want`.
+static pid_t file_pipe_reader(int pfd[2], u8csc want) {
+    pid_t pid = fork();
+    if (pid != 0) {
+        if (pid > 0) close(pfd[0]);
+        return pid;
+    }
+    close(pfd[1]);
+    size_t n = 0, len = $len(want);
+    u8 sink[4096];
+    int ok = 1;
+    for (ssize_t r; (r = read(pfd[0], sink, sizeof(sink))) > 0; n += (size_t)r)
+        if (n + (size_t)r > len || 0 != memcmp(sink, want[0] + n, (size_t)r))
+            ok = 0;
+    _exit(ok && n == len ? 0 : 1);
+}
+
 //  CODE-26B068lK6V: a buffered fd: FILEFlush writes only past a page,
 //  FILEFlushAll drains, an oversize feed goes straight out, close drains.
 ok64 FILEStreamTest() {
@@ -1024,40 +1042,42 @@ ok64 FILEStreamTest() {
     int pfd[2] = {FILE_CLOSED, FILE_CLOSED};
     test(0 == pipe(pfd), FILEFAIL);
     size_t const sp = PAGESIZE, BIG = 3 * sp, TOTAL = 100 + sp + 7 + BIG + 5;
+    a_pad(u8, pat, 4 * 4096);
+    for (size_t i = 0; i < BIG; i++) u8bFeed1(pat, (u8)(i * 7));
+    u8cs all = {pat[0], pat[0] + BIG};
+    u8cs a = {all[0], all[0] + 100}, b = {all[0] + 100, all[0] + 100 + sp};
+    u8cs c = {all[0], all[0] + 7}, d = {all[0], all[0] + 5};
+    a_pad(u8, wire, 6 * 4096);  // the expected byte stream
+    call(u8bFeed, wire, a);
+    call(u8bFeed, wire, b);
+    call(u8bFeed, wire, c);
+    call(u8bFeed, wire, all);
+    call(u8bFeed, wire, d);
+    same(u8bDataLen(wire), TOTAL);
+    pid_t rd = file_pipe_reader(pfd, u8bDataC(wire));
+    test(rd > 0, FILEFAIL);
     call(FILEBuffer, pfd[1], 2 * sp);
     test(FILEBuffer(pfd[1], sp) == FILEBADARG, FAILSANITY);  // slot is taken
     u8bp buf = FILESlot(pfd[1]);
     want(FILEBookedFD(buf) == FILE_CLOSED);  // never seen as a mapping
     want(FILEReMap(buf, sp) == FILENONE);
-    a_pad(u8, pat, 4 * 4096);
-    for (size_t i = 0; i < BIG; i++) u8bFeed1(pat, (u8)(i * 7));
-    u8cs all = {pat[0], pat[0] + BIG};
-    u8cs a = {all[0], all[0] + 100}, b = {all[0] + 100, all[0] + 100 + sp};
     call(FILEBufFeed, pfd[1], a);
     call(FILEFlush, pfd + 1);
     same(u8bDataLen(buf), 100);  // below the threshold: kept
     call(FILEBufFeed, pfd[1], b);
     call(FILEFlush, pfd + 1);
     same(u8bDataLen(buf), 0);
-    u8cs c = {all[0], all[0] + 7};
     call(FILEBufFeed, pfd[1], c);
     call(FILEFlushAll, pfd + 1);
     same(u8bDataLen(buf), 0);
     call(FILEBufFeed, pfd[1], all);  // larger than the buffer
-    u8cs d = {all[0], all[0] + 5};
     call(FILEBufFeed, pfd[1], d);
     same(u8bDataLen(buf), 5);
     int wfd = pfd[1];
     call(FILEClose, &wfd);  // drains the 5 and unmaps
     want(buf[0] == NULL);
-    a_pad(u8, got, 6 * 4096);
-    size_t n = 0;
-    for (ssize_t r; (r = read(pfd[0], got[0] + n, 6 * 4096 - n)) > 0;)
-        n += (size_t)r;
-    same(n, TOTAL);
-    want(0 == memcmp(got[0], all[0], 100 + sp));
-    want(0 == memcmp(got[0] + 100 + sp + 7, all[0], BIG));
-    close(pfd[0]);
+    int st = 0;
+    want(waitpid(rd, &st, 0) == rd && WIFEXITED(st) && 0 == WEXITSTATUS(st));
     done;
 }
 
@@ -1114,11 +1134,13 @@ ok64 FILEHoldTest() {
     sane(1);
     int pfd[2] = {FILE_CLOSED, FILE_CLOSED};
     test(0 == pipe(pfd), FILEFAIL);
+    a_pad(u8, pat, 2 * 4096);
+    u8bFed(pat, 2 * 4096);
+    pid_t rd = file_pipe_reader(pfd, u8bDataC(pat));
+    test(rd > 0, FILEFAIL);
     call(FILEBuffer, pfd[1], 4 * PAGESIZE);
     call(FILESetFlags, pfd[1], FILE_HOLD);
     u8bp buf = FILESlot(pfd[1]);
-    a_pad(u8, pat, 2 * 4096);
-    u8bFed(pat, 2 * 4096);
     call(FILEBufFeed, pfd[1], u8bDataC(pat));
     call(FILEFlush, pfd + 1);
     same(u8bDataLen(buf), 2 * 4096);  // held past a page
@@ -1126,7 +1148,8 @@ ok64 FILEHoldTest() {
     same(u8bDataLen(buf), 0);
     int wfd = pfd[1];
     call(FILEClose, &wfd);
-    close(pfd[0]);
+    int st = 0;
+    want(waitpid(rd, &st, 0) == rd && WIFEXITED(st) && 0 == WEXITSTATUS(st));
     done;
 }
 
