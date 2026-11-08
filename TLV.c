@@ -3,6 +3,11 @@
 #include "OK.h"
 #include "PRO.h"
 
+// The length after the type byte is unaligned (TLV-26B08InCbj); align-1
+// typed stores keep the old codegen, memcpy cost reloads under fortify.
+typedef u32 un32 __attribute__((aligned(1)));
+typedef u64 un64 __attribute__((aligned(1)));
+
 fun ok64 TLVprobe(u8* t, u8* hlen, u64* blen, $cu8c data) {
     if ($empty(data)) return TLVNODATA;
     if (TLVshort(**data)) {
@@ -120,7 +125,7 @@ ok64 TLVu8sEnd(u8s outer, u8sc inner, u8 lit) {
          *inner >= *outer + 5 && lit == **outer);
     u64 tl = *inner - *outer;
     test(tl - 5 <= u32max, TLVTOOLONG);
-    *(u32*)(1 + *outer) = tl - 5;
+    *(un32*)(1 + *outer) = tl - 5;
     if (tl <= 0xff + 5) {
         **outer |= TLVaA;
         memmove(*outer + 2, *outer + 5, tl - 5);
@@ -145,7 +150,7 @@ ok64 TLVu8sEndHuge(u8s outer, u8sc inner, u8 lit) {
     sane(u8sOK(outer) && u8sOK(inner) && inner[1] == outer[1] &&
          *inner >= *outer + 9 && lit == **outer + TLVaA);
     u64 tl = *inner - *outer;
-    *(u64*)(1 + *outer) = tl - 9;
+    *(un64*)(1 + *outer) = tl - 9;
     if (tl <= 0xff + 9) {
         **outer += 2 * TLVaA;
         memmove(*outer + 2, *outer + 9, tl - 9);

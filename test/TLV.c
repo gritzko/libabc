@@ -197,8 +197,40 @@ ok64 TLVtest5() {
     done;
 }
 
+// TLV-26B08InCbj: End/EndHuge store the length at idle+1, never
+// aligned; a fatal UBSan build (WITH_UBSAN) trapped the plain stores.
+ok64 TLVtestUnaligned() {
+    sane(1);
+    u64 mem[64] = {};
+    u8 tail[] = {'x', 'y', 'z'};
+    a$(u8c, val, tail);
+    for (int huge = 0; huge < 2; ++huge) {
+        u8s idle = {(u8*)mem + 2, (u8*)(mem + 64)};
+        u8s inner = {};
+        if (huge) {
+            call(TLVu8sStartHuge, idle, inner, 'X');
+        } else {
+            call(TLVu8sStart, idle, inner, 'X');
+        }
+        call(u8sFeed, inner, val);
+        if (huge) {
+            call(TLVu8sEndHuge, idle, inner, 'X');
+        } else {
+            call(TLVu8sEnd, idle, inner, 'X');
+        }
+        u8cs rec = {(u8*)mem + 2, idle[0]};
+        u8 t = 0;
+        u8cs got = {};
+        call(_TLVu8sDrain, rec, &t, got);
+        testeqv((u64)'X', (u64)t, FMTu64);
+        $testeq(val, got);
+    }
+    done;
+}
+
 ok64 TLVtest() {
     sane(1);
+    call(TLVtestUnaligned);
     call(TLVtest1);
     call(TLVtest2);
     call(TLVtest3);
