@@ -1,10 +1,11 @@
 // STD-26B068VwHO: empty slices may be {NULL, NULL}; glibc declares the
 // mem* functions nonnull, musl does not, so redeclare them glibc's way.
 #include <string.h>
-void *memcpy(void *, void const *, size_t) __attribute__((nonnull(1, 2)));
-void *memmove(void *, void const *, size_t) __attribute__((nonnull(1, 2)));
-int memcmp(void const *, void const *, size_t) __attribute__((nonnull(1, 2)));
-void *memset(void *, int, size_t) __attribute__((nonnull(1)));
+// parenthesized: Darwin <secure/_string.h> makes mem* macros
+void *(memcpy)(void *, void const *, size_t) __attribute__((nonnull(1, 2)));
+void *(memmove)(void *, void const *, size_t) __attribute__((nonnull(1, 2)));
+int (memcmp)(void const *, void const *, size_t) __attribute__((nonnull(1, 2)));
+void *(memset)(void *, int, size_t) __attribute__((nonnull(1)));
 
 #include "S.h"
 #include "TEST.h"

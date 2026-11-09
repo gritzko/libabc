@@ -728,7 +728,7 @@ con u8 *const NL[2] = {_NL, _NL + 1};
     {                                                  \
         aBpad(u8, _pad, PAGESIZE);                     \
         call($feedf, u8bIdle(_pad), fmt, __VA_ARGS__); \
-        call(FILEFeedAll, fd, u8cbData(_pad));         \
+        call(FILEFeedAll, fd, u8bDataC(_pad));         \
     }
 
 #endif  // ABC_F_H
